@@ -29,7 +29,7 @@ The licenses of the bundled open source packages are in `THIRD_PARTY_LICENSES.tx
 
 The app is signed ad hoc only (no Apple or Microsoft certificate), so the system warns on first start:
 
-- macOS: open the app once, then click "Open Anyway" under System Settings, Privacy & Security.
+- macOS: the first start shows "Apple could not verify ... is free of malware". Click "Done" (not "Move to Trash"), open System Settings, Privacy & Security, scroll down and click "Open Anyway" next to the blocked app, confirm with your password or Touch ID, then start the app again and choose "Open". Later starts need nothing.
 - Windows: in the SmartScreen window, click "More info" and then "Run anyway".
 
 From source:
