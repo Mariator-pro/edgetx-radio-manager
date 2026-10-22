@@ -1,0 +1,134 @@
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { downloadAll, wantedFiles, wantedVoices } from '../src/core/download.ts';
+import type { FetchFn, Release } from '../src/core/github.ts';
+import { localVersions } from '../src/core/packages.ts';
+import { paths } from '../src/core/paths.ts';
+import { defaultSettings, loadSettings, rememberRadio, type Settings, type Source } from '../src/core/settings.ts';
+import { tempDir } from './helpers.ts';
+
+const source = (name: string) => defaultSettings().sources.find((s) => s.name === name)!;
+
+const release = (tag: string, assets: string[]): Release => ({
+  tag,
+  published: '2026-09-18T14:00:00Z',
+  url: `https://github.com/x/y/releases/tag/${tag}`,
+  zipball: `https://api.github.com/repos/x/y/zipball/${tag}`,
+  assets: assets.map((name) => ({ name, url: `https://dl/${name}`, size: name.length })),
+});
+
+const settingsWith = (radios: Settings['radios']): Settings => ({ ...defaultSettings(), radios });
+
+describe('wantedFiles', () => {
+  it('takes the firmware zip only', () => {
+    const r = release('v2.12.5', ['edgetx-cpn-macos-v2.12.5.zip', 'edgetx-firmware-v2.12.5.zip']);
+    expect(wantedFiles(source('edgetx-firmware'), r, defaultSettings()).map((f) => f.name)).toEqual(['edgetx-firmware-v2.12.5.zip']);
+  });
+
+  it('takes SD content for every screen and sdcard.json, which maps radios to it', () => {
+    const r = release('v2.12.3', ['bw128x64.zip', 'c320x240.zip', 'c480x272.zip', 'notes.txt', 'sdcard.json']);
+    expect(wantedFiles(source('edgetx-sdcard'), r, defaultSettings()).map((f) => f.name)).toEqual(['bw128x64.zip', 'c320x240.zip', 'c480x272.zip', 'sdcard.json']);
+  });
+
+  it('takes only the sound packs the radios use, "en" not matching other English voices', () => {
+    const r = release('v2.12.3', [
+      'edgetx-sdcard-sounds-de-2.12.3.zip',
+      'edgetx-sdcard-sounds-en-2.12.3.zip',
+      'edgetx-sdcard-sounds-en_gb-ryan-2.12.3.zip',
+      'edgetx-sdcard-sounds-fr-2.12.3.zip',
+    ]);
+    const s = settingsWith({ tx16s: { language: 'en' }, tx15: { language: 'en', sounds: ['de', 'en_gb-ryan'] } });
+    expect(wantedVoices(s)).toEqual(['de', 'en', 'en_gb-ryan']);
+    expect(wantedFiles(source('edgetx-sounds'), r, s).map((f) => f.name)).toEqual([
+      'edgetx-sdcard-sounds-de-2.12.3.zip',
+      'edgetx-sdcard-sounds-en-2.12.3.zip',
+      'edgetx-sdcard-sounds-en_gb-ryan-2.12.3.zip',
+    ]);
+  });
+
+  it('takes no sound pack before any radio was seen', () => {
+    const r = release('v2.12.3', ['edgetx-sdcard-sounds-en-2.12.3.zip']);
+    expect(wantedFiles(source('edgetx-sounds'), r, defaultSettings())).toEqual([]);
+  });
+
+  it('uses attached zips of a project, else the source archive', () => {
+    const own = source('lipo-nanny');
+    expect(wantedFiles(own, release('v1.1.1', []), defaultSettings())).toEqual([
+      { name: 'edgetx-lipo-nanny-v1.1.1.zip', url: 'https://api.github.com/repos/x/y/zipball/v1.1.1' },
+    ]);
+    const foreign: Source = { name: 'widget', repo: 'someone/widget', kind: 'project' };
+    expect(wantedFiles(foreign, release('v2.0', ['widget-v2.0.zip', 'notes.txt']), defaultSettings()).map((f) => f.name)).toEqual(['widget-v2.0.zip']);
+  });
+});
+
+describe('rememberRadio', () => {
+  it('takes the sound languages from the card once and keeps chosen voices', () => {
+    const s = settingsWith({});
+    expect(rememberRadio(s, { volume: '/v', board: 'tx15', language: 'en', soundLanguages: ['de', 'en'] })).toBe(true);
+    expect(s.radios.tx15).toEqual({ language: 'en', sounds: ['de', 'en'] });
+    s.radios.tx15!.sounds = ['de', 'en_gb-ryan'];
+    expect(rememberRadio(s, { volume: '/v', board: 'tx15', language: 'en', soundLanguages: ['de', 'en', 'fr'] })).toBe(false);
+    expect(s.radios.tx15!.sounds).toEqual(['de', 'en_gb-ryan']);
+  });
+
+  it('turns the earlier single voice into the sound list', async () => {
+    const p = paths(await tempDir());
+    await mkdir(p.root, { recursive: true });
+    await writeFile(p.settings, JSON.stringify({ radios: { tx16s: { language: 'en', voice: 'en_gb-ryan' } } }));
+    expect((await loadSettings(p)).radios.tx16s).toEqual({ language: 'en', sounds: ['en_gb-ryan'] });
+  });
+});
+
+describe('downloadAll', () => {
+  // Fake GitHub: releases per repo, file downloads return the file name as content.
+  function fakeGitHub(releases: Record<string, Release | 'fail'>, calls: string[]): FetchFn {
+    return (async (input: string | URL | Request) => {
+      const url = String(input);
+      calls.push(url);
+      const m = url.match(/repos\/(.+)\/releases\/latest$/);
+      if (m) {
+        const r = releases[m[1]!];
+        if (r === undefined) return new Response('{}', { status: 404 });
+        if (r === 'fail') return new Response('{}', { status: 403, headers: { 'x-ratelimit-remaining': '0' } });
+        return Response.json({
+          tag_name: r.tag,
+          published_at: r.published,
+          html_url: r.url,
+          zipball_url: r.zipball,
+          assets: r.assets.map((a) => ({ name: a.name, browser_download_url: a.url, size: a.size })),
+        });
+      }
+      return new Response(url.split('/').pop());
+    }) as FetchFn;
+  }
+
+  it('downloads new files once, stores release.json and reports every source', async () => {
+    const p = paths(await tempDir());
+    const s = settingsWith({ tx16smk3: { language: 'en' } });
+    s.sources = [source('edgetx-firmware'), source('edgetx-sounds'), source('gps-homer'), source('lipo-nanny')];
+    const releases = {
+      'EdgeTX/edgetx': release('v2.12.5', ['edgetx-firmware-v2.12.5.zip']),
+      'EdgeTX/edgetx-sdcard-sounds': release('v2.12.3', ['edgetx-sdcard-sounds-en-2.12.3.zip']),
+      'Mariator-pro/edgetx-lipo-nanny': 'fail' as const,
+    };
+    const calls: string[] = [];
+    const first = await downloadAll(p, s, fakeGitHub(releases, calls));
+    expect(first.map((r) => [r.source, r.status])).toEqual([
+      ['edgetx-firmware', 'new'],
+      ['edgetx-sounds', 'new'],
+      ['gps-homer', 'no-release'],
+      ['lipo-nanny', 'error'],
+    ]);
+    expect(first[3]!.message).toMatch(/rate limit/);
+
+    const dir = join(p.packages, 'edgetx-firmware', 'v2.12.5');
+    expect((await readdir(dir)).sort()).toEqual(['edgetx-firmware-v2.12.5.zip', 'release.json']);
+    expect(await readFile(join(dir, 'edgetx-firmware-v2.12.5.zip'), 'utf8')).toBe('edgetx-firmware-v2.12.5.zip');
+    expect((await localVersions(p, 'edgetx-firmware'))[0]?.tag).toBe('v2.12.5');
+
+    const second = await downloadAll(p, s, fakeGitHub(releases, calls));
+    expect(second[0]!.status).toBe('current');
+    expect(calls.filter((c) => c.startsWith('https://dl/'))).toHaveLength(2);
+  });
+});
