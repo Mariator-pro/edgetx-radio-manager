@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
@@ -18,9 +19,21 @@ function apiServer(): Plugin {
   };
 }
 
+// Every file Vite bundles into the page, so the license list names exactly the packages the app ships.
+function bundledFiles(): Plugin {
+  return {
+    name: 'radio-manager-bundled-files',
+    apply: 'build',
+    generateBundle() {
+      const files = [...this.getModuleIds()].map((id) => id.replace(/^\0/, '').split('?')[0]!);
+      writeFileSync(resolve(import.meta.dirname, 'dist/ui-files.json'), JSON.stringify(files));
+    },
+  };
+}
+
 export default defineConfig({
   root: 'src/ui',
-  plugins: [react(), tailwindcss(), apiServer()],
+  plugins: [react(), tailwindcss(), apiServer(), bundledFiles()],
   build: { outDir: '../../dist/ui', emptyOutDir: true, chunkSizeWarningLimit: 1000 },
   server: { proxy: { '/api/':`http://127.0.0.1:${API_PORT}` } },
 });

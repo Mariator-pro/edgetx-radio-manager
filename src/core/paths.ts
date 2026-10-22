@@ -9,7 +9,15 @@ export interface Paths {
   settings: string;
 }
 
-export function paths(root = join(homedir(), 'EdgeTX')): Paths {
+// Where apps keep their data on each system: macOS Application Support (the same folder Electron uses for
+// the app), Windows LocalAppData (not Roaming: downloads and backups are large), elsewhere XDG data.
+function dataRoot(): string {
+  if (process.platform === 'darwin') return join(homedir(), 'Library', 'Application Support', 'EdgeTX Radio Manager');
+  if (process.platform === 'win32') return join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'EdgeTX Radio Manager');
+  return join(process.env.XDG_DATA_HOME ?? join(homedir(), '.local', 'share'), 'edgetx-radio-manager');
+}
+
+export function paths(root = dataRoot()): Paths {
   return {
     root,
     packages: join(root, 'Packages'),

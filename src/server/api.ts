@@ -90,6 +90,7 @@ export interface PlanView {
   conflicts: PlanFileView[];
   missing: string[];
   luac: number; // stale .luac files that go away with written or deleted .lua files
+  backupDir: string; // where the backup before the update goes, home folder shortened to "~" outside Windows
 }
 
 export interface UpdateResultView {

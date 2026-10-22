@@ -278,7 +278,7 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
 
           <div className="sticky bottom-0 -mx-7 -mb-7 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background/95 px-7 py-4 backdrop-blur">
             <span className="text-sm text-muted">
-              {t.nextBackup} <code className="font-mono text-foreground">~/EdgeTX/Backups/{plan.board}/</code>
+              {t.nextBackup} <code className="font-mono text-foreground">{plan.backupDir}</code>
             </span>
             <div className="flex gap-2">
               <Button variant="outline" onPress={onBack}>

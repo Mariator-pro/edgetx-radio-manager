@@ -1,0 +1,37 @@
+# A pushed tag like v0.2.0 builds the desktop app for macOS and Windows and attaches it to the GitHub release.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: --mac
+          - os: windows-latest
+            target: --win
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+        if: runner.os == 'macOS'
+      - run: npm run build
+      # macOS: ad-hoc signature (mac.identity "-" in package.json), no Apple certificate; Windows: unsigned
+      - run: npx electron-builder ${{ matrix.target }} --publish never
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.dmg
+            release/*.exe

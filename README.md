@@ -1,23 +1,45 @@
 # EdgeTX Radio Manager
 
-Backup, Paket-Download, SD-Karten-Update und Firmware-Flashen für EdgeTX-Fernsteuerungen, als Kommandozeile und als Browser-Oberfläche (Englisch und Deutsch).
+Backup, package download, SD card update and firmware flashing for EdgeTX radios, as a desktop app for macOS and Windows, as a command line tool and as a browser interface (English and German).
 
-## Funktionen
+## Features
 
-- **Erkennung**: Die Fernsteuerung wird im Modus „USB Storage“ als Laufwerk erkannt. Radiotyp, Sprache, Firmware und installierte Pakete kommen von der SD-Karte (`RADIO/radio.yml`, `edgetx.sdcard.version`).
-- **Download**: Lädt neue Releases aller Quellen von GitHub, bei eigenen Projekten zusätzlich den neuesten Commit des Hauptbranches.
-- **Backup**: Kopiert die ganze SD-Karte samt Dateizeiten in einen Ordner. Alte Backups werden aufgeräumt (Standard: die letzten 10 bleiben), einzelne Backups lassen sich dauerhaft behalten.
-- **Update**: Zeigt einen Plan (neu, ersetzt, gelöscht, Konflikte), sichert die Karte und spielt dann die Pakete auf. Auf der Karte geänderte Dateien werden nicht stillschweigend überschrieben, sondern als Konflikt abgefragt.
-- **Firmware flashen**: Radios mit UF2-Bootloader bekommen die Firmware per Laufwerk, alle anderen per USB-DFU (`dfu-util`). Die Methode ergibt sich aus der Firmware-Datei für den Radiotyp.
-- **Quellen**: EdgeTX-Firmware, SD-Inhalt und Sounds sind fest eingetragen. Weitere GitHub-Projekte mit `SCRIPTS/`- oder `WIDGETS/`-Ordner lassen sich hinzufügen und wieder entfernen.
+- **Detection**: The radio is detected as a drive in "USB Storage" mode. Radio type, language, firmware and installed packages are read from the SD card (`RADIO/radio.yml`, `edgetx.sdcard.version`).
+- **Download**: Fetches new releases of all sources from GitHub, and for own projects also the newest commit of the main branch.
+- **Backup**: Copies the whole SD card, including file times, into a folder. Old backups are pruned (default: the last 10 are kept), single backups can be kept permanently.
+- **Update**: Shows a plan (new, replaced, deleted, conflicts), backs up the card and then installs the packages. Files changed on the card are never overwritten silently, they come up as conflicts instead.
+- **Firmware flashing**: Radios with a UF2 bootloader get the firmware via the drive, all others via USB DFU (`dfu-util`). The method follows from the firmware file for the radio type.
+- **Sources**: EdgeTX firmware, SD content and sounds are built in. Further GitHub projects with a `SCRIPTS/` or `WIDGETS/` folder can be added and removed.
 
-Jedes Radio, das EdgeTX unterstützt, funktioniert ohne eigene Liste im Tool: Radiotypen und SD-Pakete kommen aus der `sdcard.json` des EdgeTX-SD-Content-Releases.
+Every radio that EdgeTX supports works without a list of its own in the tool: radio types and SD packages come from the `sdcard.json` of the EdgeTX SD content release.
 
-## Voraussetzungen
+## Requirements
 
-- Node.js 22.18 oder neuer (TypeScript läuft direkt, ohne Build-Schritt für die Kommandozeile)
-- macOS oder Windows für die Laufwerkserkennung (unter Linux mit `--volume` oder `RADIO_MANAGER_VOLUMES`)
-- Für DFU-Radios: [`dfu-util`](https://dfu-util.sourceforge.net/) im `PATH`, z. B. `brew install dfu-util`
+- For the command line and the browser interface: Node.js 22.18 or newer (TypeScript runs directly, without a build step for the command line). The desktop app brings everything it needs.
+- macOS or Windows for drive detection (on Linux use `--volume` or `RADIO_MANAGER_VOLUMES`)
+- Only for flashing firmware to DFU radios: [`dfu-util`](https://dfu-util.sourceforge.net/) in the `PATH`, not bundled. Without it, the tool blocks the flash flow and explains what to install.
+  - macOS: `brew install dfu-util`
+  - Windows: download `dfu-util` and put it in the `PATH`, and install the WinUSB driver for the radio in DFU mode with [Zadig](https://zadig.akeo.ie/)
+
+## Desktop app
+
+The finished app is on the [Releases](https://github.com/Mariator-pro/edgetx-radio-manager/releases) page: a `.dmg` for macOS (Apple Silicon `arm64`, Intel `x64`) and an `.exe` installer for Windows. The app starts the server itself (port 5175) and shows the interface in its own window; links to GitHub open in the browser.
+
+The licenses of the bundled open source packages are in `THIRD_PARTY_LICENSES.txt` in the app's resources folder, next to Electron's own license files.
+
+The app is signed ad hoc only (no Apple or Microsoft certificate), so the system warns on first start:
+
+- macOS: open the app once, then click "Open Anyway" under System Settings, Privacy & Security.
+- Windows: in the SmartScreen window, click "More info" and then "Run anyway".
+
+From source:
+
+```sh
+npm run desktop   # builds everything and starts the app
+npm run dist      # builds the installers for your own system into release/
+```
+
+A new release is made with a tag: bump the version in `package.json`, then `git tag v0.2.0 && git push origin v0.2.0`. The GitHub workflow `.github/workflows/release.yml` builds the app for macOS and Windows and attaches the files to the release.
 
 ## Installation
 
@@ -25,76 +47,88 @@ Jedes Radio, das EdgeTX unterstützt, funktioniert ohne eigene Liste im Tool: Ra
 git clone https://github.com/Mariator-pro/edgetx-radio-manager.git
 cd edgetx-radio-manager
 npm install
-npm run build   # baut die Browser-Oberfläche nach dist/ui
+npm run build   # builds the browser interface into dist/ui, the desktop main process into dist/desktop and THIRD_PARTY_LICENSES.txt
 ```
 
-## Browser-Oberfläche
+## Browser interface
 
 ```sh
 npm start
 ```
 
-Startet den Server auf `http://127.0.0.1:5174` und öffnet den Browser. Dort gibt es Seiten für das verbundene Radio, Pakete, Quellen und Backups sowie geführte Abläufe für Update und Firmware-Flashen.
+Starts the server on `http://127.0.0.1:5174` and opens the browser. There are pages for the connected radio, packages, sources and backups, plus guided flows for updating and flashing firmware.
 
-## Kommandozeile
+## Command line
 
 ```sh
-npm run cli -- <befehl> [optionen]
+npm run cli -- <command> [options]
 ```
 
-| Befehl | Was er tut |
+| Command | What it does |
 | --- | --- |
-| `status` | Verbundenes Radio, installierte und heruntergeladene Versionen |
-| `download` | Alle Quellen auf neue Releases prüfen und herunterladen |
-| `backup` | Die ganze SD-Karte des verbundenen Radios sichern |
-| `update` | Plan zeigen, dann Karte sichern und aktualisieren |
-| `flash [version]` | Firmware flashen, ohne Angabe die neueste heruntergeladene (z. B. `flash v2.12.5`) |
-| `sources` | Quellen auflisten; `sources add <owner/repo>`, `sources remove <name>` |
-| `ui` | Browser-Oberfläche öffnen (wie `npm start`) |
+| `status` | Connected radio, installed and downloaded versions |
+| `download` | Check all sources for new releases and download them |
+| `backup` | Back up the whole SD card of the connected radio |
+| `update` | Show the plan, then back up and update the card |
+| `flash [version]` | Flash firmware, without a version the newest downloaded one (e.g. `flash v2.12.5`) |
+| `sources` | List sources; `sources add <owner/repo>`, `sources remove <name>` |
+| `ui` | Open the browser interface (like `npm start`) |
 
-Optionen:
+Options:
 
-- `--volume <pfad>`: dieses Laufwerk statt der automatischen Erkennung verwenden
-- `--board <id>`: Radiotyp, wenn die Karte noch keine `RADIO/radio.yml` hat (z. B. `tx16s`)
+- `--volume <path>`: use this drive instead of automatic detection
+- `--board <id>`: radio type when the card has no `RADIO/radio.yml` yet (e.g. `tx16s`)
 
-Typischer Ablauf: `download`, Radio im Modus „USB Storage“ verbinden, `update`.
+Typical flow: `download`, connect the radio in "USB Storage" mode, `update`.
 
-## Paketquellen pro Radio
+## Package sources per radio
 
-Für jedes Radio wird gespeichert, welche Quellen auf die Karte kommen und woher:
+For every radio the tool stores which sources go on the card and where they come from:
 
-- **release**: das neueste heruntergeladene GitHub-Release
-- **main**: der neueste Commit des Hauptbranches (nur eigene Projekte), wird bei Bedarf heruntergeladen
-- **local**: ein lokaler Git-Checkout. Checkouts der Projekte neben diesem Repo (z. B. `../edgetx-lipo-nanny`) werden automatisch gefunden.
+- **release**: the newest downloaded GitHub release
+- **main**: the newest commit of the main branch (own projects only), downloaded when needed
+- **local**: a local git checkout. Checkouts of the projects next to this repo (e.g. `../edgetx-lipo-nanny`) are found automatically.
 
-Was auf der Karte installiert wurde, steht in `.radio-manager/installed.json` auf der SD-Karte. Daran erkennt das Tool beim nächsten Update, welche Dateien es selbst geschrieben hat und welche seitdem geändert wurden.
+What was installed on the card is recorded in `.radio-manager/installed.json` on the SD card. On the next update the tool uses it to tell which files it wrote itself and which were changed since.
 
-## Daten auf dem Rechner
+## Data on the computer
 
-Alles liegt unter `~/EdgeTX/`:
+Settings, downloads and backups live where apps keep their data on each system:
+
+- macOS: `~/Library/Application Support/EdgeTX Radio Manager/`
+- Windows: `%LOCALAPPDATA%\EdgeTX Radio Manager\` (e.g. `C:\Users\<name>\AppData\Local\EdgeTX Radio Manager`), not Roaming, because downloads and backups are large
+- Linux: `~/.local/share/edgetx-radio-manager/` (or `$XDG_DATA_HOME`)
 
 ```
-~/EdgeTX/
-├── settings.json          Quellen, Radios, Backup-Einstellungen
-├── Packages/<quelle>/     heruntergeladene Versionen, _main/ für den Hauptbranch
-└── Backups/<board>/       ein Ordner pro Backup, benannt nach Datum und Uhrzeit
+EdgeTX Radio Manager/
+├── settings.json          sources, radios, backup settings
+├── Packages/<source>/     downloaded versions, _main/ for the main branch
+└── Backups/<board>/       one folder per backup, named by date and time
 ```
 
-## Entwicklung
+On macOS the desktop app keeps its window data (language, theme) in the same folder. The backups page has a button that opens the backup folder.
+
+## Development
 
 ```sh
-npm run dev        # Vite mit API-Server, Oberfläche mit Hot Reload
+npm run dev        # Vite with API server, interface with hot reload
 npm test           # Vitest
-npm run typecheck  # TypeScript für Kern und Oberfläche
+npm run typecheck  # TypeScript for core and interface
 npm run lint       # oxlint
 ```
 
-Zum Testen ohne echtes Radio kann `RADIO_MANAGER_VOLUMES` auf einen oder mehrere Ordner zeigen (getrennt wie im `PATH`), etwa auf den SD-Ordner eines Simulators.
+To test without a real radio, `RADIO_MANAGER_VOLUMES` can point to one or more folders (separated like in the `PATH`), for example the SD folder of a simulator.
 
-Aufbau:
+Structure:
 
-- `src/core/`: Logik (Erkennung, Download, Backup, Update-Plan, Firmware)
-- `src/server/`: HTTP-API und Server-Sent Events für Fortschritt und Zustand
-- `src/ui/`: React-Oberfläche (HeroUI, Tailwind)
-- `src/cli/`: Kommandozeile
-- `src/platform/`: Laufwerkserkennung, der einzige betriebssystemabhängige Teil
+- `src/core/`: logic (detection, download, backup, update plan, firmware)
+- `src/server/`: HTTP API and server-sent events for progress and state
+- `src/ui/`: React interface (HeroUI, Tailwind)
+- `src/cli/`: command line
+- `src/desktop/`: Electron main process, starts the server and shows the interface in its own window
+- `src/platform/`: drive detection, the only OS-specific part
+- `scripts/licenses.ts`: collects the license texts of all bundled packages during the build
+
+## License
+
+Released under the [MIT License](LICENSE). The app bundles open source packages under their own licenses, listed in `THIRD_PARTY_LICENSES.txt` (see [Desktop app](#desktop-app)).

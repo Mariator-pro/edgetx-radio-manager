@@ -23,7 +23,7 @@ export interface ServerOptions {
   paths: Paths;
   port: number;
   staticDir?: string; // built interface; without it only /api is served (Vite serves the page)
-  repoParent: string; // where the own projects' checkouts are looked for
+  repoParent?: string; // where the own projects' checkouts are looked for; without it none are looked for
   pollMs?: number;
 }
 
@@ -64,7 +64,7 @@ function openFolder(dir: string): void {
 export async function startServer(o: ServerOptions): Promise<{ url: string; close: () => void }> {
   const p = o.paths;
   const s: Settings = await loadSettings(p);
-  if (findLocalRepos(s, o.repoParent)) await saveSettings(p, s);
+  if (o.repoParent && findLocalRepos(s, o.repoParent)) await saveSettings(p, s);
 
   let cards: RadioCard[] = [];
   const boards = new Map<string, string>(); // volume -> type chosen for a card without radio.yml
@@ -208,7 +208,7 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
       const [c, board] = await cardAt(volume);
       const setup = await prepareUpdate(p, s, c, board);
       if (setup.selectionChanged) await saveSettings(p, s);
-      return planView(volume, board, c, setup);
+      return planView(p, volume, board, c, setup);
     },
     'POST /api/update/run': async (req) => {
       const { volume, resolutions } = await body<{ volume: string; resolutions: Record<string, Resolution> }>(req);

@@ -1,0 +1,49 @@
+import { join } from 'node:path';
+import { app, BrowserWindow, shell } from 'electron';
+import { paths } from '../core/paths.ts';
+import { startServer } from '../server/server.ts';
+
+// Fixed port so the page keeps its origin and with it the stored language and theme; the CLI uses 5174.
+const PORT = 5175;
+
+// Apps started from Finder don't get the shell's PATH, so dfu-util from Homebrew would not be found.
+if (process.platform === 'darwin') process.env.PATH = ['/opt/homebrew/bin', '/usr/local/bin', process.env.PATH].join(':');
+
+async function start(): Promise<void> {
+  const o = {
+    paths: paths(),
+    staticDir: join(app.getAppPath(), 'dist', 'ui'),
+    // own projects' checkouts next to this repo only when run from the source folder
+    repoParent: app.isPackaged ? undefined : join(app.getAppPath(), '..'),
+  };
+  const server = await startServer({ ...o, port: PORT }).catch((e: NodeJS.ErrnoException) => {
+    if (e.code === 'EADDRINUSE') return startServer({ ...o, port: 0 });
+    throw e;
+  });
+  const win = new BrowserWindow({ width: 1280, height: 860, minWidth: 900, minHeight: 600, title: 'EdgeTX Radio Manager' });
+  // links to GitHub and other sites open in the browser, not in the app
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    void shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (e, url) => {
+    if (url.startsWith(server.url)) return;
+    e.preventDefault();
+    void shell.openExternal(url);
+  });
+  await win.loadURL(server.url);
+}
+
+if (!app.requestSingleInstanceLock()) app.quit();
+else {
+  app.on('second-instance', () => {
+    const [win] = BrowserWindow.getAllWindows();
+    if (win?.isMinimized()) win.restore();
+    win?.focus();
+  });
+  app.on('window-all-closed', () => app.quit());
+  app.whenReady().then(start).catch((e: Error) => {
+    console.error(e);
+    app.quit();
+  });
+}

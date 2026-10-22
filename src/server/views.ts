@@ -1,5 +1,6 @@
 import { readdir, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { join, sep } from 'node:path';
 import { listBackups } from '../core/backup.ts';
 import { installedVersion, type RadioCard } from '../core/card.ts';
 import { detectVersion, localVersion, sameOnCard } from '../core/content.ts';
@@ -118,7 +119,13 @@ function fileView(item: PlanItem): PlanFileView {
   return { path: item.path, action: item.action, pkg: item.pkg, reason: item.reason, others: others.length > 0 ? others : undefined };
 }
 
-export async function planView(volume: string, board: string, card: RadioCard, setup: UpdateSetup): Promise<PlanView> {
+// "/Users/me/Library/…" -> "~/Library/…"; Windows paths stay as they are, "~" means nothing there.
+function shortHome(path: string): string {
+  const home = homedir();
+  return process.platform !== 'win32' && path.startsWith(home + sep) ? `~${path.slice(home.length)}` : path;
+}
+
+export async function planView(p: Paths, volume: string, board: string, card: RadioCard, setup: UpdateSetup): Promise<PlanView> {
   const changed = setup.plan.filter((i) => i.action !== 'unchanged');
   const names = [...new Set(changed.map((i) => i.pkg))];
   const groups = names.map((name) => ({
@@ -139,6 +146,7 @@ export async function planView(volume: string, board: string, card: RadioCard, s
     conflicts: changed.filter((i) => i.action === 'conflict').map(fileView),
     missing: setup.missing,
     luac,
+    backupDir: shortHome(join(p.backups, board)),
   };
 }
 
