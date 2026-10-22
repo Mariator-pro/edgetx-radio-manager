@@ -4,7 +4,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { soundPackPattern } from './download.ts';
-import { localVersions, versionDir } from './packages.ts';
+import { localVersions, mainDir, mainInfo, mainVersion, versionDir } from './packages.ts';
 import type { Paths } from './paths.ts';
 import { radioTypesIn } from './radios.ts';
 import type { Source, SourceKind } from './settings.ts';
@@ -12,12 +12,12 @@ import { readZip } from './zip.ts';
 
 const run = promisify(execFile);
 
-export type Origin = 'release' | 'local';
+export type Origin = 'release' | 'main' | 'local';
 
 export interface PkgFile {
   data: Buffer;
   sha: string;
-  time: number; // release date, or the file's change time for a local checkout
+  time: number; // release or commit date, or the file's change time for a local checkout
 }
 
 // What one package puts on the card, paths relative to the card root with "/".
@@ -105,6 +105,20 @@ export async function releaseContent(p: Paths, source: Source, ctx: RadioContext
   return { name: source.name, origin: 'release', version: newest.tag, files };
 }
 
+// The downloaded newest main commit of a project; undefined when it isn't downloaded.
+export async function mainContent(p: Paths, source: Source): Promise<PackageContent | undefined> {
+  const info = await mainInfo(p, source.name);
+  if (!info) return undefined;
+  const dir = mainDir(p, source.name);
+  const files = new Map<string, PkgFile>();
+  for (const zip of (await readdir(dir)).filter((n) => n.endsWith('.zip'))) {
+    const entries = await readZip(join(dir, zip));
+    const prefix = sdPrefix([...entries.keys()], source.sdDir);
+    if (prefix !== undefined) addFiles(files, entries, prefix, source.kind, Date.parse(info.date));
+  }
+  return { name: source.name, origin: 'main', version: mainVersion(info), files };
+}
+
 function git(dir: string) {
   return async (...args: string[]) => (await run('git', ['-C', dir, ...args], { maxBuffer: 64 * 1024 * 1024 })).stdout;
 }
@@ -145,5 +159,6 @@ export async function localContent(source: Source): Promise<PackageContent | und
 }
 
 export function loadContent(p: Paths, source: Source, origin: Origin, ctx: RadioContext): Promise<PackageContent | undefined> {
-  return origin === 'local' ? localContent(source) : releaseContent(p, source, ctx);
+  if (origin === 'local') return localContent(source);
+  return origin === 'main' ? mainContent(p, source) : releaseContent(p, source, ctx);
 }

@@ -1,12 +1,14 @@
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { mainContent } from '../src/core/content.ts';
 import { downloadAll, wantedFiles, wantedVoices } from '../src/core/download.ts';
 import type { FetchFn, Release } from '../src/core/github.ts';
-import { localVersions } from '../src/core/packages.ts';
+import { localVersions, mainDir } from '../src/core/packages.ts';
 import { paths } from '../src/core/paths.ts';
+import { defaultOrigin } from '../src/core/selection.ts';
 import { defaultSettings, loadSettings, rememberRadio, type Settings, type Source } from '../src/core/settings.ts';
-import { tempDir } from './helpers.ts';
+import { makeZip, tempDir } from './helpers.ts';
 
 const source = (name: string) => defaultSettings().sources.find((s) => s.name === name)!;
 
@@ -82,10 +84,17 @@ describe('rememberRadio', () => {
 
 describe('downloadAll', () => {
   // Fake GitHub: releases per repo, file downloads return the file name as content.
-  function fakeGitHub(releases: Record<string, Release | 'fail'>, calls: string[]): FetchFn {
+  function fakeGitHub(releases: Record<string, Release | 'fail'>, calls: string[], commits: Record<string, string> = {}): FetchFn {
     return (async (input: string | URL | Request) => {
       const url = String(input);
       calls.push(url);
+      const c = url.match(/repos\/(.+)\/commits\/HEAD$/);
+      if (c) {
+        const sha = commits[c[1]!];
+        return sha ? Response.json({ sha, commit: { committer: { date: '2026-10-01T10:00:00Z' } } }) : new Response('{}', { status: 409 });
+      }
+      const z = url.match(/zipball\/([0-9a-f]+)$/);
+      if (z) return new Response(makeZip({ [`x-y-${z[1]!.slice(0, 7)}/src/WIDGETS/LIPONY/main.lua`]: z[1]! }));
       const m = url.match(/repos\/(.+)\/releases\/latest$/);
       if (m) {
         const r = releases[m[1]!];
@@ -130,5 +139,24 @@ describe('downloadAll', () => {
     const second = await downloadAll(p, s, fakeGitHub(releases, calls));
     expect(second[0]!.status).toBe('current');
     expect(calls.filter((c) => c.startsWith('https://dl/'))).toHaveLength(2);
+  });
+
+  it('keeps the newest main commit of a project next to the releases, replacing the older one', async () => {
+    const p = paths(await tempDir());
+    const s = settingsWith({});
+    s.sources = [source('lipo-nanny')];
+    const calls: string[] = [];
+    const repo = 'Mariator-pro/edgetx-lipo-nanny';
+    const first = await downloadAll(p, s, fakeGitHub({}, calls, { [repo]: 'aaaaaaa111' }));
+    expect(first.map((r) => [r.status, r.tag])).toEqual([['no-release', undefined], ['new', 'main aaaaaaa']]);
+    expect((await downloadAll(p, s, fakeGitHub({}, calls, { [repo]: 'aaaaaaa111' })))[1]!.status).toBe('current');
+
+    await downloadAll(p, s, fakeGitHub({}, calls, { [repo]: 'bbbbbbb222' }));
+    expect((await readdir(mainDir(p, 'lipo-nanny'))).sort()).toEqual(['commit.json', 'edgetx-lipo-nanny-bbbbbbb.zip']);
+    expect(await localVersions(p, 'lipo-nanny')).toEqual([]);
+    const c = await mainContent(p, s.sources[0]!);
+    expect(c?.version).toBe('main bbbbbbb');
+    expect(c?.files.get('WIDGETS/LIPONY/main.lua')?.data.toString()).toBe('bbbbbbb222');
+    expect(await defaultOrigin(p, s.sources[0]!)).toBe('main');
   });
 });

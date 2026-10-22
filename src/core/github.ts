@@ -36,16 +36,37 @@ export function releaseByTag(repo: string, tag: string, fetchFn: FetchFn = fetch
   return getRelease(`https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(tag)}`, fetchFn);
 }
 
-async function getRelease(url: string, fetchFn: FetchFn): Promise<Release | undefined> {
+export interface Commit {
+  sha: string;
+  date: string;
+  zipball: string;
+}
+
+// Newest commit on the default branch, or undefined when the repo has none (409: empty repo).
+export async function latestCommit(repo: string, fetchFn: FetchFn = fetch): Promise<Commit | undefined> {
+  const c = await getJson<{ sha: string; commit: { committer: { date: string } } }>(
+    `https://api.github.com/repos/${repo}/commits/HEAD`,
+    fetchFn,
+    [404, 409],
+  );
+  return c && { sha: c.sha, date: c.commit.committer.date, zipball: `https://api.github.com/repos/${repo}/zipball/${c.sha}` };
+}
+
+async function getJson<T>(url: string, fetchFn: FetchFn, missing = [404]): Promise<T | undefined> {
   const res = await fetchFn(url, { headers: HEADERS }).catch(() => {
     throw new AppError('noConnection');
   });
-  if (res.status === 404) return undefined;
+  if (missing.includes(res.status)) return undefined;
   if (!res.ok) {
     const limited = (res.status === 403 || res.status === 429) && res.headers.get('x-ratelimit-remaining') === '0';
     throw limited ? new AppError('rateLimit') : new AppError('githubStatus', { status: res.status });
   }
-  const r = (await res.json()) as ApiRelease;
+  return (await res.json()) as T;
+}
+
+async function getRelease(url: string, fetchFn: FetchFn): Promise<Release | undefined> {
+  const r = await getJson<ApiRelease>(url, fetchFn);
+  if (!r) return undefined;
   return {
     tag: r.tag_name,
     published: r.published_at,

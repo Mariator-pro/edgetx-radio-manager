@@ -37,12 +37,20 @@ function Versions({ s }: { s: RadioSourceView }) {
 function tag(s: RadioSourceView, t: Texts): { label: string; color: 'default' | 'accent' | 'warning' } {
   if (s.isNew) return { label: t.tagNew, color: 'warning' };
   if (s.fixed) return { label: t.tagRequired, color: 'default' };
-  return s.origin === 'local' ? { label: t.tagLocal, color: 'accent' } : { label: t.tagRelease, color: 'default' };
+  if (s.origin === 'local') return { label: t.tagLocal, color: 'accent' };
+  return s.origin === 'main' ? { label: t.tagMain, color: 'accent' } : { label: t.tagRelease, color: 'default' };
 }
 
 function SourceCard({ radio, s, run }: { radio: RadioView; s: RadioSourceView; run: Run }) {
   const { t } = usePrefs();
   const chip = tag(s, t);
+  const origins = (
+    [
+      ['release', s.hasRelease, t.tagRelease],
+      ['main', s.hasMain, t.tagMain],
+      ['local', s.hasLocal, t.tagLocal],
+    ] as const
+  ).filter(([id, has]) => has || id === s.origin || id === 'main'); // main is fetched when chosen
   const set = (change: { on?: boolean; origin?: string }) =>
     run(() => post('/api/radio/selection', { board: radio.board, source: s.name, ...change }));
   return (
@@ -72,7 +80,7 @@ function SourceCard({ radio, s, run }: { radio: RadioView; s: RadioSourceView; r
             {chip.label}
           </Chip>
         </div>
-        {s.kind === 'project' && s.hasRelease && s.hasLocal && (
+        {s.kind === 'project' && origins.length > 1 && (
           <ToggleButtonGroup
             size="sm"
             aria-label={t.originOf(s.name)}
@@ -84,8 +92,11 @@ function SourceCard({ radio, s, run }: { radio: RadioView; s: RadioSourceView; r
               if (origin && origin !== s.origin) set({ origin: String(origin) });
             }}
           >
-            <ToggleButton id="release">{t.tagRelease}</ToggleButton>
-            <ToggleButton id="local">{t.tagLocal}</ToggleButton>
+            {origins.map(([id, , label]) => (
+              <ToggleButton key={id} id={id}>
+                {label}
+              </ToggleButton>
+            ))}
           </ToggleButtonGroup>
         )}
       </Card.Content>

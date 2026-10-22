@@ -98,6 +98,7 @@ export function SourcesPage({ state, run, board }: { state: StateView; run: Run;
                 <th scope="col" className="px-5 py-2.5 font-medium">{t.colSource}</th>
                 <th scope="col" className="px-2 py-2.5 font-medium">{t.colKind}</th>
                 <th scope="col" className="px-2 py-2.5 font-medium">{t.colNewest}</th>
+                <th scope="col" className="px-2 py-2.5 font-medium">{t.colMain}</th>
                 <th scope="col" className="px-2 py-2.5 font-medium">{t.colLocal}</th>
                 <th scope="col" className="px-5 py-2.5" />
               </tr>
@@ -117,6 +118,7 @@ export function SourcesPage({ state, run, board }: { state: StateView; run: Run;
                     </Chip>
                   </td>
                   <td className="px-2 py-3 font-mono text-xs">{s.newest ? `${s.newest.tag} · ${date(s.newest.published, t.locale)}` : t.none}</td>
+                  <td className="px-2 py-3 font-mono text-xs">{s.main ?? '–'}</td>
                   <td className="px-2 py-3 font-mono text-xs" title={s.localDir}>
                     {s.local ?? '–'}
                   </td>

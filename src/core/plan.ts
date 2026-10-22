@@ -25,7 +25,7 @@ export interface PlanItem {
   wanted?: Wanted; // absent for deletions
 }
 
-// Local beats release; between two of the same kind the newer one (release date or
+// Local beats release and main; between two of the same kind the newer one (release date or
 // file change time); on a tie the source listed first.
 export function mergePackages(contents: PackageContent[]): Map<string, Wanted> {
   const best = new Map<string, { w: Wanted; local: boolean; time: number }>();

@@ -16,7 +16,7 @@ export interface Source {
 
 export interface Choice {
   on: boolean;
-  origin: 'release' | 'local';
+  origin: 'release' | 'main' | 'local';
 }
 
 export interface RadioSettings {

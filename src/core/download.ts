@@ -1,12 +1,12 @@
 import { createWriteStream } from 'node:fs';
-import { mkdir, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import type { ReadableStream } from 'node:stream/web';
 import { pipeline } from 'node:stream/promises';
 import { AppError, errorInfo, type ErrorInfo } from './errors.ts';
-import { latestRelease, releaseByTag, type FetchFn, type Release } from './github.ts';
-import { versionDir, type ReleaseInfo } from './packages.ts';
+import { latestCommit, latestRelease, releaseByTag, type FetchFn, type Release } from './github.ts';
+import { mainDir, mainInfo, mainVersion, versionDir, type MainInfo, type ReleaseInfo } from './packages.ts';
 import type { Paths } from './paths.ts';
 import { soundsOf, type Settings, type Source } from './settings.ts';
 
@@ -128,7 +128,29 @@ async function downloadRelease(
   return { source: source.name, status: files.length > 0 ? 'new' : 'current', tag: release.tag, files };
 }
 
-// Checks every source; one failing source doesn't stop the others.
+// Newest commit on a project's default branch, as source archive in "_main/"; undefined when the repo has no commit.
+export async function downloadMain(
+  p: Paths,
+  source: Source,
+  fetchFn: FetchFn = fetch,
+  onEvent: (e: DownloadEvent) => void = () => {},
+): Promise<DownloadResult | undefined> {
+  const commit = await latestCommit(source.repo, fetchFn);
+  if (!commit) return undefined;
+  const info: MainInfo = { sha: commit.sha, date: commit.date };
+  const tag = mainVersion(info);
+  if ((await mainInfo(p, source.name))?.sha === commit.sha) return { source: source.name, status: 'current', tag, files: [] };
+  const dir = mainDir(p, source.name);
+  await mkdir(dir, { recursive: true });
+  const name = `${source.repo.split('/')[1] ?? source.name}-${commit.sha.slice(0, 7)}.zip`;
+  onEvent({ type: 'file', source: source.name, file: name });
+  await fetchTo(commit.zipball, join(dir, name), fetchFn);
+  for (const old of await readdir(dir)) if (old !== name) await rm(join(dir, old), { force: true });
+  await writeFile(join(dir, 'commit.json'), `${JSON.stringify(info, null, 2)}\n`);
+  return { source: source.name, status: 'new', tag, files: [name] };
+}
+
+// Checks every source, projects also for their newest main commit; one failing source doesn't stop the others.
 export async function downloadAll(
   p: Paths,
   s: Settings,
@@ -142,6 +164,14 @@ export async function downloadAll(
     } catch (e) {
       const error = errorInfo(e);
       results.push({ source: source.name, status: 'error', files: [], message: error.message, error });
+    }
+    if (source.kind !== 'project') continue;
+    try {
+      const main = await downloadMain(p, source, fetchFn, onEvent);
+      if (main) results.push(main);
+    } catch (e) {
+      const error = errorInfo(e);
+      results.push({ source: source.name, status: 'error', tag: 'main', files: [], message: error.message, error });
     }
   }
   return results;

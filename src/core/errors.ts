@@ -19,6 +19,7 @@ export const ERRORS = {
   repoFormat: () => 'Enter the repo as owner/name',
   alreadySource: (p: { name: string }) => `${p.name} is already a source`,
   noRelease: (p: { repo: string }) => `${p.repo} has no release`,
+  noCommit: (p: { repo: string }) => `${p.repo} has no commit yet`,
   noSdFolder: (p: { repo: string; tag: string }) => `No SCRIPTS/ or WIDGETS/ folder found in ${p.repo} ${p.tag}`,
   onlyProjectsRemovable: () => 'Only project sources can be removed',
   installedOn: (p: { name: string; tag: string; radios: string }) => `${p.name} ${p.tag} is installed on ${p.radios}`,

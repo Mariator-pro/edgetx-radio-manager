@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { loadContent, type Origin, type PackageContent, type RadioContext } from './content.ts';
-import { localVersions } from './packages.ts';
+import { localVersions, mainInfo } from './packages.ts';
 import type { Paths } from './paths.ts';
 import type { Settings, Source } from './settings.ts';
 
@@ -10,9 +10,10 @@ export function updateSources(s: Settings): Source[] {
   return s.sources.filter((src) => src.kind !== 'firmware');
 }
 
-// Release when one is downloaded, else the local checkout when there is one.
+// Release when one is downloaded, else the newest main commit, else the local checkout when there is one.
 export async function defaultOrigin(p: Paths, source: Source): Promise<Origin> {
   if ((await localVersions(p, source.name)).length > 0) return 'release';
+  if (await mainInfo(p, source.name)) return 'main';
   return source.localDir ? 'local' : 'release';
 }
 

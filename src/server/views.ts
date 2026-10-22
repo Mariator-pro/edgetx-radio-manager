@@ -4,7 +4,7 @@ import { listBackups } from '../core/backup.ts';
 import { installedVersion, type RadioCard } from '../core/card.ts';
 import { localVersion } from '../core/content.ts';
 import { latestRelease } from '../core/github.ts';
-import { folderSize, installedOn, localVersions, versionDir } from '../core/packages.ts';
+import { folderSize, installedOn, localVersions, mainInfo, mainVersion, versionDir } from '../core/packages.ts';
 import type { Paths } from '../core/paths.ts';
 import { countActions, type PlanItem } from '../core/plan.ts';
 import { isBelowMin, radioName, radioTypes, type RadioType } from '../core/radios.ts';
@@ -27,12 +27,14 @@ export async function sourceViews(p: Paths, s: Settings): Promise<SourceView[]> 
   return Promise.all(
     s.sources.map(async (src) => {
       const [newest] = await localVersions(p, src.name);
+      const main = await mainInfo(p, src.name);
       return {
         name: src.name,
         repo: src.repo,
         kind: src.kind,
         localDir: src.localDir,
         newest: newest && { tag: newest.tag, published: newest.published },
+        main: main && mainVersion(main),
         local: await localVersion(src),
       };
     }),
@@ -61,8 +63,9 @@ export async function radioView(
       isNew: r?.newSources?.includes(src.name) ?? false,
       fixed: src.kind === 'sdcard',
       installed: installedVersion(card, src.name, src.kind),
-      available: choice.origin === 'local' ? view?.local : view?.newest?.tag,
+      available: { release: view?.newest?.tag, main: view?.main, local: view?.local }[choice.origin],
       hasRelease: !!view?.newest,
+      hasMain: !!view?.main,
       hasLocal: !!view?.local,
     };
   });

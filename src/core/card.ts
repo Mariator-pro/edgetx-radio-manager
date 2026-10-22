@@ -13,7 +13,7 @@ export interface ListedFile {
 export interface InstalledList {
   tool: number;
   updated: string;
-  packages: Record<string, { version: string; origin: 'release' | 'local' }>;
+  packages: Record<string, { version: string; origin: 'release' | 'main' | 'local' }>;
   files: Record<string, ListedFile>;
 }
 

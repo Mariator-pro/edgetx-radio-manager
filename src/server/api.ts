@@ -13,6 +13,7 @@ export interface SourceView {
   kind: SourceKind;
   localDir?: string;
   newest?: { tag: string; published: string };
+  main?: string; // "main <hash>", downloaded newest commit of the default branch
   local?: string; // "local <hash>[*]"
 }
 
@@ -21,12 +22,13 @@ export interface RadioSourceView {
   repo: string;
   kind: SourceKind;
   on: boolean;
-  origin: 'release' | 'local';
+  origin: 'release' | 'main' | 'local';
   isNew: boolean;
   fixed: boolean; // SD content: always on
   installed?: string;
   available?: string;
   hasRelease: boolean;
+  hasMain: boolean;
   hasLocal: boolean;
 }
 

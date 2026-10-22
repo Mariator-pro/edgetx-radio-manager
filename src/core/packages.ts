@@ -11,8 +11,29 @@ export interface ReleaseInfo {
   url: string;
 }
 
+// commit.json next to the source archive of a project's newest main commit.
+export interface MainInfo {
+  sha: string;
+  date: string;
+}
+
 export function versionDir(p: Paths, name: string, tag: string): string {
   return join(p.packages, name, tag);
+}
+
+// Next to the releases; has no release.json, so it never counts as a release.
+export function mainDir(p: Paths, name: string): string {
+  return join(p.packages, name, '_main');
+}
+
+export async function mainInfo(p: Paths, name: string): Promise<MainInfo | undefined> {
+  const text = await readFile(join(mainDir(p, name), 'commit.json'), 'utf8').catch(() => undefined);
+  return text === undefined ? undefined : (JSON.parse(text) as MainInfo);
+}
+
+// "main 1a2b3c4"
+export function mainVersion(info: MainInfo): string {
+  return `main ${info.sha.slice(0, 7)}`;
 }
 
 // Downloaded versions of a package, newest release first.

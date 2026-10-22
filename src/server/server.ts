@@ -5,10 +5,10 @@ import { extname, join, normalize, sep } from 'node:path';
 import { applyPlan, type Resolution } from '../core/apply.ts';
 import { backupCard, deleteBackup, pruneBackups } from '../core/backup.ts';
 import { findCards, readCard, type RadioCard } from '../core/card.ts';
-import { downloadAll } from '../core/download.ts';
+import { downloadAll, downloadMain, type DownloadEvent } from '../core/download.ts';
 import { AppError, errorInfo, type ErrorArgs, type ErrorCode } from '../core/errors.ts';
 import { dfuUtilAvailable, flashFirmware, flashMethod } from '../core/firmware.ts';
-import { deleteVersion, localVersions } from '../core/packages.ts';
+import { deleteVersion, localVersions, mainInfo } from '../core/packages.ts';
 import { isSafeName, type Paths } from '../core/paths.ts';
 import { isBelowMin, MIN_EDGETX, radioTypes } from '../core/radios.ts';
 import { ensureSelection } from '../core/selection.ts';
@@ -77,6 +77,13 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
     for (const c of clients) c.write(msg);
   };
   const progress = (e: ProgressEvent) => send('progress', e);
+  const downloadProgress = (e: DownloadEvent) =>
+    progress({
+      op: 'download',
+      text: e.type === 'file' ? `${e.source}: ${e.file}` : `Checking ${e.source}`,
+      source: e.source,
+      file: e.type === 'file' ? e.file : undefined,
+    });
   const pushState = async () => send('state', await stateView(p, s, cards, boards, busy));
   const boardOf = (c: RadioCard) => c.board ?? boards.get(c.volume);
   const ctxOf = (board: string) => ({ board, voices: soundsOf(s.radios[board]) });
@@ -150,14 +157,26 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
       await pushState();
     },
     'POST /api/radio/selection': async (req) => {
-      const { board, source, on, origin } = await body<{ board: string; source: string; on?: boolean; origin?: 'release' | 'local' }>(req);
+      const { board, source, on, origin } = await body<{ board: string; source: string; on?: boolean; origin?: 'release' | 'main' | 'local' }>(req);
       const r = s.radios[board];
       const choice = r?.sources?.[source];
-      if (!r || !choice) throw new HttpError(404, 'unknownRadioOrSource');
-      if (on !== undefined && s.sources.find((x) => x.name === source)?.kind !== 'sdcard') choice.on = on;
-      if (origin) choice.origin = origin;
-      r.newSources = r.newSources?.filter((n) => n !== source);
-      await saveSettings(p, s);
+      const src = s.sources.find((x) => x.name === source);
+      if (!r || !choice || !src) throw new HttpError(404, 'unknownRadioOrSource');
+      const save = async () => {
+        if (on !== undefined && src.kind !== 'sdcard') choice.on = on;
+        if (origin) choice.origin = origin;
+        r.newSources = r.newSources?.filter((n) => n !== source);
+        await saveSettings(p, s);
+      };
+      // Switching to main fetches the newest commit first when it isn't downloaded yet.
+      if (origin === 'main' && src.kind === 'project' && !(await mainInfo(p, source))) {
+        return op('download', async () => {
+          const result = await downloadMain(p, src, fetch, downloadProgress);
+          if (!result) throw new HttpError(404, 'noCommit', { repo: src.repo });
+          await save();
+        });
+      }
+      await save();
       await pushState();
     },
     'POST /api/radio/sounds': async (req) => {
@@ -172,14 +191,7 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
     'GET /api/voices': async () => voiceViews(p, s),
     'POST /api/download': () =>
       op('download', async () => {
-        const results = await downloadAll(p, s, fetch, (e) =>
-          progress({
-            op: 'download',
-            text: e.type === 'file' ? `${e.source}: ${e.file}` : `Checking ${e.source}`,
-            source: e.source,
-            file: e.type === 'file' ? e.file : undefined,
-          }),
-        );
+        const results = await downloadAll(p, s, fetch, downloadProgress);
         s.lastCheck = new Date().toISOString();
         await saveSettings(p, s);
         return results;
