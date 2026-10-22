@@ -2,6 +2,7 @@ import { Alert, Button, Label, ListBox, ProgressBar, Select, Spinner } from '@he
 import { useEffect, useState } from 'react';
 import type { FirmwareView, FlashResultView, ProgressEvent } from '../../server/api.ts';
 import { errorText, get, post } from '../api.ts';
+import { isNewer } from '../format.ts';
 import { usePrefs } from '../usePrefs.ts';
 
 type Phase = 'loading' | 'ready' | 'running' | 'done' | 'error';
@@ -41,6 +42,7 @@ export function FlashFlow({ board, name, progress, onBack }: { board: string; na
   };
 
   const blocked = fw?.method === 'dfu' && fw.dfuUtil === false;
+  const isOlder = (v: string) => !!fw?.installed && isNewer(fw.installed, v);
   const writing = phase === 'running' && progress?.op === 'flash' && progress.step === 'flash';
 
   return (
@@ -89,6 +91,7 @@ export function FlashFlow({ board, name, progress, onBack }: { board: string; na
                     {fw.versions.map((v) => (
                       <ListBox.Item key={v} id={v} textValue={v}>
                         {v}
+                        {isOlder(v) && <span className="text-muted">· {t.downgrade}</span>}
                         <ListBox.ItemIndicator />
                       </ListBox.Item>
                     ))}
@@ -97,6 +100,16 @@ export function FlashFlow({ board, name, progress, onBack }: { board: string; na
               </Select>
               <span className="pb-2 text-sm text-muted">{t.installed(fw.installed ?? t.unknown)}</span>
             </div>
+          )}
+
+          {tag && isOlder(tag) && (
+            <Alert status="warning">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Title>{t.downgradeTitle(tag)}</Alert.Title>
+                <Alert.Description>{t.downgradeText}</Alert.Description>
+              </Alert.Content>
+            </Alert>
           )}
 
           {blocked && (

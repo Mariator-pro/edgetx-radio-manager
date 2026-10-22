@@ -31,3 +31,11 @@ export function backupLabel(name: string): string {
   const m = name.match(/^(\d{4}-\d{2}-\d{2})_(\d{2})(\d{2})(?:_(\d+))?$/);
   return m ? `${m[1]} ${m[2]}:${m[3]}${m[4] ? ` (${m[4]})` : ''}` : name;
 }
+
+// "2.12.5" newer than "v2.12.3"; a leading "v" is ignored, missing parts count as 0.
+export function isNewer(a: string, b: string): boolean {
+  const x = a.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  const y = b.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+  return false;
+}

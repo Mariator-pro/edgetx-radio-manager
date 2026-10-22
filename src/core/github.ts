@@ -24,6 +24,8 @@ interface ApiRelease {
   html_url: string;
   zipball_url: string;
   assets: { name: string; browser_download_url: string; size: number }[];
+  draft?: boolean;
+  prerelease?: boolean;
 }
 
 // Newest non-prerelease release, or undefined when the repo has none.
@@ -34,6 +36,12 @@ export function latestRelease(repo: string, fetchFn: FetchFn = fetch): Promise<R
 // The release of one tag, or undefined when there is none.
 export function releaseByTag(repo: string, tag: string, fetchFn: FetchFn = fetch): Promise<Release | undefined> {
   return getRelease(`https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(tag)}`, fetchFn);
+}
+
+// The newest 30 releases without drafts and pre-releases, newest first.
+export async function listReleases(repo: string, fetchFn: FetchFn = fetch): Promise<Release[]> {
+  const list = await getJson<ApiRelease[]>(`https://api.github.com/repos/${repo}/releases?per_page=30`, fetchFn);
+  return (list ?? []).filter((r) => !r.draft && !r.prerelease).map(toRelease);
 }
 
 export interface Commit {
@@ -59,14 +67,19 @@ async function getJson<T>(url: string, fetchFn: FetchFn, missing = [404]): Promi
   if (missing.includes(res.status)) return undefined;
   if (!res.ok) {
     const limited = (res.status === 403 || res.status === 429) && res.headers.get('x-ratelimit-remaining') === '0';
-    throw limited ? new AppError('rateLimit') : new AppError('githubStatus', { status: res.status });
+    const reset = Number(res.headers.get('x-ratelimit-reset')); // seconds since 1970
+    if (limited) throw new AppError('rateLimit', reset ? { reset: new Date(reset * 1000).toISOString() } : {});
+    throw new AppError('githubStatus', { status: res.status });
   }
   return (await res.json()) as T;
 }
 
 async function getRelease(url: string, fetchFn: FetchFn): Promise<Release | undefined> {
   const r = await getJson<ApiRelease>(url, fetchFn);
-  if (!r) return undefined;
+  return r && toRelease(r);
+}
+
+function toRelease(r: ApiRelease): Release {
   return {
     tag: r.tag_name,
     published: r.published_at,

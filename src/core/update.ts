@@ -1,14 +1,14 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { InstalledList, RadioCard } from './card.ts';
-import { loadContent, releaseContent, type PackageContent, type RadioContext } from './content.ts';
+import { detectVersion, loadContent, releaseContent, type PackageContent, type RadioContext } from './content.ts';
 import { downloadTag } from './download.ts';
 import type { FetchFn } from './github.ts';
 import { versionDir } from './packages.ts';
 import type { Paths } from './paths.ts';
 import { makePlan, mergePackages, type PlanItem } from './plan.ts';
 import { ensureSelection, updateSources } from './selection.ts';
-import { soundsOf, type Settings } from './settings.ts';
+import { soundsOf, type Choice, type Settings } from './settings.ts';
 
 export interface UpdateSetup {
   contents: PackageContent[];
@@ -34,6 +34,22 @@ async function sdContentBaseline(p: Paths, s: Settings, card: RadioCard, ctx: Ra
   return { tool: 1, updated: '', packages: { [src.name]: { version: tag, origin: 'release' } }, files };
 }
 
+// Projects copied to the card by hand that match a downloaded version exactly count as installed by the
+// tool: switched off they are removed, switched on they are replaced without asking.
+async function withCopied(p: Paths, s: Settings, card: RadioCard, list: InstalledList | undefined, choices: Record<string, Choice>) {
+  const out: InstalledList = list ? { ...list, packages: { ...list.packages }, files: { ...list.files } } : { tool: 1, updated: '', packages: {}, files: {} };
+  let adopted = false;
+  for (const src of updateSources(s)) {
+    if (src.kind !== 'project' || out.packages[src.name]) continue;
+    const found = await detectVersion(p, src, card.volume, choices[src.name]?.origin ?? 'release');
+    if (!found.files) continue;
+    out.packages[src.name] = { version: found.version!, origin: found.origin! };
+    for (const [path, sha] of found.files) out.files[path] ??= { sha256: sha, from: [src.name], written: src.name };
+    adopted = true;
+  }
+  return adopted ? out : list;
+}
+
 // Everything an SD update of this card would do, without touching the card.
 export async function prepareUpdate(p: Paths, s: Settings, card: RadioCard, board: string, fetchFn: FetchFn = fetch): Promise<UpdateSetup> {
   const ctx = { board, voices: soundsOf(s.radios[board]) };
@@ -48,7 +64,7 @@ export async function prepareUpdate(p: Paths, s: Settings, card: RadioCard, boar
     if (content && content.files.size > 0) contents.push(content);
     else missing.push(`${src.name} (${choice.origin})`);
   }
-  const list = card.installed ?? (await sdContentBaseline(p, s, card, ctx, fetchFn));
+  const list = await withCopied(p, s, card, card.installed ?? (await sdContentBaseline(p, s, card, ctx, fetchFn)), choices);
   const plan = await makePlan(card.volume, mergePackages(contents), list);
   return { contents, missing, plan, selectionChanged };
 }

@@ -5,7 +5,8 @@ export const ERRORS = {
   notFound: () => 'Not found',
   invalidRequest: (p: { what: string }) => `Invalid request: ${p.what}`,
   noConnection: () => 'No connection to GitHub. Check the internet connection.',
-  rateLimit: () => 'GitHub rate limit reached, try again later',
+  rateLimit: (p: { reset?: string } = {}) =>
+    p.reset ? `GitHub rate limit reached, try again after ${new Date(p.reset).toTimeString().slice(0, 5)}` : 'GitHub rate limit reached, try again later',
   githubStatus: (p: { status: number }) => `GitHub answered ${p.status}`,
   downloadFailed: (p: { status: number; url: string }) => `Download failed (${p.status}): ${p.url}`,
 

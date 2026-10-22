@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { loadContent, type Origin, type PackageContent, type RadioContext } from './content.ts';
 import { localVersions, mainInfo } from './packages.ts';
 import type { Paths } from './paths.ts';
-import type { Settings, Source } from './settings.ts';
+import { ON_FOR_NEW_RADIOS, type Settings, type Source } from './settings.ts';
 
 // Sources that put files on the SD card (firmware is flashed instead).
 export function updateSources(s: Settings): Source[] {
@@ -38,7 +38,8 @@ async function anyExists(root: string, rels: string[]): Promise<boolean> {
   return false;
 }
 
-// First detection of a radio: EdgeTX content always, projects that are already on the card.
+// First detection of a radio: EdgeTX content always, Flight Wingman, and projects that are already on the card
+// (switching those off would delete them on the next update).
 // Later: sources added since then come in switched off and listed as new.
 export async function ensureSelection(
   p: Paths,
@@ -57,7 +58,7 @@ export async function ensureSelection(
     const own = ownFolders(contents.filter((c): c is PackageContent => c !== undefined));
     r.sources = {};
     for (const src of sources) {
-      const on = src.kind !== 'project' || (await anyExists(cardRoot, own.get(src.name) ?? []));
+      const on = src.kind !== 'project' || ON_FOR_NEW_RADIOS.includes(src.name) || (await anyExists(cardRoot, own.get(src.name) ?? []));
       r.sources[src.name] = { on, origin: origins.get(src.name)! };
     }
     return true;

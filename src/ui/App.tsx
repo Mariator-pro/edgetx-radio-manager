@@ -14,10 +14,22 @@ import { usePrefs } from './usePrefs.ts';
 
 type Notice = { status: 'success' | 'danger' | 'default'; title: string; text?: string };
 
+// One line per kind of error; a missing connection or the rate limit hit every source, so no names there.
 function downloadNotice(results: DownloadResultView[], t: Texts): Notice {
   const fresh = results.filter((r) => r.status === 'new').map((r) => `${r.source} ${r.tag}`);
-  const failed = results.filter((r) => r.status === 'error').map((r) => `${r.source}: ${errorText(t, r.error ?? { message: r.message ?? '' })}`);
-  if (failed.length > 0) return { status: 'danger', title: t.someFailed, text: failed.join('; ') };
+  const groups = new Map<string, Set<string>>();
+  for (const r of results.filter((x) => x.status === 'error')) {
+    const error = r.error ?? { message: r.message ?? '' };
+    const text = errorText(t, error);
+    const names = groups.get(text) ?? new Set<string>();
+    if (error.code !== 'rateLimit' && error.code !== 'noConnection') names.add(r.source);
+    groups.set(text, names);
+  }
+  if (groups.size > 0) {
+    const text = [...groups].map(([msg, names]) => (names.size > 0 ? `${msg} (${[...names].join(', ')})` : msg)).join(' ');
+    const anyOk = results.some((r) => r.status !== 'error');
+    return { status: 'danger', title: anyOk ? t.someFailed : t.checkFailed, text };
+  }
   return fresh.length > 0 ? { status: 'success', title: t.downloaded, text: fresh.join(', ') } : { status: 'default', title: t.allCurrent };
 }
 
@@ -104,6 +116,7 @@ export function App() {
             keep={state.backupsToKeep}
             run={run}
             onPlan={() => setPage('update')}
+            onSources={() => setPage('sources')}
             onFlash={() => {
               setFlashing({ board: radio.board!, name: radio.name });
               setPage('flash');

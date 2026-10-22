@@ -12,6 +12,8 @@ export interface Source {
   kind: SourceKind;
   sdDir?: string; // folder inside the release that maps to the SD card root
   localDir?: string; // local git checkout, optional
+  // one file put on the card at this path: the release asset, and on main the file at repoPath; no local checkout
+  file?: { asset: string; card: string; repoPath?: string };
 }
 
 export interface Choice {
@@ -34,7 +36,11 @@ export interface Settings {
   backupsToKeep: number;
   keptBackups: Record<string, string[]>; // board -> backup folder names never pruned
   lastCheck?: string; // last download run
+  knownDefaults?: string[]; // default sources already offered; a removed one isn't added again
 }
+
+// Projects switched on for a newly detected radio; all other projects start switched off.
+export const ON_FOR_NEW_RADIOS: readonly string[] = ['flight-wingman'];
 
 export const DEFAULT_SOURCES: readonly Source[] = [
   { name: 'edgetx-firmware', repo: 'EdgeTX/edgetx', kind: 'firmware' },
@@ -44,20 +50,40 @@ export const DEFAULT_SOURCES: readonly Source[] = [
   { name: 'lipo-nanny', repo: 'Mariator-pro/edgetx-lipo-nanny', kind: 'project', sdDir: 'src' },
   { name: 'link-sentinel', repo: 'Mariator-pro/elrs-link-sentinel', kind: 'project', sdDir: 'src' },
   { name: 'gps-homer', repo: 'Mariator-pro/edgetx-gps-homer', kind: 'project', sdDir: 'src' },
+  { name: 'elrs-lua', repo: 'ExpressLRS/ExpressLRS', kind: 'project', file: { asset: 'elrs.lua', card: 'SCRIPTS/TOOLS/elrs.lua', repoPath: 'src/lua/elrs.lua' } },
 ];
 
 export function defaultSettings(): Settings {
-  return { sources: DEFAULT_SOURCES.map((s) => ({ ...s })), radios: {}, backupsToKeep: 10, keptBackups: {} };
+  return {
+    sources: DEFAULT_SOURCES.map((s) => ({ ...s })),
+    radios: {},
+    backupsToKeep: 10,
+    keptBackups: {},
+    knownDefaults: DEFAULT_SOURCES.map((s) => s.name),
+  };
 }
 
 export async function loadSettings(p: Paths): Promise<Settings> {
   const text = await readFile(p.settings, 'utf8').catch(() => undefined);
   if (text === undefined) return defaultSettings();
-  const s = { ...defaultSettings(), ...(JSON.parse(text) as Partial<Settings>) };
+  const saved = JSON.parse(text) as Partial<Settings>;
+  const s = { ...defaultSettings(), ...saved };
   // earlier settings had one "voice" per radio
   for (const r of Object.values(s.radios) as (RadioSettings & { voice?: string })[]) {
     if (r.voice && !r.sounds) r.sounds = [r.voice];
     delete r.voice;
+  }
+  // default sources added in a later version reach existing settings once
+  const known = new Set(saved.knownDefaults ?? s.sources.map((x) => x.name));
+  for (const d of DEFAULT_SOURCES) {
+    const have = s.sources.some((x) => x.name === d.name || x.repo.toLowerCase() === d.repo.toLowerCase());
+    if (!known.has(d.name) && !have) s.sources.push({ ...d });
+  }
+  s.knownDefaults = DEFAULT_SOURCES.map((x) => x.name);
+  // one-file sources take their file from the defaults, so a changed mapping reaches saved settings
+  for (const src of s.sources) {
+    const d = DEFAULT_SOURCES.find((x) => x.name === src.name);
+    if (d?.file) src.file = { ...d.file };
   }
   return s;
 }
@@ -88,7 +114,7 @@ export function rememberRadio(s: Settings, card: RadioCard): boolean {
 export function findLocalRepos(s: Settings, parentDir: string): boolean {
   let changed = false;
   for (const src of s.sources) {
-    if (src.kind !== 'project' || src.localDir) continue;
+    if (src.kind !== 'project' || src.localDir || src.file) continue;
     const dir = join(parentDir, src.repo.split('/')[1] ?? src.name);
     if (existsSync(join(dir, '.git'))) {
       src.localDir = dir;

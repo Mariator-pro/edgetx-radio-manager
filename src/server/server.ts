@@ -162,6 +162,8 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
       const choice = r?.sources?.[source];
       const src = s.sources.find((x) => x.name === source);
       if (!r || !choice || !src) throw new HttpError(404, 'unknownRadioOrSource');
+      const noMain = origin === 'main' && src.file && !src.file.repoPath;
+      if (src.file && (origin === 'local' || noMain)) throw new HttpError(400, 'invalidRequest', { what: 'origin' });
       const save = async () => {
         if (on !== undefined && src.kind !== 'sdcard') choice.on = on;
         if (origin) choice.origin = origin;

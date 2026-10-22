@@ -23,6 +23,7 @@ const en = {
   language: 'Language',
 
   someFailed: 'Some downloads failed',
+  checkFailed: 'Could not check for updates',
   downloaded: 'Downloaded',
   allCurrent: 'Everything is up to date',
   failed: 'That did not work',
@@ -31,7 +32,8 @@ const en = {
   close: 'Close',
 
   notInstalled: 'not installed',
-  removedNext: 'removed on next update',
+  versionUnknown: 'on the card, version unknown',
+  removedNext: 'will be uninstalled',
   tagNew: 'New',
   tagRequired: 'Required',
   tagLocal: 'Local',
@@ -66,6 +68,18 @@ const en = {
   lastBackup: 'Last backup',
   noneYet: 'none yet',
   stored: (n: number, keep: number) => `${n} of max. ${keep} kept`,
+  whatsNext: 'What’s next',
+  newVersion: 'New version',
+  current: 'Up to date',
+  neededFirst: 'Needed first',
+  sdCard: 'SD card',
+  waitsForFirmware: 'Starts once EdgeTX 2.12 or newer is on the radio.',
+  backup: 'Backup',
+  sourcesOnRadio: 'Sources on this radio',
+  sourcesCount: (n: number, on: number) => `${n} ${n === 1 ? 'source' : 'sources'}, ${on} switched on`,
+  colOrigin: 'Origin',
+  colVersion: 'Version',
+  colActive: 'Active',
 
   actions: { add: 'new', replace: 'replace', delete: 'delete', conflict: 'conflict' },
   reasons: {
@@ -83,6 +97,7 @@ const en = {
   deleteIt: 'Delete it',
   keepAll: 'Keep all files on radio',
   overwriteAll: 'Overwrite all with update',
+  keptByDefault: 'Without a choice, the file stays on the radio.',
   changeSources: 'Change sources',
   reading: 'Reading packages and SD card …',
   updateFailed: 'The update failed',
@@ -92,7 +107,6 @@ const en = {
   notAvailableText: (l: string) => `${l}: not downloaded yet, or no local checkout. Check for updates first.`,
   nothing: 'Nothing to change: the SD card is already up to date.',
   files: 'Files',
-  fileCount: (n: number) => `${n} ${n === 1 ? 'file' : 'files'}`,
   alsoIn: (l: string) => `also in ${l}`,
   luac: (n: number) => `${n} outdated .luac ${n === 1 ? 'file is' : 'files are'} deleted as well, so the radio compiles the new code.`,
   nextBackup: 'Next: backup to',
@@ -108,6 +122,9 @@ const en = {
   noFirmware: 'No firmware downloaded yet. Use “Check for updates” first.',
   edgetxVersion: 'EdgeTX version',
   installed: (v: string) => `Installed: ${v}`,
+  downgrade: 'downgrade',
+  downgradeTitle: (v: string) => `Downgrade to ${v}`,
+  downgradeText: 'An older firmware may not fully read models and settings saved by a newer version. Back up the SD card first.',
   dfuMissing: 'dfu-util is missing',
   dfuMissingText: (n: string) =>
     `The ${n} is flashed over USB with dfu-util. On macOS install it with “brew install dfu-util”, on Windows together with the WinUSB driver (Zadig).`,
@@ -186,6 +203,7 @@ const de: Texts = {
   language: 'Sprache',
 
   someFailed: 'Einige Downloads sind fehlgeschlagen',
+  checkFailed: 'Suche nach Updates fehlgeschlagen',
   downloaded: 'Heruntergeladen',
   allCurrent: 'Alles ist aktuell',
   failed: 'Das hat nicht geklappt',
@@ -194,7 +212,8 @@ const de: Texts = {
   close: 'Schließen',
 
   notInstalled: 'nicht installiert',
-  removedNext: 'wird beim nächsten Update entfernt',
+  versionUnknown: 'auf der Karte, Version unbekannt',
+  removedNext: 'wird deinstalliert',
   tagNew: 'Neu',
   tagRequired: 'Pflicht',
   tagLocal: 'Lokal',
@@ -229,6 +248,18 @@ const de: Texts = {
   lastBackup: 'Letztes Backup',
   noneYet: 'noch keins',
   stored: (n, keep) => `${n} von max. ${keep} aufbewahrt`,
+  whatsNext: 'Was ansteht',
+  newVersion: 'Neue Version',
+  current: 'Aktuell',
+  neededFirst: 'Zuerst nötig',
+  sdCard: 'SD-Karte',
+  waitsForFirmware: 'Geht los, sobald EdgeTX 2.12 oder neuer auf dem Sender ist.',
+  backup: 'Backup',
+  sourcesOnRadio: 'Quellen auf diesem Sender',
+  sourcesCount: (n, on) => `${n} ${n === 1 ? 'Quelle' : 'Quellen'}, ${on} eingeschaltet`,
+  colOrigin: 'Herkunft',
+  colVersion: 'Version',
+  colActive: 'Aktiv',
 
   actions: { add: 'neu', replace: 'ersetzen', delete: 'löschen', conflict: 'Konflikt' },
   reasons: {
@@ -246,6 +277,7 @@ const de: Texts = {
   deleteIt: 'Löschen',
   keepAll: 'Alle Dateien auf dem Sender behalten',
   overwriteAll: 'Alle mit Update überschreiben',
+  keptByDefault: 'Ohne Auswahl bleibt die Datei auf dem Sender.',
   changeSources: 'Quellen ändern',
   reading: 'Lese Pakete und SD-Karte …',
   updateFailed: 'Das Update hat nicht geklappt',
@@ -255,7 +287,6 @@ const de: Texts = {
   notAvailableText: (l) => `${l}: noch nicht heruntergeladen oder kein lokales Repo. Zuerst nach Updates suchen.`,
   nothing: 'Nichts zu ändern, die SD-Karte ist schon auf dem neuesten Stand.',
   files: 'Dateien',
-  fileCount: (n) => `${n} ${n === 1 ? 'Datei' : 'Dateien'}`,
   alsoIn: (l) => `auch in ${l}`,
   luac: (n) => `Dazu ${n === 1 ? 'wird 1 veraltete .luac-Datei' : `werden ${n} veraltete .luac-Dateien`} gelöscht, damit der Sender den neuen Code kompiliert.`,
   nextBackup: 'Als Nächstes: Backup nach',
@@ -271,6 +302,9 @@ const de: Texts = {
   noFirmware: 'Noch keine Firmware heruntergeladen. Zuerst „Nach Updates suchen“.',
   edgetxVersion: 'EdgeTX-Version',
   installed: (v) => `Installiert: ${v}`,
+  downgrade: 'Downgrade',
+  downgradeTitle: (v) => `Downgrade auf ${v}`,
+  downgradeText: 'Eine ältere Firmware liest Modelle und Einstellungen, die eine neuere Version gespeichert hat, unter Umständen nicht vollständig. Vorher die SD-Karte sichern.',
   dfuMissing: 'dfu-util fehlt',
   dfuMissingText: (n) =>
     `Der Sender ${n} wird über USB mit dfu-util geflasht. Unter macOS mit „brew install dfu-util“ installieren, unter Windows zusammen mit dem WinUSB-Treiber (Zadig).`,
@@ -339,7 +373,10 @@ const de: Texts = {
     notFound: () => 'Nicht gefunden.',
     invalidRequest: ({ what }) => `Ungültige Anfrage: ${what}`,
     noConnection: () => 'Keine Verbindung zu GitHub. Bitte die Internetverbindung prüfen.',
-    rateLimit: () => 'GitHub-Abfragelimit erreicht, bitte später noch einmal versuchen.',
+    rateLimit: ({ reset } = {}) =>
+      reset
+        ? `GitHub-Abfragelimit erreicht, wieder möglich ab ${new Date(reset).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr.`
+        : 'GitHub-Abfragelimit erreicht, bitte später noch einmal versuchen.',
     githubStatus: ({ status }) => `GitHub antwortet mit Fehler ${status}.`,
     downloadFailed: ({ status, url }) => `Download fehlgeschlagen (${status}): ${url}`,
 

@@ -2,7 +2,7 @@ import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { listBackups } from '../core/backup.ts';
 import { installedVersion, type RadioCard } from '../core/card.ts';
-import { localVersion } from '../core/content.ts';
+import { detectVersion, localVersion, sameOnCard } from '../core/content.ts';
 import { latestRelease } from '../core/github.ts';
 import { folderSize, installedOn, localVersions, mainInfo, mainVersion, versionDir } from '../core/packages.ts';
 import type { Paths } from '../core/paths.ts';
@@ -51,9 +51,16 @@ export async function radioView(
 ): Promise<RadioView> {
   const r = board ? s.radios[board] : undefined;
   const sel = r?.sources ?? {};
-  const radioSources: RadioSourceView[] = updateSources(s).map((src) => {
+  const radioSources: RadioSourceView[] = await Promise.all(updateSources(s).map(async (src) => {
     const view = sources.find((x) => x.name === src.name);
     const choice = sel[src.name] ?? { on: false, origin: 'release' as const };
+    const listed = installedVersion(card, src.name, src.kind);
+    // a project copied by hand: its version comes from comparing the card with the downloads
+    const found = !listed && src.kind === 'project' ? await detectVersion(p, src, card.volume, choice.origin) : undefined;
+    const available = { release: view?.newest?.tag, main: view?.main, local: view?.local }[choice.origin];
+    // another label for the same files (e.g. "local abc1234" and "main abc1234") is no update
+    const same =
+      choice.on && !!listed && !!available && listed !== available && src.kind === 'project' && (await sameOnCard(p, src, card, choice.origin));
     return {
       name: src.name,
       repo: src.repo,
@@ -62,13 +69,16 @@ export async function radioView(
       origin: choice.origin,
       isNew: r?.newSources?.includes(src.name) ?? false,
       fixed: src.kind === 'sdcard',
-      installed: installedVersion(card, src.name, src.kind),
-      available: { release: view?.newest?.tag, main: view?.main, local: view?.local }[choice.origin],
+      installed: same ? available : (listed ?? found?.version),
+      found: found?.version ? ('match' as const) : found?.onCard ? ('unknown' as const) : undefined,
+      available,
       hasRelease: !!view?.newest,
       hasMain: !!view?.main,
+      releaseOnly: !!src.file && !src.file.repoPath,
       hasLocal: !!view?.local,
     };
-  });
+  }));
+  // switched off and on the card: listed by the tool, or copied by hand as an exact downloaded version
   const updates = radioSources
     .filter((x) => (x.on && x.available && x.available !== x.installed) || (!x.on && x.installed))
     .map((x) => x.name);

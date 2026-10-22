@@ -1,28 +1,22 @@
 import { Alert, Button, Card, Chip, CloseButton, Label, ListBox, Select, Switch, ToggleButton, ToggleButtonGroup } from '@heroui/react';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import type { RadioSourceView, RadioView, VoiceView } from '../../server/api.ts';
 import { get, post } from '../api.ts';
-import { ArrowIcon } from '../components/icons.tsx';
-import { backupLabel, languageName } from '../format.ts';
+import { ArrowIcon, BackupsIcon, CheckIcon } from '../components/icons.tsx';
+import { backupLabel, isNewer, languageName } from '../format.ts';
 import type { Texts } from '../texts.ts';
 import { usePrefs } from '../usePrefs.ts';
 
 type Run = (fn: () => Promise<unknown>) => void;
-
-// "2.12.5" newer than "2.12.3"; missing parts count as 0.
-function isNewer(a: string, b: string): boolean {
-  const x = a.split('.').map((n) => parseInt(n, 10) || 0);
-  const y = b.split('.').map((n) => parseInt(n, 10) || 0);
-  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
-  return false;
-}
 
 function Versions({ s }: { s: RadioSourceView }) {
   const { t } = usePrefs();
   const changes = s.on && s.available && s.available !== s.installed;
   return (
     <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
-      <span className="rounded-md bg-surface-secondary px-2 py-0.5 text-muted">{s.installed ?? t.notInstalled}</span>
+      <span className="rounded-md bg-surface-secondary px-2 py-0.5 whitespace-nowrap text-muted">
+        {s.installed ?? (s.found === 'unknown' ? t.versionUnknown : t.notInstalled)}
+      </span>
       {changes && (
         <>
           <ArrowIcon size={14} className="text-warning" />
@@ -34,56 +28,39 @@ function Versions({ s }: { s: RadioSourceView }) {
   );
 }
 
-function tag(s: RadioSourceView, t: Texts): { label: string; color: 'default' | 'accent' | 'warning' } {
-  if (s.isNew) return { label: t.tagNew, color: 'warning' };
-  if (s.fixed) return { label: t.tagRequired, color: 'default' };
-  if (s.origin === 'local') return { label: t.tagLocal, color: 'accent' };
-  return s.origin === 'main' ? { label: t.tagMain, color: 'accent' } : { label: t.tagRelease, color: 'default' };
+function originLabel(origin: RadioSourceView['origin'], t: Texts): string {
+  return { release: t.tagRelease, main: t.tagMain, local: t.tagLocal }[origin];
 }
 
-function SourceCard({ radio, s, run }: { radio: RadioView; s: RadioSourceView; run: Run }) {
+function SourceRow({ radio, s, run }: { radio: RadioView; s: RadioSourceView; run: Run }) {
   const { t } = usePrefs();
-  const chip = tag(s, t);
   const origins = (
     [
       ['release', s.hasRelease, t.tagRelease],
       ['main', s.hasMain, t.tagMain],
       ['local', s.hasLocal, t.tagLocal],
     ] as const
-  ).filter(([id, has]) => has || id === s.origin || id === 'main'); // main is fetched when chosen
+  ).filter(([id, has]) => has || id === s.origin || (id === 'main' && !s.releaseOnly)); // main is fetched when chosen
   const set = (change: { on?: boolean; origin?: string }) =>
     run(() => post('/api/radio/selection', { board: radio.board, source: s.name, ...change }));
   return (
-    <Card className={s.isNew ? 'border border-warning' : undefined}>
-      <Card.Content className="flex flex-col gap-2.5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 flex-col">
-            <span className="font-semibold">{s.name}</span>
-            <span className="truncate text-xs text-muted">{s.repo}</span>
-          </div>
-          <Switch
-            aria-label={t.onThisRadio(s.name)}
-            isSelected={s.on}
-            isDisabled={s.fixed}
-            onChange={(on) => set({ on })}
-          >
-            <Switch.Content>
-              <Switch.Control>
-                <Switch.Thumb />
-              </Switch.Control>
-            </Switch.Content>
-          </Switch>
+    <tr className={`border-t border-separator ${s.isNew ? 'bg-warning-soft/40' : ''}`}>
+      <td className="px-5 py-2.5">
+        <div className="flex items-center gap-2">
+          <span className={`font-semibold ${s.on ? '' : 'text-muted'}`}>{s.name}</span>
+          {s.isNew && (
+            <Chip size="sm" variant="soft" color="warning">
+              {t.tagNew}
+            </Chip>
+          )}
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Versions s={s} />
-          <Chip size="sm" variant="soft" color={chip.color}>
-            {chip.label}
-          </Chip>
-        </div>
-        {s.kind === 'project' && origins.length > 1 && (
+        <div className="text-xs text-muted">{s.repo}</div>
+      </td>
+      <td className="px-3 py-2.5">
+        {s.kind === 'project' && origins.length > 1 ? (
           <ToggleButtonGroup
-            size="sm"
             aria-label={t.originOf(s.name)}
+            isDisabled={!s.on}
             selectionMode="single"
             disallowEmptySelection
             selectedKeys={new Set([s.origin])}
@@ -98,7 +75,52 @@ function SourceCard({ radio, s, run }: { radio: RadioView; s: RadioSourceView; r
               </ToggleButton>
             ))}
           </ToggleButtonGroup>
+        ) : (
+          <Chip size="sm" variant="soft">
+            {s.fixed ? `${originLabel(s.origin, t)} · ${t.tagRequired}` : originLabel(s.origin, t)}
+          </Chip>
         )}
+      </td>
+      <td className="px-3 py-2.5">
+        <Versions s={s} />
+      </td>
+      <td className="px-5 py-2.5">
+        <div className="flex justify-end">
+          <Switch aria-label={t.onThisRadio(s.name)} isSelected={s.on} isDisabled={s.fixed} onChange={(on) => set({ on })}>
+            <Switch.Content>
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+            </Switch.Content>
+          </Switch>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+// One card in "What's next": a numbered step, or a check mark once nothing is left to do.
+function Step(props: { mark: ReactNode; done: boolean; primary?: boolean; title: string; tag?: ReactNode; children: ReactNode; action: ReactNode }) {
+  const { mark, done, primary, title, tag, children, action } = props;
+  const circle = done
+    ? 'bg-success-soft text-success-soft-foreground'
+    : primary
+      ? 'bg-accent text-accent-foreground'
+      : 'bg-surface-secondary text-muted';
+  return (
+    <Card className={primary ? 'border-2 border-accent' : undefined}>
+      <Card.Content className="flex h-full flex-col gap-3.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2 font-semibold">
+            <span className={`inline-flex size-[22px] items-center justify-center rounded-full text-xs font-semibold ${circle}`}>
+              {done ? <CheckIcon size={13} /> : mark}
+            </span>
+            {title}
+          </span>
+          {tag}
+        </div>
+        {children}
+        <div className="mt-auto flex flex-col">{action}</div>
       </Card.Content>
     </Card>
   );
@@ -232,22 +254,31 @@ function ChooseBoard({ radio, run }: { radio: RadioView; run: Run }) {
   );
 }
 
-export function RadioPage(props: { radio: RadioView; busy?: string; keep: number; run: Run; onPlan: () => void; onFlash: () => void }) {
-  const { radio, busy, keep, run, onPlan, onFlash } = props;
+export function RadioPage(props: {
+  radio: RadioView;
+  busy?: string;
+  keep: number;
+  run: Run;
+  onPlan: () => void;
+  onFlash: () => void;
+  onSources: () => void;
+}) {
+  const { radio, busy, keep, run, onPlan, onFlash, onSources } = props;
   const { t } = usePrefs();
   const n = radio.updates.length;
+  const newer = !!radio.firmwareAvailable && (!radio.firmware || isNewer(radio.firmwareAvailable, radio.firmware));
+  const firmwareDone = !!radio.firmware && !newer && !radio.belowMin;
+  const sdPrimary = !radio.belowMin && n > 0;
+  const chip = (label: string, color: 'default' | 'success' | 'warning') => (
+    <Chip size="sm" variant="soft" color={color}>
+      {label}
+    </Chip>
+  );
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm text-muted">{t.connectedRadio(radio.volume)}</span>
-          <h1 className="m-0 text-3xl font-bold tracking-tight">{radio.name}</h1>
-        </div>
-        {radio.board && (
-          <Button variant="outline" isDisabled={!!busy} onPress={() => run(() => post('/api/backup', { volume: radio.volume }))}>
-            {busy === 'backup' ? t.backingUp : t.backUpNow}
-          </Button>
-        )}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm text-muted">{t.connectedRadio(radio.volume)}</span>
+        <h1 className="m-0 text-3xl font-bold tracking-tight">{radio.name}</h1>
       </div>
 
       {!radio.board ? (
@@ -264,64 +295,123 @@ export function RadioPage(props: { radio: RadioView; busy?: string; keep: number
             </Alert>
           )}
 
-          <section aria-labelledby="status" className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-accent-soft px-6 py-5 text-accent-soft-foreground dark:bg-zinc-900 dark:text-white">
-            <div className="flex flex-col gap-1.5">
-              <h2 id="status" className="m-0 text-xl font-semibold">
-                {n === 0 ? t.upToDate : t.updatesReady(n)}
-              </h2>
-              <p className="m-0 text-sm opacity-80 dark:text-zinc-300 dark:opacity-100">
-                {n === 0 ? t.matches : t.backupFirst(radio.updates.join(', '))}
-              </p>
+          {/* In the order they should happen: firmware first, then the SD card that matches it. */}
+          <section aria-labelledby="next" className="flex flex-col gap-3">
+            <h2 id="next" className="m-0 text-xs font-semibold tracking-wider text-muted uppercase">
+              {t.whatsNext}
+            </h2>
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
+              <Step
+                mark={1}
+                done={firmwareDone}
+                primary={radio.belowMin}
+                title={t.firmware}
+                tag={
+                  radio.belowMin
+                    ? chip(t.neededFirst, 'warning')
+                    : newer
+                      ? chip(t.newVersion, 'warning')
+                      : firmwareDone && chip(t.current, 'success')
+                }
+                action={
+                  <Button variant={radio.belowMin ? 'primary' : 'outline'} isDisabled={!!busy} onPress={onFlash}>
+                    {t.flashFirmware}
+                  </Button>
+                }
+              >
+                <div className="flex items-center gap-2.5 font-mono text-xl">
+                  {newer && (
+                    <>
+                      <span className="text-muted">{radio.firmware ?? t.unknown}</span>
+                      <ArrowIcon className="text-warning" />
+                    </>
+                  )}
+                  <span>{newer ? radio.firmwareAvailable : (radio.firmware ?? t.unknown)}</span>
+                </div>
+              </Step>
+
+              <Step
+                mark={2}
+                done={n === 0 && !radio.belowMin}
+                primary={sdPrimary}
+                title={t.sdCard}
+                tag={
+                  n > 0 ? chip(t.updatesReady(n), radio.belowMin ? 'default' : 'warning') : !radio.belowMin && chip(t.upToDate, 'success')
+                }
+                action={
+                  <Button variant={sdPrimary ? 'primary' : 'outline'} isDisabled={!!busy || radio.belowMin} onPress={onPlan}>
+                    {t.reviewPlan}
+                  </Button>
+                }
+              >
+                <p className="m-0 text-sm text-muted">
+                  {radio.belowMin ? t.waitsForFirmware : n === 0 ? t.matches : t.backupFirst(radio.updates.join(', '))}
+                </p>
+              </Step>
+
+              <Step
+                mark={<BackupsIcon size={13} />}
+                done={!!radio.lastBackup}
+                title={t.backup}
+                action={
+                  <Button variant="outline" isDisabled={!!busy} onPress={() => run(() => post('/api/backup', { volume: radio.volume }))}>
+                    {busy === 'backup' ? t.backingUp : t.backUpNow}
+                  </Button>
+                }
+              >
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm text-muted">{t.lastBackup}</span>
+                  <span className="font-mono">{radio.lastBackup ? backupLabel(radio.lastBackup) : t.noneYet}</span>
+                  <span className="text-xs text-muted">{t.stored(radio.backups, keep)}</span>
+                </div>
+              </Step>
             </div>
-            <Button size="lg" isDisabled={!!busy || radio.belowMin} onPress={onPlan}>
-              {t.reviewPlan}
-            </Button>
           </section>
 
           <div className="flex flex-wrap items-start gap-6">
-            <section aria-labelledby="sources" className="flex min-w-0 flex-[999_1_420px] flex-col gap-3">
-              <h2 id="sources" className="m-0 text-base font-semibold">
-                {t.sources}
-              </h2>
-              <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
-                {radio.sources.map((s) => (
-                  <SourceCard key={s.name} radio={radio} s={s} run={run} />
-                ))}
-              </div>
-            </section>
+            <Card className="min-w-0 flex-[999_1_560px] gap-0 overflow-hidden p-0">
+              <section aria-labelledby="sources">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                  <div className="flex flex-col">
+                    <h2 id="sources" className="m-0 text-base font-semibold">
+                      {t.sourcesOnRadio}
+                    </h2>
+                    <span className="text-sm text-muted">{t.sourcesCount(radio.sources.length, radio.sources.filter((s) => s.on).length)}</span>
+                  </div>
+                  <Button variant="ghost" size="sm" onPress={onSources}>
+                    {t.addSource}
+                  </Button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[640px] border-collapse text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-muted">
+                        <th scope="col" className="px-5 py-2 font-medium">
+                          {t.colSource}
+                        </th>
+                        <th scope="col" className="px-3 py-2 font-medium">
+                          {t.colOrigin}
+                        </th>
+                        <th scope="col" className="px-3 py-2 font-medium">
+                          {t.colVersion}
+                        </th>
+                        <th scope="col" className="px-5 py-2 text-right font-medium">
+                          {t.colActive}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {radio.sources.map((s) => (
+                        <SourceRow key={s.name} radio={radio} s={s} run={run} />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </Card>
 
             <aside className="flex min-w-0 flex-[1_1_280px] flex-col gap-4">
-              <Card>
-                <Card.Header>
-                  <Card.Title>{t.firmware}</Card.Title>
-                </Card.Header>
-                <Card.Content className="flex flex-col gap-3">
-                  <div className="flex items-center gap-2 font-mono text-lg">
-                    <span>{radio.firmware ?? t.unknown}</span>
-                    {radio.firmwareAvailable && (!radio.firmware || isNewer(radio.firmwareAvailable, radio.firmware)) && (
-                      <>
-                        <ArrowIcon className="text-muted" />
-                        <span className="text-warning-soft-foreground">{radio.firmwareAvailable}</span>
-                      </>
-                    )}
-                  </div>
-                  <Button variant="outline" isDisabled={!!busy} onPress={onFlash}>
-                    {t.flashFirmware}
-                  </Button>
-                </Card.Content>
-              </Card>
               <SoundsCard radio={radio} run={run} />
-              <Card>
-                <Card.Header>
-                  <Card.Title>{t.lastBackup}</Card.Title>
-                </Card.Header>
-                <Card.Content className="flex flex-col gap-1">
-                  <span className="font-mono text-sm">{radio.lastBackup ? backupLabel(radio.lastBackup) : t.noneYet}</span>
-                  <span className="text-xs text-muted">
-                    {t.stored(radio.backups, keep)}
-                  </span>
-                </Card.Content>
-              </Card>
             </aside>
           </div>
         </>

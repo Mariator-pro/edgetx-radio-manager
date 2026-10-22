@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { soundPackPattern } from './download.ts';
 import { localVersions, mainDir, mainInfo, mainVersion, versionDir } from './packages.ts';
 import type { Paths } from './paths.ts';
+import type { RadioCard } from './card.ts';
 import { radioTypesIn } from './radios.ts';
 import type { Source, SourceKind } from './settings.ts';
 import { readZip } from './zip.ts';
@@ -97,6 +98,11 @@ export async function releaseContent(p: Paths, source: Source, ctx: RadioContext
   const dir = versionDir(p, source.name, newest.tag);
   const files = new Map<string, PkgFile>();
   const time = Date.parse(newest.published);
+  if (source.file) {
+    const data = await readFile(join(dir, source.file.asset)).catch(() => undefined);
+    if (data) files.set(source.file.card, { data, sha: sha256(data), time });
+    return { name: source.name, origin: 'release', version: newest.tag, files };
+  }
   for (const zip of await zipsFor(dir, source, ctx)) {
     const entries = await readZip(join(dir, zip));
     const prefix = sdPrefix([...entries.keys()], source.sdDir);
@@ -111,6 +117,11 @@ export async function mainContent(p: Paths, source: Source): Promise<PackageCont
   if (!info) return undefined;
   const dir = mainDir(p, source.name);
   const files = new Map<string, PkgFile>();
+  if (source.file) {
+    const data = await readFile(join(dir, source.file.asset)).catch(() => undefined);
+    if (data) files.set(source.file.card, { data, sha: sha256(data), time: Date.parse(info.date) });
+    return { name: source.name, origin: 'main', version: mainVersion(info), files };
+  }
   for (const zip of (await readdir(dir)).filter((n) => n.endsWith('.zip'))) {
     const entries = await readZip(join(dir, zip));
     const prefix = sdPrefix([...entries.keys()], source.sdDir);
@@ -161,4 +172,91 @@ export async function localContent(source: Source): Promise<PackageContent | und
 export function loadContent(p: Paths, source: Source, origin: Origin, ctx: RadioContext): Promise<PackageContent | undefined> {
   if (origin === 'local') return localContent(source);
   return origin === 'main' ? mainContent(p, source) : releaseContent(p, source, ctx);
+}
+
+// Card paths and checksums of downloaded versions, and checksums of card files by size and change time,
+// so detecting versions on every state update doesn't read packages and card again.
+const versionShas = new Map<string, { version: string; shas: Map<string, string> } | undefined>();
+const cardShas = new Map<string, string>();
+
+async function cardSha(volume: string, path: string): Promise<string | undefined> {
+  const full = join(volume, path);
+  const st = await stat(full).catch(() => undefined);
+  if (!st?.isFile()) return undefined;
+  const key = `${full}|${st.size}|${st.mtimeMs}`;
+  let sha = cardShas.get(key);
+  if (!sha) {
+    sha = sha256(await readFile(full));
+    cardShas.set(key, sha);
+  }
+  return sha;
+}
+
+type Candidate = { origin: Origin; key: string; load: () => Promise<PackageContent | undefined> };
+
+// Every downloaded version of a project: releases newest first, then main, then the local checkout.
+async function candidates(p: Paths, source: Source): Promise<Candidate[]> {
+  const list: Candidate[] = [];
+  for (const v of await localVersions(p, source.name)) {
+    list.push({ origin: 'release', key: v.tag, load: () => releaseContent(p, source, {}, v.tag) });
+  }
+  const main = await mainInfo(p, source.name);
+  if (main) list.push({ origin: 'main', key: mainVersion(main), load: () => mainContent(p, source) });
+  const local = await localVersion(source);
+  if (local) list.push({ origin: 'local', key: local, load: () => localContent(source) });
+  return list;
+}
+
+async function shasOf(p: Paths, source: Source, c: Candidate): Promise<{ version: string; shas: Map<string, string> } | undefined> {
+  const key = `${p.packages}|${source.name}|${c.key}`;
+  if (!versionShas.has(key)) {
+    const content = await c.load().catch(() => undefined);
+    versionShas.set(key, content && { version: content.version, shas: new Map([...content.files].map(([path, f]) => [path, f.sha])) });
+  }
+  return versionShas.get(key);
+}
+
+// How many files of a version are on the card, and how many of them unchanged.
+async function onCardCount(volume: string, shas: Map<string, string>): Promise<{ present: number; same: number }> {
+  let present = 0;
+  let same = 0;
+  for (const [path, sha] of shas) {
+    const onDisk = await cardSha(volume, path);
+    if (onDisk) present++;
+    if (onDisk === sha) same++;
+  }
+  return { present, same };
+}
+
+export interface Detected {
+  onCard: boolean; // most files of some downloaded version are on the card
+  version?: string; // the version whose files are all there unchanged
+  origin?: Origin;
+  files?: Map<string, string>; // its card paths and checksums
+}
+
+// A project the tool didn't put on the card (copied by hand): the downloaded version whose files are all
+// there unchanged, the chosen origin tried first.
+export async function detectVersion(p: Paths, source: Source, volume: string, prefer: Origin): Promise<Detected> {
+  const list = (await candidates(p, source)).sort((a, b) => Number(b.origin === prefer) - Number(a.origin === prefer)); // stable: newest release first
+  let onCard = false;
+  for (const c of list) {
+    const v = await shasOf(p, source, c);
+    if (!v || v.shas.size === 0) continue;
+    const { present, same } = await onCardCount(volume, v.shas);
+    if (same === v.shas.size) return { onCard: true, version: v.version, origin: c.origin, files: v.shas };
+    if (present * 2 > v.shas.size) onCard = true;
+  }
+  return { onCard };
+}
+
+// True when the card already holds exactly the chosen version of a project: all its files unchanged, and no
+// file the tool wrote for it earlier that an update would delete (e.g. "local abc1234" against "main abc1234").
+export async function sameOnCard(p: Paths, source: Source, card: RadioCard, origin: Origin): Promise<boolean> {
+  const c = (await candidates(p, source)).find((x) => x.origin === origin);
+  const v = c && (await shasOf(p, source, c));
+  if (!v || v.shas.size === 0) return false;
+  const listed = Object.entries(card.installed?.files ?? {}).filter(([, f]) => f.written === source.name);
+  if (listed.some(([path]) => !v.shas.has(path))) return false;
+  return (await onCardCount(card.volume, v.shas)).same === v.shas.size;
 }

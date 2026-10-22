@@ -78,24 +78,30 @@ function Conflict({ f, value, onChange }: { f: PlanFileView; value: Resolution; 
       <p className="m-0 text-sm text-warning-soft-foreground">
         {t.reasons[f.reason!]} {t.from(f.pkg)}
       </p>
-      <RadioGroup aria-label={t.whatToDo(f.path)} value={value} onChange={(v) => onChange(v as Resolution)} orientation="horizontal">
-        <Radio value="keep">
-          <Radio.Content>
-            <Radio.Control>
-              <Radio.Indicator />
-            </Radio.Control>
-            <Label>{t.keepFile}</Label>
-          </Radio.Content>
-        </Radio>
-        <Radio value="apply">
-          <Radio.Content>
-            <Radio.Control>
-              <Radio.Indicator />
-            </Radio.Control>
-            <Label>{deleting ? t.deleteIt : t.overwrite}</Label>
-          </Radio.Content>
-        </Radio>
+      <RadioGroup
+        aria-label={t.whatToDo(f.path)}
+        value={value}
+        onChange={(v) => onChange(v as Resolution)}
+        orientation="horizontal"
+        className="gap-2.5"
+      >
+        {(
+          [
+            ['keep', t.keepFile],
+            ['apply', deleting ? t.deleteIt : t.overwrite],
+          ] as const
+        ).map(([id, label]) => (
+          <Radio key={id} value={id} className="group min-w-56 flex-1">
+            <Radio.Content className="min-h-12 w-full rounded-xl border border-border bg-surface px-4 group-data-selected:border-2 group-data-selected:border-accent group-data-selected:px-[15px]">
+              <Radio.Control>
+                <Radio.Indicator />
+              </Radio.Control>
+              <Label>{label}</Label>
+            </Radio.Content>
+          </Radio>
+        ))}
       </RadioGroup>
+      <p className="m-0 text-sm text-muted">{t.keptByDefault}</p>
     </section>
   );
 }
@@ -177,7 +183,10 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
 
           <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
             {(['add', 'replace', 'delete', 'conflict'] as const).map((a) => (
-              <div key={a} className={`flex flex-col rounded-2xl px-4 py-3.5 ${TILES[a]}`}>
+              <div
+                key={a}
+                className={`flex flex-col rounded-2xl px-4 py-3.5 ${TILES[a]} ${a === 'conflict' && c[a] > 0 ? 'ring-2 ring-warning ring-inset' : ''}`}
+              >
                 <span className="text-[26px] font-bold">{c[a]}</span>
                 <span className="text-sm">{t.actions[a]}</span>
               </div>
@@ -231,12 +240,28 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
                 {t.files}
               </h2>
               {plan.groups.map((g) => (
-                <details key={g.name} open={g.files.length <= 20} className="overflow-hidden rounded-2xl border border-border">
-                  <summary className="flex cursor-pointer flex-wrap justify-between gap-3 bg-surface-secondary px-4 py-3">
-                    <span className="font-semibold">{g.name}</span>
-                    <span className="font-mono text-xs text-muted">
-                      {g.from && g.to && g.from !== g.to ? `${g.from} → ${g.to}` : (g.to ?? g.from)} · {t.fileCount(g.files.length)}
+                <details
+                  key={g.name}
+                  open={g.files.length <= 20 || g.files.some((f) => f.action === 'conflict')}
+                  className="overflow-hidden rounded-2xl border border-border"
+                >
+                  <summary className="flex cursor-pointer flex-wrap items-center gap-2 bg-surface-secondary px-4 py-3">
+                    <span className="flex-auto">
+                      <span className="font-semibold">{g.name}</span>{' '}
+                      <span className="font-mono text-xs text-muted">
+                        {g.from && g.to && g.from !== g.to ? `${g.from} → ${g.to}` : (g.to ?? g.from)}
+                      </span>
                     </span>
+                    {(['add', 'replace', 'delete', 'conflict'] as const).map((a) => {
+                      const count = g.files.filter((f) => f.action === a).length;
+                      return (
+                        count > 0 && (
+                          <Chip key={a} size="sm" variant="soft" color={COLORS[a]}>
+                            {count} {t.actions[a]}
+                          </Chip>
+                        )
+                      );
+                    })}
                   </summary>
                   <ul className="m-0 list-none p-0">
                     {g.files.map((f) => (
@@ -251,7 +276,7 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
             </section>
           )}
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+          <div className="sticky bottom-0 -mx-7 -mb-7 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background/95 px-7 py-4 backdrop-blur">
             <span className="text-sm text-muted">
               {t.nextBackup} <code className="font-mono text-foreground">~/EdgeTX/Backups/{plan.board}/</code>
             </span>

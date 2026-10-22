@@ -5,7 +5,7 @@ import { Readable } from 'node:stream';
 import type { ReadableStream } from 'node:stream/web';
 import { pipeline } from 'node:stream/promises';
 import { AppError, errorInfo, type ErrorInfo } from './errors.ts';
-import { latestCommit, latestRelease, releaseByTag, type FetchFn, type Release } from './github.ts';
+import { latestCommit, latestRelease, listReleases, releaseByTag, type FetchFn, type Release } from './github.ts';
 import { mainDir, mainInfo, mainVersion, versionDir, type MainInfo, type ReleaseInfo } from './packages.ts';
 import type { Paths } from './paths.ts';
 import { soundsOf, type Settings, type Source } from './settings.ts';
@@ -30,6 +30,17 @@ export type DownloadEvent =
   | { type: 'file'; source: string; file: string; size?: number };
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Firmware releases kept besides the newest one, so a radio can go back to them.
+export const OLDER_FIRMWARE = 2;
+
+// "v2.12.5" against "v2.12.4": the numbers count, a leading "v" and suffixes don't.
+export function compareVersions(a: string, b: string): number {
+  const x = a.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  const y = b.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
+  return 0;
+}
 
 // Sound pack zip of one voice; "en" must not match "en_gb-ryan": the voice id is followed directly by the version.
 export function soundPackPattern(voice: string): RegExp {
@@ -56,6 +67,7 @@ export function wantedFiles(source: Source, release: Release, s: Settings): Want
       return pick((n) => res.some((re) => re.test(n)));
     }
     case 'project': {
+      if (source.file) return pick((n) => n === source.file!.asset);
       const zips = pick((n) => n.endsWith('.zip'));
       if (zips.length > 0) return zips;
       const repoName = source.repo.split('/')[1] ?? source.name;
@@ -128,6 +140,24 @@ async function downloadRelease(
   return { source: source.name, status: files.length > 0 ? 'new' : 'current', tag: release.tag, files };
 }
 
+// The releases just below the newest one by version number, for flashing an older firmware.
+export async function downloadOlderFirmware(
+  p: Paths,
+  s: Settings,
+  source: Source,
+  newest: string,
+  fetchFn: FetchFn = fetch,
+  onEvent: (e: DownloadEvent) => void = () => {},
+): Promise<DownloadResult[]> {
+  const older = (await listReleases(source.repo, fetchFn))
+    .filter((r) => compareVersions(r.tag, newest) < 0)
+    .sort((a, b) => compareVersions(b.tag, a.tag))
+    .slice(0, OLDER_FIRMWARE);
+  const results: DownloadResult[] = [];
+  for (const r of older) results.push(await downloadRelease(p, s, source, r, fetchFn, onEvent));
+  return results;
+}
+
 // Newest commit on a project's default branch, as source archive in "_main/"; undefined when the repo has no commit.
 export async function downloadMain(
   p: Paths,
@@ -142,9 +172,12 @@ export async function downloadMain(
   if ((await mainInfo(p, source.name))?.sha === commit.sha) return { source: source.name, status: 'current', tag, files: [] };
   const dir = mainDir(p, source.name);
   await mkdir(dir, { recursive: true });
-  const name = `${source.repo.split('/')[1] ?? source.name}-${commit.sha.slice(0, 7)}.zip`;
+  // a one-file source loads just that file of the commit, not the whole repo
+  const one = source.file?.repoPath;
+  const name = one ? source.file!.asset : `${source.repo.split('/')[1] ?? source.name}-${commit.sha.slice(0, 7)}.zip`;
+  const url = one ? `https://raw.githubusercontent.com/${source.repo}/${commit.sha}/${one}` : commit.zipball;
   onEvent({ type: 'file', source: source.name, file: name });
-  await fetchTo(commit.zipball, join(dir, name), fetchFn);
+  await fetchTo(url, join(dir, name), fetchFn);
   for (const old of await readdir(dir)) if (old !== name) await rm(join(dir, old), { force: true });
   await writeFile(join(dir, 'commit.json'), `${JSON.stringify(info, null, 2)}\n`);
   return { source: source.name, status: 'new', tag, files: [name] };
@@ -159,19 +192,33 @@ export async function downloadAll(
 ): Promise<DownloadResult[]> {
   const results: DownloadResult[] = [];
   for (const source of s.sources) {
+    let newest: string | undefined;
     try {
-      results.push(await downloadSource(p, s, source, fetchFn, onEvent));
+      const result = await downloadSource(p, s, source, fetchFn, onEvent);
+      newest = result.tag;
+      results.push(result);
     } catch (e) {
       const error = errorInfo(e);
       results.push({ source: source.name, status: 'error', files: [], message: error.message, error });
+      if (error.code === 'rateLimit') return results; // every further request fails the same way
     }
-    if (source.kind !== 'project') continue;
+    if (source.kind === 'firmware' && newest) {
+      try {
+        results.push(...(await downloadOlderFirmware(p, s, source, newest, fetchFn, onEvent)));
+      } catch (e) {
+        const error = errorInfo(e);
+        results.push({ source: source.name, status: 'error', files: [], message: error.message, error });
+        if (error.code === 'rateLimit') return results;
+      }
+    }
+    if (source.kind !== 'project' || (source.file && !source.file.repoPath)) continue; // no main without a path in the repo
     try {
       const main = await downloadMain(p, source, fetchFn, onEvent);
       if (main) results.push(main);
     } catch (e) {
       const error = errorInfo(e);
       results.push({ source: source.name, status: 'error', tag: 'main', files: [], message: error.message, error });
+      if (error.code === 'rateLimit') return results;
     }
   }
   return results;

@@ -3,7 +3,7 @@ import type { ProgressEvent, StateView } from '../../server/api.ts';
 import { dateTime } from '../format.ts';
 import type { Lang } from '../texts.ts';
 import { usePrefs, type Theme } from '../usePrefs.ts';
-import { BackupsIcon, MoonIcon, PackagesIcon, RadioIcon, SourcesIcon, SunIcon } from './icons.tsx';
+import { BackupsIcon, MoonIcon, PackagesIcon, RadioIcon, RefreshIcon, SourcesIcon, SunIcon } from './icons.tsx';
 
 export type Page = 'radio' | 'update' | 'flash' | 'sources' | 'packages' | 'backups';
 
@@ -57,10 +57,18 @@ export function Sidebar(props: {
                 className={`${item} ${active ? 'bg-zinc-800 text-white' : 'hover:bg-zinc-800/60'}`}
               >
                 <span className="size-2 shrink-0 rounded-full bg-green-400" aria-hidden="true" />
-                <span className="flex min-w-0 flex-col">
+                <span className="flex min-w-0 flex-1 flex-col">
                   <span className="font-semibold">{r.name}</span>
                   <span className="truncate font-mono text-xs text-zinc-400">{r.board ?? t.typeUnknown}</span>
                 </span>
+                {r.updates.length > 0 && (
+                  <>
+                    <span className="rounded-full bg-amber-400 px-1.5 text-[11px] font-semibold text-zinc-900" aria-hidden="true">
+                      {r.updates.length}
+                    </span>
+                    <span className="sr-only">{t.updatesReady(r.updates.length)}</span>
+                  </>
+                )}
               </button>
             );
           })
@@ -88,7 +96,6 @@ export function Sidebar(props: {
       <div className="mt-auto flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2 px-1">
           <ToggleButtonGroup
-            size="sm"
             aria-label={t.theme}
             selectionMode="single"
             disallowEmptySelection
@@ -106,7 +113,6 @@ export function Sidebar(props: {
             </ToggleButton>
           </ToggleButtonGroup>
           <ToggleButtonGroup
-            size="sm"
             aria-label={t.language}
             selectionMode="single"
             disallowEmptySelection
@@ -130,7 +136,7 @@ export function Sidebar(props: {
             {downloading ? progressText : state?.lastCheck ? t.lastChecked(dateTime(state.lastCheck, t.locale)) : t.notChecked}
           </span>
           <Button variant="outline" className="text-white" isDisabled={!!state?.busy} onPress={onDownload}>
-            {downloading && <Spinner size="sm" color="current" />}
+            {downloading ? <Spinner size="sm" color="current" /> : <RefreshIcon size={16} />}
             {t.checkUpdates}
           </Button>
         </div>
