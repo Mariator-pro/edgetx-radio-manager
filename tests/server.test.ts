@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { versionDir } from '../src/core/packages.ts';
@@ -12,13 +12,14 @@ import { makeZip, SDCARD_JSON, tempDir, writeTree } from './helpers.ts';
 let url = '';
 let close = () => {};
 let card = '';
+let p = paths('');
 
 const get = async <T>(path: string) => (await fetch(url + path)).json() as Promise<T>;
 const post = async <T>(path: string, body: unknown) =>
   (await fetch(url + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json() as Promise<T>;
 
 beforeAll(async () => {
-  const p = paths(await tempDir());
+  p = paths(await tempDir());
   const dir = versionDir(p, 'edgetx-sdcard', 'v2.12.3');
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, 'release.json'), JSON.stringify({ tag: 'v2.12.3', published: '2026-09-01T00:00:00Z', url: '' }));
@@ -75,6 +76,26 @@ describe('server', () => {
     const [backups] = await get<BackupView[]>('/api/backups');
     expect(backups!.items.map((i) => i.name)).toEqual(expect.arrayContaining([lastBackup, r.backup]));
     expect((await get<StateView>('/api/state')).radios[0]!.updates).toEqual(['edgetx-sdcard']);
+  });
+
+  it('labels backups with EdgeTX version and reason, and keeps notes until the backup goes', async () => {
+    const [b] = await get<BackupView[]>('/api/backups');
+    const restoreBackup = b!.items[0]!;
+    const updateBackup = b!.items[1]!;
+    expect(updateBackup).toMatchObject({ firmware: '2.12.3', reason: 'update', changes: [{ name: 'edgetx-sdcard', to: 'v2.12.3' }] });
+    expect(restoreBackup).toMatchObject({ reason: 'restore', restoredFrom: updateBackup.name });
+
+    await post('/api/backups/note', { board: 'tx16smk3', name: updateBackup.name, note: '  before the new SD content ' });
+    expect((await get<BackupView[]>('/api/backups'))[0]!.items[1]!.note).toBe('before the new SD content');
+    const long = await fetch(`${url}/api/backups/note`, { method: 'POST', body: JSON.stringify({ board: 'tx16smk3', name: updateBackup.name, note: 'x'.repeat(201) }) });
+    expect(long.status).toBe(400);
+    await post('/api/backups/note', { board: 'tx16smk3', name: updateBackup.name, note: '' });
+    expect((await get<BackupView[]>('/api/backups'))[0]!.items[1]!.note).toBeUndefined();
+
+    await post('/api/backups/note', { board: 'tx16smk3', name: restoreBackup.name, note: 'gone soon' });
+    await post('/api/backups/delete', { board: 'tx16smk3', name: restoreBackup.name });
+    const settings = JSON.parse(await readFile(join(p.root, 'settings.json'), 'utf8')) as { backupInfo: Record<string, Record<string, unknown>> };
+    expect(Object.keys(settings.backupInfo.tx16smk3!)).toEqual([updateBackup.name]);
   });
 
   it('sends errors as codes the interface translates', async () => {

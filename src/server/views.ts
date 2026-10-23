@@ -1,7 +1,7 @@
 import { readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, sep } from 'node:path';
-import { listBackups } from '../core/backup.ts';
+import { backupFirmware, listBackups } from '../core/backup.ts';
 import { installedVersion, type RadioCard } from '../core/card.ts';
 import { detectVersion, localVersion, sameOnCard } from '../core/content.ts';
 import { latestRelease } from '../core/github.ts';
@@ -192,7 +192,13 @@ export async function backupViews(p: Paths, s: Settings): Promise<BackupView[]> 
       const kept = s.keptBackups[board] ?? [];
       const names = await listBackups(p, board);
       const items = await Promise.all(
-        names.map(async (name) => ({ name, bytes: await folderSize(join(p.backups, board, name)), kept: kept.includes(name) })),
+        names.map(async (name) => ({
+          name,
+          bytes: await folderSize(join(p.backups, board, name)),
+          kept: kept.includes(name),
+          firmware: await backupFirmware(join(p.backups, board, name)),
+          ...s.backupInfo[board]?.[name],
+        })),
       );
       return { board, radio: radioName(types, board), items };
     }),

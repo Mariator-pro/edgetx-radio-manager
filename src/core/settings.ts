@@ -30,11 +30,29 @@ export interface RadioSettings {
   installed?: Record<string, string>; // package -> version, last seen on the card
 }
 
+// A package whose version on the card an update changes; without from it is new, without to removed.
+export interface PackageChange {
+  name: string;
+  from?: string;
+  to?: string;
+}
+
+// Why a backup was made, and the user's own note on it.
+export interface BackupInfo {
+  reason?: 'manual' | 'update' | 'restore';
+  changes?: PackageChange[]; // update: what it changed
+  restoredFrom?: string; // restore: the backup put back afterwards
+  note?: string;
+}
+
+export const MAX_NOTE = 200;
+
 export interface Settings {
   sources: Source[];
   radios: Record<string, RadioSettings>;
   backupsToKeep: number;
   keptBackups: Record<string, string[]>; // board -> backup folder names never pruned
+  backupInfo: Record<string, Record<string, BackupInfo>>; // board -> backup folder name -> reason and note
   lastCheck?: string; // last download run
   knownDefaults?: string[]; // default sources already offered; a removed one isn't added again
 }
@@ -59,6 +77,7 @@ export function defaultSettings(): Settings {
     radios: {},
     backupsToKeep: 10,
     keptBackups: {},
+    backupInfo: {},
     knownDefaults: DEFAULT_SOURCES.map((s) => s.name),
   };
 }
@@ -93,6 +112,22 @@ export async function saveSettings(p: Paths, s: Settings): Promise<void> {
   const tmp = `${p.settings}.tmp`;
   await writeFile(tmp, `${JSON.stringify(s, null, 2)}\n`);
   await rename(tmp, p.settings);
+}
+
+// Sets a backup's note; an empty one removes it, and with it an entry left with nothing in it.
+export function setBackupNote(s: Settings, board: string, name: string, note: string): void {
+  const info = { ...s.backupInfo[board]?.[name] };
+  const text = note.trim();
+  if (text) info.note = text;
+  else delete info.note;
+  const all = (s.backupInfo[board] ??= {});
+  if (Object.keys(info).length > 0) all[name] = info;
+  else delete all[name];
+}
+
+// Drops what is known about deleted backups.
+export function forgetBackups(s: Settings, board: string, names: string[]): void {
+  for (const n of names) delete s.backupInfo[board]?.[n];
 }
 
 // Notes what a detected radio has (language, firmware, installed versions); true when settings changed.

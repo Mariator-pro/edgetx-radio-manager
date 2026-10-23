@@ -8,12 +8,13 @@ import { versionDir } from './packages.ts';
 import type { Paths } from './paths.ts';
 import { makePlan, mergePackages, type PlanItem } from './plan.ts';
 import { ensureSelection, updateSources } from './selection.ts';
-import { soundsOf, type Choice, type Settings } from './settings.ts';
+import { soundsOf, type Choice, type PackageChange, type Settings } from './settings.ts';
 
 export interface UpdateSetup {
   contents: PackageContent[];
   missing: string[]; // switched on, but nothing to install (not downloaded, no checkout)
   plan: PlanItem[];
+  changes: PackageChange[]; // packages whose version on the card changes
   selectionChanged: boolean;
 }
 
@@ -66,5 +67,12 @@ export async function prepareUpdate(p: Paths, s: Settings, card: RadioCard, boar
   }
   const list = await withCopied(p, s, card, card.installed ?? (await sdContentBaseline(p, s, card, ctx, fetchFn)), choices);
   const plan = await makePlan(card.volume, mergePackages(contents), list);
-  return { contents, missing, plan, selectionChanged };
+  // Switched off means removed; switched on but not available leaves the card's version alone.
+  const changes: PackageChange[] = [];
+  for (const src of updateSources(s)) {
+    const from = list?.packages[src.name]?.version;
+    const to = contents.find((c) => c.name === src.name)?.version;
+    if (to ? to !== from : from && !choices[src.name]?.on) changes.push({ name: src.name, from, to });
+  }
+  return { contents, missing, plan, changes, selectionChanged };
 }

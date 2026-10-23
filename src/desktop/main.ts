@@ -1,10 +1,12 @@
 import { join } from 'node:path';
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, screen, shell } from 'electron';
 import { paths } from '../core/paths.ts';
 import { startServer } from '../server/server.ts';
 
 // Fixed port so the page keeps its origin and with it the stored language and theme; the CLI uses 5174.
 const PORT = 5175;
+// Space kept free around the window when it opens, in points.
+const WINDOW_MARGIN = 24;
 
 // Apps started from Finder don't get the shell's PATH, so dfu-util from Homebrew would not be found.
 if (process.platform === 'darwin') process.env.PATH = ['/opt/homebrew/bin', '/usr/local/bin', process.env.PATH].join(':');
@@ -20,7 +22,19 @@ async function start(): Promise<void> {
     if (e.code === 'EADDRINUSE') return startServer({ ...o, port: 0 });
     throw e;
   });
-  const win = new BrowserWindow({ width: 1280, height: 860, minWidth: 900, minHeight: 600, title: 'EdgeTX Radio Manager' });
+  // At most 1280 × 860, but always inside the free screen area (no menu bar, dock or taskbar) with a margin, centred there.
+  const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  const width = Math.min(1280, area.width - 2 * WINDOW_MARGIN);
+  const height = Math.min(860, area.height - 2 * WINDOW_MARGIN);
+  const win = new BrowserWindow({
+    width,
+    height,
+    x: Math.round(area.x + (area.width - width) / 2),
+    y: Math.round(area.y + (area.height - height) / 2),
+    minWidth: 900,
+    minHeight: 600,
+    title: 'EdgeTX Radio Manager',
+  });
   // Electron's default menu has nothing the app needs on Windows, and Windows draws a stray white line under it in dark mode;
   // macOS keeps it for Cmd+Q and copy and paste
   if (process.platform !== 'darwin') win.removeMenu();

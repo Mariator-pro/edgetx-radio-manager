@@ -1,5 +1,6 @@
-import { copyFile, mkdir, readdir, rm, stat, utimes } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, rm, stat, utimes } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
+import { parseRadioYml } from './card.ts';
 import { AppError } from './errors.ts';
 import { isSafeName, type Paths } from './paths.ts';
 
@@ -88,6 +89,15 @@ export async function backupCard(
     onProgress({ file: rel, done: i + 1, total: files.length, bytesDone, bytesTotal });
   }
   return { dir, name, files: files.length, bytes: bytesTotal };
+}
+
+// EdgeTX version in a backup folder's radio.yml.
+export async function backupFirmware(dir: string): Promise<string | undefined> {
+  try {
+    return parseRadioYml(await readFile(join(dir, 'RADIO', 'radio.yml'), 'utf8')).firmware;
+  } catch {
+    return undefined; // no or unreadable radio.yml in the backup
+  }
 }
 
 export async function listBackups(p: Paths, board: string): Promise<string[]> {

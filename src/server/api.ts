@@ -133,10 +133,21 @@ export interface PackageView {
   versions: PackageVersionView[];
 }
 
+export interface PackageChangeView {
+  name: string;
+  from?: string; // missing: new on the card
+  to?: string; // missing: removed from the card
+}
+
 export interface BackupItemView {
   name: string;
   bytes: number;
   kept: boolean;
+  firmware?: string; // EdgeTX version in the backup's radio.yml
+  reason?: 'manual' | 'update' | 'restore'; // only backups made since the tool notes it
+  changes?: PackageChangeView[]; // update: what it changed
+  restoredFrom?: string; // restore: the backup put back afterwards
+  note?: string;
 }
 
 export interface BackupView {

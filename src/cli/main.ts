@@ -5,7 +5,7 @@ import { createInterface } from 'node:readline/promises';
 import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { applyPlan, type Resolution } from '../core/apply.ts';
-import { backupCard, listBackups, pruneBackups } from '../core/backup.ts';
+import { backupCard, backupFirmware, listBackups, pruneBackups } from '../core/backup.ts';
 import { findCards, readCard, type RadioCard } from '../core/card.ts';
 import { localVersion } from '../core/content.ts';
 import { flashFirmware, flashMethod } from '../core/firmware.ts';
@@ -17,7 +17,17 @@ import { countActions, type PlanItem } from '../core/plan.ts';
 import { isBelowMin, MIN_EDGETX, radioName, radioTypes } from '../core/radios.ts';
 import { applyRestore, planRestore } from '../core/restore.ts';
 import { updateSources } from '../core/selection.ts';
-import { findLocalRepos, loadSettings, rememberRadio, saveSettings, soundsOf, type Settings } from '../core/settings.ts';
+import {
+  findLocalRepos,
+  forgetBackups,
+  loadSettings,
+  rememberRadio,
+  saveSettings,
+  soundsOf,
+  type BackupInfo,
+  type PackageChange,
+  type Settings,
+} from '../core/settings.ts';
 import { addSource, checkSource, removeSource } from '../core/sources.ts';
 import { prepareUpdate } from '../core/update.ts';
 import { listVolumes } from '../platform/volumes.ts';
@@ -137,11 +147,11 @@ async function cardAndBoard(p: Paths, s: Settings, volume?: string, boardOpt?: s
 
 async function backup(p: Paths, s: Settings, volume?: string, boardOpt?: string): Promise<void> {
   const [card, board] = await cardAndBoard(p, s, volume, boardOpt);
-  await runBackup(p, s, card, board);
+  await runBackup(p, s, card, board, { reason: 'manual' });
 }
 
-// alsoKeep: the backup being restored, which the clean-up must not delete
-async function runBackup(p: Paths, s: Settings, card: RadioCard, board: string, alsoKeep?: string): Promise<void> {
+// info: why the backup is made; alsoKeep: the backup being restored, which the clean-up must not delete
+async function runBackup(p: Paths, s: Settings, card: RadioCard, board: string, info: BackupInfo, alsoKeep?: string): Promise<void> {
   console.log(`Backing up ${radioName(await radioTypes(p, s), board)} from ${card.volume} ...`);
   let shown = -1;
   const result = await backupCard(card.volume, board, p, new Date(), (pr) => {
@@ -152,7 +162,10 @@ async function runBackup(p: Paths, s: Settings, card: RadioCard, board: string, 
   });
   if (process.stdout.isTTY) process.stdout.write('\n');
   console.log(`Done: ${result.files} files, ${mb(result.bytes)} in ${result.dir}`);
+  (s.backupInfo[board] ??= {})[result.name] = info;
   const removed = await pruneBackups(p, board, s.backupsToKeep, [...(s.keptBackups[board] ?? []), ...(alsoKeep ? [alsoKeep] : [])]);
+  forgetBackups(s, board, removed);
+  await saveSettings(p, s);
   if (removed.length > 0) console.log(`Removed old backups: ${removed.join(', ')}`);
 }
 
@@ -212,13 +225,28 @@ async function update(p: Paths, s: Settings, volume?: string, boardOpt?: string)
     console.log('Nothing changed.');
     return;
   }
-  await runBackup(p, s, card, board);
+  await runBackup(p, s, card, board, { reason: 'update', changes: setup.changes });
   console.log('Updating ...');
   const r = await applyPlan(card.volume, setup.plan, setup.contents, resolutions, (pr) => {
     if (process.stdout.isTTY) process.stdout.write(`\r  ${pr.done}/${pr.total}`);
   });
   if (process.stdout.isTTY) process.stdout.write('\n');
   console.log(`Done: ${r.written} files written, ${r.deleted} deleted, ${r.kept} kept.`);
+}
+
+const changeText = (c: PackageChange) => (!c.from ? `${c.name} ${c.to} new` : !c.to ? `${c.name} ${c.from} removed` : `${c.name} ${c.from} -> ${c.to}`);
+
+// "EdgeTX 2.12.3 · before update: edgetx-sdcard v2.12.3 -> v2.12.5"
+function backupDetails(firmware?: string, info?: BackupInfo): string {
+  const reason =
+    info?.reason === 'manual'
+      ? 'made by hand'
+      : info?.reason === 'update'
+        ? `before update${info.changes?.length ? `: ${info.changes.map(changeText).join(', ')}` : ''}`
+        : info?.reason === 'restore'
+          ? `before restoring ${info.restoredFrom}`
+          : undefined;
+  return [firmware && `EdgeTX ${firmware}`, reason].filter(Boolean).join(' · ');
 }
 
 async function restore(p: Paths, s: Settings, name?: string, noBackup = false, volume?: string, boardOpt?: string): Promise<void> {
@@ -231,7 +259,13 @@ async function restore(p: Paths, s: Settings, name?: string, noBackup = false, v
       return;
     }
     console.log(`Backups of the ${radio}:`);
-    for (const n of names) console.log(`  ${n}${s.keptBackups[board]?.includes(n) ? '  kept' : ''}`);
+    for (const n of names) {
+      const info = s.backupInfo[board]?.[n];
+      console.log(`  ${n}${s.keptBackups[board]?.includes(n) ? '  kept' : ''}`);
+      const details = backupDetails(await backupFirmware(join(p.backups, board, n)), info);
+      if (details) console.log(`      ${details}`);
+      if (info?.note) console.log(`      Note: ${info.note}`);
+    }
     console.log('\nRestore one with "restore <backup>".');
     return;
   }
@@ -255,7 +289,7 @@ async function restore(p: Paths, s: Settings, name?: string, noBackup = false, v
     console.log('Nothing changed.');
     return;
   }
-  if (!noBackup) await runBackup(p, s, card, board, name);
+  if (!noBackup) await runBackup(p, s, card, board, { reason: 'restore', restoredFrom: name }, name);
   console.log('Restoring ...');
   const r = await applyRestore(card.volume, plan, (pr) => {
     if (process.stdout.isTTY) process.stdout.write(`\r  ${pr.done}/${pr.total}`);

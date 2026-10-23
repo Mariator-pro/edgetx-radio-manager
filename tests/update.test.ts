@@ -292,8 +292,12 @@ describe('prepareUpdate', () => {
       ['SOUNDS/en/hello.wav', 'add'],
       ['WIDGETS/BattAnalog/main.lua', 'add'],
     ]);
-    // Flight Wingman is on for a new radio but not downloaded here
+    // Flight Wingman is on for a new radio but not downloaded here, so it changes nothing on the card
     expect(setup.missing).toEqual(['flight-wingman (release)']);
+    expect(setup.changes).toEqual([
+      { name: 'edgetx-sdcard', to: 'v2.12.3' },
+      { name: 'edgetx-sounds', to: 'v2.12.3' },
+    ]);
 
     s.radios.tx16smk3!.sources!['gps-homer'] = { on: true, origin: 'local' };
     const again = await prepareUpdate(p, s, card, 'tx16smk3');
@@ -313,6 +317,7 @@ describe('projects copied by hand', () => {
     const exact = (await readCard(await newCard({ 'SCRIPTS/TOOLS/elrs.lua': 'lua' })))!;
     const removed = await prepareUpdate(p, s, exact, 'tx16smk3');
     expect(removed.plan.map((i) => [i.path, i.action, i.pkg])).toEqual([['SCRIPTS/TOOLS/elrs.lua', 'delete', 'elrs-lua']]);
+    expect(removed.changes).toEqual([{ name: 'elrs-lua', from: '4.1.0' }]);
 
     const changed = (await readCard(await newCard({ 'SCRIPTS/TOOLS/elrs.lua': 'my own' })))!;
     expect((await prepareUpdate(p, s, changed, 'tx16smk3')).plan).toEqual([]);

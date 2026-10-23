@@ -1,8 +1,7 @@
 import { copyFile, mkdir, readdir, readFile, rm, rmdir, stat, utimes } from 'node:fs/promises';
 import { dirname, join, relative, sep } from 'node:path';
 import type { ApplyProgress } from './apply.ts';
-import { isBackupName, listFiles, type CardFile } from './backup.ts';
-import { parseRadioYml } from './card.ts';
+import { backupFirmware, isBackupName, listFiles, type CardFile } from './backup.ts';
 import { AppError } from './errors.ts';
 import { isSafeName, type Paths } from './paths.ts';
 
@@ -62,14 +61,7 @@ export async function planRestore(volume: string, p: Paths, board: string, name:
   items.sort((a, b) => a.path.localeCompare(b.path));
   const dirs = new Set<string>();
   for (const path of wanted.keys()) for (let d = dirname(path); d !== '.'; d = dirname(d)) dirs.add(d);
-  let firmware: string | undefined;
-  try {
-    const yml = await readFile(join(dir, 'RADIO', 'radio.yml'), 'utf8');
-    firmware = parseRadioYml(yml).firmware;
-  } catch {
-    // no or unreadable radio.yml in the backup: version unknown
-  }
-  return { dir, dirs, items, unchanged, firmware };
+  return { dir, dirs, items, unchanged, firmware: await backupFirmware(dir) };
 }
 
 // Removes folders left empty by deletions unless the backup has them, never the top-level card folders.

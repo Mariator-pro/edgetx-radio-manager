@@ -21,7 +21,7 @@ Every radio that EdgeTX supports works: radio types and SD card content come str
 Download the app from the [Releases](https://github.com/Mariator-pro/edgetx-radio-manager/releases) page:
 
 - **macOS**: the `.zip` file, `arm64` for Apple Silicon (M1 and newer) or `x64` for Intel Macs. Unzip it, open the `.dmg` inside and drag the app into Applications.
-- **Windows**: the `.zip` file. Unzip it and run the installer inside. Windows is not tested yet, feedback is welcome.
+- **Windows**: the `.zip` file. Unzip it and run the installer inside.
 
 The app is not signed with an Apple or Microsoft certificate, so the system warns on first start:
 
@@ -71,7 +71,7 @@ On the "Sources" page, enter a GitHub repo (`owner/name`) and click "Check". The
 
 ### 6. Restore or keep backups
 
-The "Backups" page lists the backups per radio. Switch on "Keep" for a backup that should never be deleted, for example before a big EdgeTX upgrade. "Open folder" shows the backups on your computer, for example to copy a single model back by hand.
+The "Backups" page lists the backups per radio. Below each one it shows the EdgeTX version on the card at the time and why the backup was made: by hand, before restoring another backup, or before an SD update together with the packages that update changed. "Note" adds your own short text. Switch on "Keep" for a backup that should never be deleted, for example before a big EdgeTX upgrade. "Open folder" shows the backups on your computer, for example to copy a single model back by hand.
 
 "Restore" brings the SD card back to exactly the state of that backup: changed and missing files come back, files added since then are deleted. It works only while a radio of the same type is connected. Before anything is written, the app shows the plan with every file, and points out when the backup was made with a different EdgeTX version than the one on the radio. "Back up the SD card first" is on by default, so a restore can be undone as well.
 
@@ -137,7 +137,7 @@ npm run cli -- <command> [options]
 | `download` | Check all sources for new releases and download them |
 | `backup` | Back up the whole SD card of the connected radio |
 | `update` | Show the plan, then back up and update the card |
-| `restore [backup]` | Without a name, list the backups of the connected radio; with one (e.g. `restore 2026-10-23_2015`), show the plan, then back up the card and restore the backup |
+| `restore [backup]` | Without a name, list the backups of the connected radio with EdgeTX version, reason and note; with one (e.g. `restore 2026-10-23_2015`), show the plan, then back up the card and restore the backup |
 | `flash [version]` | Flash firmware, without a version the newest downloaded one (e.g. `flash v2.12.5`) |
 | `sources` | List sources; `sources add <owner/repo>`, `sources remove <name>` |
 | `ui` | Open the browser interface (like `npm start`) |

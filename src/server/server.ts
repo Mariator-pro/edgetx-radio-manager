@@ -3,7 +3,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, normalize, sep } from 'node:path';
 import { applyPlan, type Resolution } from '../core/apply.ts';
-import { backupCard, deleteBackup, pruneBackups } from '../core/backup.ts';
+import { backupCard, deleteBackup, isBackupName, listBackups, pruneBackups } from '../core/backup.ts';
 import { findCards, readCard, type RadioCard } from '../core/card.ts';
 import { downloadAll, downloadMain, type DownloadEvent } from '../core/download.ts';
 import { AppError, errorInfo, type ErrorArgs, type ErrorCode } from '../core/errors.ts';
@@ -13,7 +13,19 @@ import { isSafeName, type Paths } from '../core/paths.ts';
 import { isBelowMin, MIN_EDGETX, radioName, radioTypes } from '../core/radios.ts';
 import { applyRestore, planRestore } from '../core/restore.ts';
 import { ensureSelection } from '../core/selection.ts';
-import { findLocalRepos, loadSettings, rememberRadio, saveSettings, soundsOf, voiceLanguage, type Settings } from '../core/settings.ts';
+import {
+  findLocalRepos,
+  forgetBackups,
+  loadSettings,
+  MAX_NOTE,
+  rememberRadio,
+  saveSettings,
+  setBackupNote,
+  soundsOf,
+  voiceLanguage,
+  type BackupInfo,
+  type Settings,
+} from '../core/settings.ts';
 import { addSource, checkSource, removeSource } from '../core/sources.ts';
 import { prepareUpdate } from '../core/update.ts';
 import { listVolumes } from '../platform/volumes.ts';
@@ -146,14 +158,16 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
     return c;
   };
 
-  // alsoKeep: the backup being restored, which the clean-up must not delete
-  const runBackup = async (c: RadioCard, board: string, alsoKeep?: string) => {
+  // info: why the backup is made; alsoKeep: the backup being restored, which the clean-up must not delete
+  const runBackup = async (c: RadioCard, board: string, info: BackupInfo, alsoKeep?: string) => {
     let shown = -1;
     const r = await backupCard(c.volume, board, p, new Date(), (pr) => {
       const pct = pr.bytesTotal > 0 ? Math.floor((pr.bytesDone / pr.bytesTotal) * 100) : 100;
       if (pct !== shown) progress({ op: busy ?? 'backup', step: 'backup', text: pr.file, done: (shown = pct), total: 100 });
     });
-    await pruneBackups(p, board, s.backupsToKeep, [...(s.keptBackups[board] ?? []), ...(alsoKeep ? [alsoKeep] : [])]);
+    (s.backupInfo[board] ??= {})[r.name] = info;
+    forgetBackups(s, board, await pruneBackups(p, board, s.backupsToKeep, [...(s.keptBackups[board] ?? []), ...(alsoKeep ? [alsoKeep] : [])]));
+    await saveSettings(p, s);
     return r;
   };
 
@@ -213,7 +227,7 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
     'POST /api/backup': async (req) => {
       const { volume } = await body<{ volume: string }>(req);
       const [c, board] = await cardAt(volume);
-      return op('backup', async () => (await runBackup(c, board)).name);
+      return op('backup', async () => (await runBackup(c, board, { reason: 'manual' })).name);
     },
     'POST /api/update/plan': async (req) => {
       const { volume } = await body<{ volume: string }>(req);
@@ -228,7 +242,7 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
       if (c.firmware && isBelowMin(c.firmware)) throw new HttpError(400, 'firmwareTooOld', { version: c.firmware, min: MIN_EDGETX });
       return op('update', async (): Promise<UpdateResultView> => {
         const setup = await prepareUpdate(p, s, c, board);
-        const b = await runBackup(c, board);
+        const b = await runBackup(c, board, { reason: 'update', changes: setup.changes });
         const r = await applyPlan(c.volume, setup.plan, setup.contents, new Map(Object.entries(resolutions ?? {})), (pr) =>
           progress({ op: 'update', step: 'write', text: pr.path, done: pr.done, total: pr.total }),
         );
@@ -245,7 +259,7 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
       const c = await restoreCardAt(volume, board);
       return op('restore', async (): Promise<RestoreResultView> => {
         const plan = await planRestore(c.volume, p, board, name);
-        const b = backupFirst ? await runBackup(c, board, name) : undefined;
+        const b = backupFirst ? await runBackup(c, board, { reason: 'restore', restoredFrom: name }, name) : undefined;
         const r = await applyRestore(c.volume, plan, (pr) =>
           progress({ op: 'restore', step: 'write', text: pr.path, done: pr.done, total: pr.total }),
         );
@@ -295,8 +309,18 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
       const { board, name } = await body<{ board: string; name: string }>(req);
       await deleteBackup(p, board, name);
       s.keptBackups[board] = (s.keptBackups[board] ?? []).filter((n) => n !== name);
+      forgetBackups(s, board, [name]);
       await saveSettings(p, s);
       await pushState();
+    },
+    'POST /api/backups/note': async (req) => {
+      const { board, name, note } = await body<{ board: string; name: string; note: string }>(req);
+      if (!isSafeName(board) || !isBackupName(name) || typeof note !== 'string' || note.trim().length > MAX_NOTE) {
+        throw new HttpError(400, 'invalidRequest', { what: 'note' });
+      }
+      if (!(await listBackups(p, board)).includes(name)) throw new HttpError(404, 'backupNotFound', { name });
+      setBackupNote(s, board, name, note);
+      await saveSettings(p, s);
     },
     'POST /api/backups/open': async (req) => {
       const { board, name } = await body<{ board?: string; name?: string }>(req);
