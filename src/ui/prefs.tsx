@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { TEXTS, type Lang } from './texts.ts';
 import { PrefsContext, type Theme } from './usePrefs.ts';
 
-// Per-browser choices; unreadable storage just means the system default every time.
+// Per-browser choices; unreadable storage just means the default every time.
 function stored<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
   try {
     const v = localStorage.getItem(key);
@@ -22,9 +22,7 @@ function store(key: string, value: string): void {
 }
 
 export function PrefsProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLang] = useState<Lang>(() =>
-    stored('radio-manager:lang', ['en', 'de'] as const, navigator.language.toLowerCase().startsWith('de') ? 'de' : 'en'),
-  );
+  const [lang, setLang] = useState<Lang>(() => stored('radio-manager:lang', ['en', 'de'] as const, 'en'));
   const [theme, setTheme] = useState<Theme>(() =>
     stored('radio-manager:theme', ['light', 'dark'] as const, window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
   );

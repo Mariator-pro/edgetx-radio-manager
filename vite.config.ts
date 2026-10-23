@@ -1,10 +1,11 @@
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
 
 const API_PORT = 5174;
+const { version } = JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json'), 'utf8')) as { version: string };
 
 // In development the API server runs inside Vite; Vite forwards /api to it.
 function apiServer(): Plugin {
@@ -34,6 +35,7 @@ function bundledFiles(): Plugin {
 export default defineConfig({
   root: 'src/ui',
   plugins: [react(), tailwindcss(), apiServer(), bundledFiles()],
+  define: { __APP_VERSION__: JSON.stringify(version) },
   build: { outDir: '../../dist/ui', emptyOutDir: true, chunkSizeWarningLimit: 1000 },
   server: { proxy: { '/api/':`http://127.0.0.1:${API_PORT}` } },
 });

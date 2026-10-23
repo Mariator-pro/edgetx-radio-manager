@@ -30,17 +30,20 @@ export function Sidebar(props: {
     : t.checking;
   // Always dark: the "dark" class gives its HeroUI controls dark colours in the light theme too.
   // On wide screens it stays in place while long pages scroll, so its bottom row stays visible.
+  // Its width there is a whole number: a fractional one moves with the Windows scrollbar and puts
+  // the edges of the toggle buttons on half pixels, which shows as a thin gap between them.
   const item = 'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-left no-underline transition-colors';
   return (
     <nav
       aria-label={t.nav}
-      className="dark flex flex-[1_1_240px] flex-col gap-6 bg-zinc-900 px-3.5 py-5 text-zinc-200 md:sticky md:top-0 md:h-screen md:max-w-[260px] md:self-start md:overflow-y-auto"
+      className="dark flex flex-[1_1_240px] flex-col gap-6 bg-zinc-900 px-3.5 py-5 text-zinc-200 md:sticky md:top-0 md:h-screen md:flex-[0_0_240px] md:self-start md:overflow-y-auto"
     >
       <div className="flex items-center gap-2.5 px-2">
         <span className="flex size-[30px] items-center justify-center rounded-lg bg-accent text-white">
           <RadioIcon size={16} />
         </span>
         <span className="font-semibold text-white">Radio Manager</span>
+        <span className="text-xs text-zinc-400">v{__APP_VERSION__}</span>
       </div>
 
       <div className="flex flex-col gap-1.5">
