@@ -20,13 +20,13 @@ Every radio that EdgeTX supports works: radio types and SD card content come str
 
 Download the app from the [Releases](https://github.com/Mariator-pro/edgetx-radio-manager/releases) page:
 
-- **macOS**: the `.dmg` file, `arm64` for Apple Silicon (M1 and newer) or `x64` for Intel Macs. Open it and drag the app into Applications.
-- **Windows**: the `.exe` installer. Windows is not tested yet, feedback is welcome.
+- **macOS**: the `.zip` file, `arm64` for Apple Silicon (M1 and newer) or `x64` for Intel Macs. Unzip it, open the `.dmg` inside and drag the app into Applications.
+- **Windows**: the `.zip` file. Unzip it and run the installer inside. Windows is not tested yet, feedback is welcome.
 
 The app is not signed with an Apple or Microsoft certificate, so the system warns on first start:
 
 - **macOS**: the first start shows "Apple could not verify ... is free of malware". Click "Done" (not "Move to Trash"), open System Settings, Privacy & Security, scroll down and click "Open Anyway" next to the blocked app, confirm with your password or Touch ID, then start the app again and choose "Open". Later starts need nothing.
-- **Windows**: in the SmartScreen window, click "More info" and then "Run anyway".
+- **Windows**: if a SmartScreen window appears, click "More info" and then "Run anyway".
 
 ### Only for radios that flash over DFU
 

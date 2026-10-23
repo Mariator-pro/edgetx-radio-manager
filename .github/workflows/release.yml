@@ -30,8 +30,10 @@ jobs:
       - run: npm run build
       # macOS: ad-hoc signature (mac.identity "-" in package.json), no Apple certificate; Windows: unsigned
       - run: npx electron-builder ${{ matrix.target }} --publish never
+      # Like EdgeTX Companion: each installer in its own zip, browsers warn far less about a zip than about an unsigned .exe
+      - shell: pwsh
+        run: Get-ChildItem release/*.exe, release/*.dmg | ForEach-Object { Compress-Archive -Path $_.FullName -DestinationPath ($_.FullName -replace '\.(exe|dmg)$', '.zip') }
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            release/*.dmg
-            release/*.exe
+            release/*.zip
