@@ -12,7 +12,7 @@ Desktop app for macOS and Windows, in English and German. A browser interface an
 - **Downloads updates** from GitHub: EdgeTX firmware, the EdgeTX SD card content, voice packs, the ExpressLRS Lua script and any Lua project you add.
 - **Updates the SD card** in one guided flow: shows exactly which files are added, replaced or deleted, backs up the card, then writes the changes.
 - **Flashes firmware**, with step by step instructions for entering the bootloader.
-- **Keeps backups** of the whole SD card, the last 10 per radio by default, and any backup you mark to keep.
+- **Keeps backups** of the whole SD card, the last 10 per radio by default, and any backup you mark to keep, and restores them when needed.
 
 Every radio that EdgeTX supports works: radio types and SD card content come straight from the EdgeTX release.
 
@@ -71,7 +71,9 @@ On the "Sources" page, enter a GitHub repo (`owner/name`) and click "Check". The
 
 ### 6. Restore or keep backups
 
-The "Backups" page lists the backups per radio. Switch on "Keep" for a backup that should never be deleted, for example before a big EdgeTX upgrade. "Open folder" shows the backups on your computer; to restore one, copy its contents back onto the SD card.
+The "Backups" page lists the backups per radio. Switch on "Keep" for a backup that should never be deleted, for example before a big EdgeTX upgrade. "Open folder" shows the backups on your computer, for example to copy a single model back by hand.
+
+"Restore" brings the SD card back to exactly the state of that backup: changed and missing files come back, files added since then are deleted. It works only while a radio of the same type is connected. Before anything is written, the app shows the plan with every file, and points out when the backup was made with a different EdgeTX version than the one on the radio. "Back up the SD card first" is on by default, so a restore can be undone as well.
 
 ![The backups page with backups of two radios](docs/screenshots/backups.png)
 
@@ -135,6 +137,7 @@ npm run cli -- <command> [options]
 | `download` | Check all sources for new releases and download them |
 | `backup` | Back up the whole SD card of the connected radio |
 | `update` | Show the plan, then back up and update the card |
+| `restore [backup]` | Without a name, list the backups of the connected radio; with one (e.g. `restore 2026-10-23_2015`), show the plan, then back up the card and restore the backup |
 | `flash [version]` | Flash firmware, without a version the newest downloaded one (e.g. `flash v2.12.5`) |
 | `sources` | List sources; `sources add <owner/repo>`, `sources remove <name>` |
 | `ui` | Open the browser interface (like `npm start`) |
@@ -143,6 +146,7 @@ Options:
 
 - `--volume <path>`: use this drive instead of automatic detection
 - `--board <id>`: radio type when the card has no `RADIO/radio.yml` yet (e.g. `tx16s`)
+- `--no-backup`: restore without backing up the card first
 
 Typical flow: `download`, connect the radio in "USB Storage" mode, `update`.
 
@@ -173,12 +177,13 @@ How it works under the hood:
 - **Detection**: the radio type, language and firmware are read from the SD card (`RADIO/radio.yml`, `edgetx.sdcard.version`).
 - **Download**: new releases of all sources from GitHub, and for own projects also the newest commit of the main branch.
 - **Backup**: copies the whole SD card, including file times, into a folder; old backups are pruned.
+- **Restore**: compares the backup with the card by size and file time (small files also by content) and writes only what differs; files the backup does not have are deleted.
 - **Update**: compares the packages with the card; files changed on the card come up as conflicts instead of being overwritten.
 - **Firmware**: radios with a UF2 bootloader get the firmware via the drive, all others via USB DFU (`dfu-util`). The method follows from the firmware file for the radio type.
 
 Structure:
 
-- `src/core/`: logic (detection, download, backup, update plan, firmware)
+- `src/core/`: logic (detection, download, backup, restore, update plan, firmware)
 - `src/server/`: HTTP API and server-sent events for progress and state
 - `src/ui/`: React interface (HeroUI, Tailwind)
 - `src/cli/`: command line

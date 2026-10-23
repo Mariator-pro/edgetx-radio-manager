@@ -5,7 +5,7 @@ import type { Lang } from '../texts.ts';
 import { usePrefs, type Theme } from '../usePrefs.ts';
 import { BackupsIcon, MoonIcon, PackagesIcon, RadioIcon, RefreshIcon, SourcesIcon, SunIcon } from './icons.tsx';
 
-export type Page = 'radio' | 'update' | 'flash' | 'sources' | 'packages' | 'backups';
+export type Page = 'radio' | 'update' | 'flash' | 'sources' | 'packages' | 'backups' | 'restore';
 
 export function Sidebar(props: {
   state?: StateView;
@@ -84,8 +84,8 @@ export function Sidebar(props: {
             key={target}
             type="button"
             onClick={() => onNavigate(target)}
-            aria-current={page === target ? 'page' : undefined}
-            className={`${item} ${page === target ? 'bg-zinc-800 text-white' : 'hover:bg-zinc-800/60'}`}
+            aria-current={page === target || (page === 'restore' && target === 'backups') ? 'page' : undefined}
+            className={`${item} ${page === target || (page === 'restore' && target === 'backups') ? 'bg-zinc-800 text-white' : 'hover:bg-zinc-800/60'}`}
           >
             <Icon />
             {label}

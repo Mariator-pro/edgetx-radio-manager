@@ -100,6 +100,26 @@ export interface UpdateResultView {
   backup: string;
 }
 
+export type RestoreAction = 'add' | 'replace' | 'delete';
+
+export interface RestorePlanView {
+  volume: string;
+  board: string;
+  name: string; // the backup
+  counts: Record<RestoreAction, number>;
+  unchanged: number;
+  files: { path: string; action: RestoreAction }[];
+  backupFirmware?: string; // EdgeTX version when the backup was made
+  cardFirmware?: string;
+  backupDir: string; // where the backup before the restore goes
+}
+
+export interface RestoreResultView {
+  written: number;
+  deleted: number;
+  backup?: string; // the backup made first, unless left out
+}
+
 export interface PackageVersionView {
   tag: string;
   published: string;

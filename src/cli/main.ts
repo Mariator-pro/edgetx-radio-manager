@@ -5,15 +5,17 @@ import { createInterface } from 'node:readline/promises';
 import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { applyPlan, type Resolution } from '../core/apply.ts';
-import { backupCard, pruneBackups } from '../core/backup.ts';
+import { backupCard, listBackups, pruneBackups } from '../core/backup.ts';
 import { findCards, readCard, type RadioCard } from '../core/card.ts';
 import { localVersion } from '../core/content.ts';
 import { flashFirmware, flashMethod } from '../core/firmware.ts';
 import { downloadAll } from '../core/download.ts';
+import { AppError } from '../core/errors.ts';
 import { localVersions } from '../core/packages.ts';
 import { paths, type Paths } from '../core/paths.ts';
 import { countActions, type PlanItem } from '../core/plan.ts';
 import { isBelowMin, MIN_EDGETX, radioName, radioTypes } from '../core/radios.ts';
+import { applyRestore, planRestore } from '../core/restore.ts';
 import { updateSources } from '../core/selection.ts';
 import { findLocalRepos, loadSettings, rememberRadio, saveSettings, soundsOf, type Settings } from '../core/settings.ts';
 import { addSource, checkSource, removeSource } from '../core/sources.ts';
@@ -29,6 +31,7 @@ Commands:
   download   check all sources for new releases and download them
   backup     copy the whole SD card of the connected radio
   update     show the plan, then back up the card and update it
+  restore    list the backups of the connected radio; "restore <backup>" brings the card back to one
   flash      flash firmware: "flash" for the newest download, "flash v2.12.5" for another
   sources    list sources; "sources add <owner/repo>", "sources remove <name>"
   ui         open the browser interface
@@ -36,6 +39,7 @@ Commands:
 Options:
   --volume <path>   use this drive instead of detecting the radio
   --board <id>      radio type when the card has no RADIO/radio.yml, e.g. tx16s
+  --no-backup       restore without backing up the card first
 `;
 
 class UserError extends Error {}
@@ -136,7 +140,8 @@ async function backup(p: Paths, s: Settings, volume?: string, boardOpt?: string)
   await runBackup(p, s, card, board);
 }
 
-async function runBackup(p: Paths, s: Settings, card: RadioCard, board: string): Promise<void> {
+// alsoKeep: the backup being restored, which the clean-up must not delete
+async function runBackup(p: Paths, s: Settings, card: RadioCard, board: string, alsoKeep?: string): Promise<void> {
   console.log(`Backing up ${radioName(await radioTypes(p, s), board)} from ${card.volume} ...`);
   let shown = -1;
   const result = await backupCard(card.volume, board, p, new Date(), (pr) => {
@@ -147,7 +152,7 @@ async function runBackup(p: Paths, s: Settings, card: RadioCard, board: string):
   });
   if (process.stdout.isTTY) process.stdout.write('\n');
   console.log(`Done: ${result.files} files, ${mb(result.bytes)} in ${result.dir}`);
-  const removed = await pruneBackups(p, board, s.backupsToKeep, s.keptBackups[board]);
+  const removed = await pruneBackups(p, board, s.backupsToKeep, [...(s.keptBackups[board] ?? []), ...(alsoKeep ? [alsoKeep] : [])]);
   if (removed.length > 0) console.log(`Removed old backups: ${removed.join(', ')}`);
 }
 
@@ -214,6 +219,49 @@ async function update(p: Paths, s: Settings, volume?: string, boardOpt?: string)
   });
   if (process.stdout.isTTY) process.stdout.write('\n');
   console.log(`Done: ${r.written} files written, ${r.deleted} deleted, ${r.kept} kept.`);
+}
+
+async function restore(p: Paths, s: Settings, name?: string, noBackup = false, volume?: string, boardOpt?: string): Promise<void> {
+  const [card, board] = await cardAndBoard(p, s, volume, boardOpt);
+  const radio = radioName(await radioTypes(p, s), board);
+  if (!name) {
+    const names = await listBackups(p, board);
+    if (names.length === 0) {
+      console.log(`No backups of the ${radio} yet.`);
+      return;
+    }
+    console.log(`Backups of the ${radio}:`);
+    for (const n of names) console.log(`  ${n}${s.keptBackups[board]?.includes(n) ? '  kept' : ''}`);
+    console.log('\nRestore one with "restore <backup>".');
+    return;
+  }
+  const plan = await planRestore(card.volume, p, board, name);
+  const count = (a: string) => plan.items.filter((i) => i.action === a).length;
+  console.log(`${radio} at ${card.volume}, back to the backup ${name}\n`);
+  console.log(`Plan: ${count('add')} back, ${count('replace')} replaced, ${count('delete')} deleted, ${plan.unchanged} unchanged`);
+  for (const d of plan.items.filter((i) => i.action === 'delete')) console.log(`  delete  ${d.path}`);
+  if (plan.firmware && card.firmware && plan.firmware !== card.firmware) {
+    console.log(`\nNote: the backup was made with EdgeTX ${plan.firmware}, the radio runs ${card.firmware}.`);
+    console.log('Models and scripts from the backup may not fully work with this firmware.');
+  }
+  if (plan.items.length === 0) {
+    console.log('\nNothing to change: the SD card already matches the backup.');
+    return;
+  }
+  const q = noBackup
+    ? '\nRestore without a backup first? Files added since then are gone for good. [y/N] '
+    : '\nBack up the card and restore? [y/N] ';
+  if ((await ask(q)) !== 'y') {
+    console.log('Nothing changed.');
+    return;
+  }
+  if (!noBackup) await runBackup(p, s, card, board, name);
+  console.log('Restoring ...');
+  const r = await applyRestore(card.volume, plan, (pr) => {
+    if (process.stdout.isTTY) process.stdout.write(`\r  ${pr.done}/${pr.total}`);
+  });
+  if (process.stdout.isTTY) process.stdout.write('\n');
+  console.log(`Done: ${r.written} files written, ${r.deleted} deleted.`);
 }
 
 const REPO_ROOT = resolve(import.meta.dirname, '../..');
@@ -292,7 +340,7 @@ async function ui(p: Paths): Promise<void> {
 async function main(): Promise<void> {
   const { positionals, values } = parseArgs({
     allowPositionals: true,
-    options: { volume: { type: 'string' }, board: { type: 'string' }, help: { type: 'boolean', short: 'h' } },
+    options: { volume: { type: 'string' }, board: { type: 'string' }, 'no-backup': { type: 'boolean' }, help: { type: 'boolean', short: 'h' } },
   });
   const [command] = positionals;
   if (!command || values.help) {
@@ -311,6 +359,8 @@ async function main(): Promise<void> {
       return backup(p, s, values.volume, values.board);
     case 'update':
       return update(p, s, values.volume, values.board);
+    case 'restore':
+      return restore(p, s, positionals[1], values['no-backup'], values.volume, values.board);
     case 'sources':
       return sources(p, s, positionals.slice(1));
     case 'ui':
@@ -323,6 +373,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((e: unknown) => {
-  console.error(e instanceof UserError ? e.message : e);
+  console.error(e instanceof UserError || e instanceof AppError ? e.message : e);
   process.exitCode = 1;
 });

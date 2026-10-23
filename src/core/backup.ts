@@ -8,6 +8,7 @@ const SKIP_NAMES = new Set(['.Spotlight-V100', '.fseventsd', '.Trashes', '.Tempo
 const skip = (name: string) => SKIP_NAMES.has(name) || name.startsWith('._');
 
 const BACKUP_NAME = /^\d{4}-\d{2}-\d{2}_\d{4}(_\d+)?$/;
+export const isBackupName = (name: string) => BACKUP_NAME.test(name);
 
 export interface BackupProgress {
   file: string;
@@ -30,14 +31,15 @@ export function backupName(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
 }
 
-interface CardFile {
+export interface CardFile {
   path: string;
   size: number;
   atime: Date;
   mtime: Date;
 }
 
-async function listFiles(root: string): Promise<CardFile[]> {
+// Every file below root except OS housekeeping, with full paths.
+export async function listFiles(root: string): Promise<CardFile[]> {
   const out: CardFile[] = [];
   const walk = async (dir: string) => {
     for (const e of await readdir(dir, { withFileTypes: true })) {

@@ -11,12 +11,14 @@ import { countActions, type PlanItem } from '../core/plan.ts';
 import { isBelowMin, radioName, radioTypes, type RadioType } from '../core/radios.ts';
 import { updateSources } from '../core/selection.ts';
 import { soundsOf, voiceLanguage, type Settings } from '../core/settings.ts';
+import type { RestorePlan } from '../core/restore.ts';
 import type { UpdateSetup } from '../core/update.ts';
 import type {
   BackupView,
   PackageView,
   PlanFileView,
   PlanView,
+  RestorePlanView,
   RadioSourceView,
   RadioView,
   SourceView,
@@ -146,6 +148,21 @@ export async function planView(p: Paths, volume: string, board: string, card: Ra
     conflicts: changed.filter((i) => i.action === 'conflict').map(fileView),
     missing: setup.missing,
     luac,
+    backupDir: shortHome(join(p.backups, board)),
+  };
+}
+
+export function restorePlanView(p: Paths, card: RadioCard, board: string, name: string, plan: RestorePlan): RestorePlanView {
+  const count = (a: string) => plan.items.filter((i) => i.action === a).length;
+  return {
+    volume: card.volume,
+    board,
+    name,
+    counts: { add: count('add'), replace: count('replace'), delete: count('delete') },
+    unchanged: plan.unchanged,
+    files: plan.items,
+    backupFirmware: plan.firmware,
+    cardFirmware: card.firmware,
     backupDir: shortHome(join(p.backups, board)),
   };
 }

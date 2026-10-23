@@ -176,6 +176,26 @@ const en = {
   keep: 'Keep',
   show: 'Show',
   deleteBackup: (l: string, r: string) => `Delete the backup of ${r} from ${l}?`,
+  restore: 'Restore',
+  restoreNeedsRadio: (r: string) => `Connect the ${r} to restore`,
+
+  restoreSteps: ['Plan', 'Backup', 'Restore'],
+  restoreStepsLabel: 'Restore steps',
+  restoreTitle: (d: string) => `Restore the backup from ${d}`,
+  restoreText: 'Afterwards the SD card holds exactly what it held then. Files added since then are deleted.',
+  restoreActions: { add: 'back', replace: 'replace', delete: 'delete' },
+  restoreUnchanged: (n: number) => `${n} ${n === 1 ? 'file is' : 'files are'} unchanged.`,
+  restoreFirmware: 'Different EdgeTX version',
+  restoreFirmwareText: (b: string, c: string) =>
+    `The backup was made with EdgeTX ${b}, the radio runs ${c}. Models and scripts from the backup may not fully work with this firmware. Flash EdgeTX ${b} for exactly the old state.`,
+  restoreNothing: 'Nothing to change: the SD card already matches the backup.',
+  backUpFirst: 'Back up the SD card first',
+  noBackupWarning: 'Without a backup, files added since then are gone for good.',
+  restoring: 'Restoring the SD card …',
+  restoreFailed: 'The restore failed',
+  restored: 'The backup is restored',
+  restoredText: (w: number, d: number, b?: string) => `${w} files written, ${d} deleted.${b ? ` Backup first: ${b}.` : ''}`,
+  backToBackups: 'Back to the backups',
 
   errors: ERRORS,
 };
@@ -367,6 +387,26 @@ const de: Texts = {
   keep: 'Behalten',
   show: 'Anzeigen',
   deleteBackup: (l, r) => `Backup von ${r} vom ${l} löschen?`,
+  restore: 'Zurückspielen',
+  restoreNeedsRadio: (r) => `Zum Zurückspielen ${r} anstecken`,
+
+  restoreSteps: ['Plan', 'Backup', 'Zurückspielen'],
+  restoreStepsLabel: 'Schritte beim Zurückspielen',
+  restoreTitle: (d) => `Backup vom ${d} zurückspielen`,
+  restoreText: 'Danach ist auf der SD-Karte genau das, was damals darauf war. Seitdem hinzugekommene Dateien werden gelöscht.',
+  restoreActions: { add: 'zurück', replace: 'ersetzen', delete: 'löschen' },
+  restoreUnchanged: (n) => `${n} ${n === 1 ? 'Datei ist' : 'Dateien sind'} unverändert.`,
+  restoreFirmware: 'Andere EdgeTX-Version',
+  restoreFirmwareText: (b, c) =>
+    `Das Backup stammt von EdgeTX ${b}, auf dem Sender läuft ${c}. Modelle und Skripte aus dem Backup funktionieren mit dieser Firmware eventuell nicht vollständig. Für genau den alten Stand EdgeTX ${b} flashen.`,
+  restoreNothing: 'Nichts zu ändern, die SD-Karte entspricht schon dem Backup.',
+  backUpFirst: 'Vorher die SD-Karte sichern',
+  noBackupWarning: 'Ohne Backup sind seitdem hinzugekommene Dateien endgültig weg.',
+  restoring: 'Spiele das Backup zurück …',
+  restoreFailed: 'Das Zurückspielen hat nicht geklappt',
+  restored: 'Das Backup ist zurückgespielt',
+  restoredText: (w, d, b) => `${w} Dateien geschrieben, ${d} gelöscht.${b ? ` Backup vorher: ${b}.` : ''}`,
+  backToBackups: 'Zurück zu den Backups',
 
   errors: {
     busy: () => 'Bitte warten, es läuft noch ein anderer Vorgang.',
@@ -386,6 +426,10 @@ const de: Texts = {
     unknownRadioOrSource: () => 'Unbekannter Sender oder unbekannte Quelle.',
     oneVoicePerLanguage: () => 'Pro Sprache ist nur eine Stimme möglich.',
     firmwareTooOld: ({ version, min }) => `EdgeTX ${version} ist älter als ${min}. Zuerst die Firmware flashen.`,
+
+    backupNotFound: ({ name }) => `Backup ${name} nicht gefunden.`,
+    wrongRadioForBackup: ({ connected, board }) => `Der angesteckte Sender ist ${connected}, das Backup stammt aber von ${board}.`,
+    restoreInterrupted: () => 'Die SD-Karte wurde während des Zurückspielens abgezogen. Wieder anstecken und erneut zurückspielen.',
 
     repoFormat: () => 'Das Repo bitte als besitzer/name angeben.',
     alreadySource: ({ name }) => `${name} ist schon eine Quelle.`,

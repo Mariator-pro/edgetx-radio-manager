@@ -10,14 +10,15 @@ import { AppError, errorInfo, type ErrorArgs, type ErrorCode } from '../core/err
 import { dfuUtilAvailable, flashFirmware, flashMethod } from '../core/firmware.ts';
 import { deleteVersion, localVersions, mainInfo } from '../core/packages.ts';
 import { isSafeName, type Paths } from '../core/paths.ts';
-import { isBelowMin, MIN_EDGETX, radioTypes } from '../core/radios.ts';
+import { isBelowMin, MIN_EDGETX, radioName, radioTypes } from '../core/radios.ts';
+import { applyRestore, planRestore } from '../core/restore.ts';
 import { ensureSelection } from '../core/selection.ts';
 import { findLocalRepos, loadSettings, rememberRadio, saveSettings, soundsOf, voiceLanguage, type Settings } from '../core/settings.ts';
 import { addSource, checkSource, removeSource } from '../core/sources.ts';
 import { prepareUpdate } from '../core/update.ts';
 import { listVolumes } from '../platform/volumes.ts';
-import type { FirmwareView, FlashResultView, ProgressEvent, SourceCheckView, UpdateResultView } from './api.ts';
-import { backupViews, packageViews, planView, stateView, voiceViews } from './views.ts';
+import type { FirmwareView, FlashResultView, ProgressEvent, RestoreResultView, SourceCheckView, UpdateResultView } from './api.ts';
+import { backupViews, packageViews, planView, restorePlanView, stateView, voiceViews } from './views.ts';
 
 export interface ServerOptions {
   paths: Paths;
@@ -135,13 +136,24 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
     return [c, board];
   };
 
-  const runBackup = async (c: RadioCard, board: string) => {
+  // A backup goes back only onto a radio of its own type.
+  const restoreCardAt = async (volume: string, board: string): Promise<RadioCard> => {
+    const [c, connected] = await cardAt(volume);
+    if (connected !== board) {
+      const types = await radioTypes(p, s);
+      throw new HttpError(400, 'wrongRadioForBackup', { connected: radioName(types, connected), board: radioName(types, board) });
+    }
+    return c;
+  };
+
+  // alsoKeep: the backup being restored, which the clean-up must not delete
+  const runBackup = async (c: RadioCard, board: string, alsoKeep?: string) => {
     let shown = -1;
     const r = await backupCard(c.volume, board, p, new Date(), (pr) => {
       const pct = pr.bytesTotal > 0 ? Math.floor((pr.bytesDone / pr.bytesTotal) * 100) : 100;
       if (pct !== shown) progress({ op: busy ?? 'backup', step: 'backup', text: pr.file, done: (shown = pct), total: 100 });
     });
-    await pruneBackups(p, board, s.backupsToKeep, s.keptBackups[board]);
+    await pruneBackups(p, board, s.backupsToKeep, [...(s.keptBackups[board] ?? []), ...(alsoKeep ? [alsoKeep] : [])]);
     return r;
   };
 
@@ -221,6 +233,23 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
           progress({ op: 'update', step: 'write', text: pr.path, done: pr.done, total: pr.total }),
         );
         return { ...r, backup: b.name };
+      });
+    },
+    'POST /api/restore/plan': async (req) => {
+      const { volume, board, name } = await body<{ volume: string; board: string; name: string }>(req);
+      const c = await restoreCardAt(volume, board);
+      return restorePlanView(p, c, board, name, await planRestore(c.volume, p, board, name));
+    },
+    'POST /api/restore/run': async (req) => {
+      const { volume, board, name, backupFirst } = await body<{ volume: string; board: string; name: string; backupFirst: boolean }>(req);
+      const c = await restoreCardAt(volume, board);
+      return op('restore', async (): Promise<RestoreResultView> => {
+        const plan = await planRestore(c.volume, p, board, name);
+        const b = backupFirst ? await runBackup(c, board, name) : undefined;
+        const r = await applyRestore(c.volume, plan, (pr) =>
+          progress({ op: 'restore', step: 'write', text: pr.path, done: pr.done, total: pr.total }),
+        );
+        return { ...r, backup: b?.name };
       });
     },
     'GET /api/firmware': async (_req, q) => {

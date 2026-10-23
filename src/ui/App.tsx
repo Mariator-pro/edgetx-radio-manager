@@ -1,12 +1,13 @@
 import { Alert, CloseButton, Spinner } from '@heroui/react';
 import { useEffect, useRef, useState } from 'react';
-import type { DownloadResultView } from '../server/api.ts';
+import type { DownloadResultView, RadioView } from '../server/api.ts';
 import { errorText, post, useServer } from './api.ts';
 import { Sidebar, type Page } from './components/Sidebar.tsx';
 import { BackupsPage } from './pages/BackupsPage.tsx';
 import { FlashFlow } from './pages/FlashFlow.tsx';
 import { PackagesPage } from './pages/PackagesPage.tsx';
 import { RadioPage } from './pages/RadioPage.tsx';
+import { RestoreFlow } from './pages/RestoreFlow.tsx';
 import { SourcesPage } from './pages/SourcesPage.tsx';
 import { UpdateFlow } from './pages/UpdateFlow.tsx';
 import type { Texts } from './texts.ts';
@@ -40,6 +41,9 @@ export function App() {
   const [volume, setVolume] = useState<string>();
   // The radio leaves USB storage mode for flashing, so the flash page keeps its own radio.
   const [flashing, setFlashing] = useState<{ board: string; name: string }>();
+  // The restore page keeps its radio too, so it can show the error when the card is pulled;
+  // while the radio is connected it shows the live one.
+  const [restoring, setRestoring] = useState<{ radio: RadioView; name: string }>();
   const [notice, setNotice] = useState<Notice>();
   const known = useRef<Set<string>>(new Set());
 
@@ -107,6 +111,14 @@ export function App() {
             progress={progress}
             onBack={() => setPage(radio ? 'radio' : 'sources')}
           />
+        ) : page === 'restore' && restoring ? (
+          <RestoreFlow
+            key={`${restoring.radio.volume}|${restoring.name}`}
+            radio={state.radios.find((r) => r.volume === restoring.radio.volume) ?? restoring.radio}
+            name={restoring.name}
+            progress={progress}
+            onBack={() => setPage('backups')}
+          />
         ) : showRadio && page === 'update' ? (
           <UpdateFlow key={radio.volume} radio={radio} progress={progress} onBack={() => setPage('radio')} />
         ) : showRadio ? (
@@ -125,7 +137,17 @@ export function App() {
         ) : page === 'packages' ? (
           <PackagesPage run={run} refreshKey={`${state.lastCheck}|${state.busy}`} />
         ) : page === 'backups' ? (
-          <BackupsPage run={run} keep={state.backupsToKeep} refreshKey={state.radios.map((r) => r.lastBackup).join()} />
+          <BackupsPage
+            run={run}
+            keep={state.backupsToKeep}
+            refreshKey={state.radios.map((r) => r.lastBackup).join()}
+            radios={state.radios}
+            busy={state.busy}
+            onRestore={(r, name) => {
+              setRestoring({ radio: r, name });
+              setPage('restore');
+            }}
+          />
         ) : (
           <SourcesPage state={state} run={run} board={radio?.board} />
         )}

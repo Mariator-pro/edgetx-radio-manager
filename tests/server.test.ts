@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { versionDir } from '../src/core/packages.ts';
 import { paths } from '../src/core/paths.ts';
-import type { PlanView, StateView, UpdateResultView } from '../src/server/api.ts';
+import type { BackupView, PlanView, RestorePlanView, RestoreResultView, StateView, UpdateResultView } from '../src/server/api.ts';
 import { startServer } from '../src/server/server.ts';
 import { ApiError, errorText } from '../src/ui/api.ts';
 import { TEXTS } from '../src/ui/texts.ts';
@@ -56,6 +56,25 @@ describe('server', () => {
     const state = await get<StateView>('/api/state');
     expect(state.radios[0]!.updates).toEqual([]);
     expect(state.radios[0]!.lastBackup).toBe(r.backup);
+  });
+
+  it('restores the backup from before the update, backing up first and keeping the restored one', async () => {
+    const { lastBackup } = (await get<StateView>('/api/state')).radios[0]!;
+    const wrong = await fetch(`${url}/api/restore/plan`, { method: 'POST', body: JSON.stringify({ volume: card, board: 'tx15', name: lastBackup }) });
+    expect(wrong.status).toBe(400);
+    expect(((await wrong.json()) as { code: string }).code).toBe('wrongRadioForBackup');
+
+    const plan = await post<RestorePlanView>('/api/restore/plan', { volume: card, board: 'tx16smk3', name: lastBackup });
+    expect(plan.counts).toEqual({ add: 0, replace: 0, delete: 2 });
+    expect(plan.files.map((f) => f.path)).toEqual(['.radio-manager/installed.json', 'WIDGETS/BattAnalog/main.lua']);
+    expect(plan.backupFirmware).toBe('2.12.3');
+
+    const r = await post<RestoreResultView>('/api/restore/run', { volume: card, board: 'tx16smk3', name: lastBackup, backupFirst: true });
+    expect(r).toMatchObject({ written: 0, deleted: 2 });
+    expect(r.backup).toMatch(/^\d{4}-\d{2}-\d{2}_\d{4}(_\d+)?$/);
+    const [backups] = await get<BackupView[]>('/api/backups');
+    expect(backups!.items.map((i) => i.name)).toEqual(expect.arrayContaining([lastBackup, r.backup]));
+    expect((await get<StateView>('/api/state')).radios[0]!.updates).toEqual(['edgetx-sdcard']);
   });
 
   it('sends errors as codes the interface translates', async () => {

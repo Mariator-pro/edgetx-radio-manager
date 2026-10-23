@@ -17,6 +17,10 @@ export const ERRORS = {
   oneVoicePerLanguage: () => 'Only one voice per language',
   firmwareTooOld: (p: { version: string; min: string }) => `EdgeTX ${p.version} is below ${p.min}. Flash the firmware first.`,
 
+  backupNotFound: (p: { name: string }) => `Backup ${p.name} not found`,
+  wrongRadioForBackup: (p: { connected: string; board: string }) => `The connected radio is a ${p.connected}, the backup is from a ${p.board}`,
+  restoreInterrupted: () => 'The SD card was removed during the restore. Connect it again and restore once more.',
+
   repoFormat: () => 'Enter the repo as owner/name',
   alreadySource: (p: { name: string }) => `${p.name} is already a source`,
   noRelease: (p: { repo: string }) => `${p.repo} has no release`,

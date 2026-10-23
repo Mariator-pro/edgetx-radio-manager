@@ -2,54 +2,14 @@ import { Alert, Button, Chip, Label, ProgressBar, Radio, RadioGroup, Spinner } f
 import { useEffect, useState } from 'react';
 import type { Action, PlanFileView, PlanView, ProgressEvent, RadioView, UpdateResultView } from '../../server/api.ts';
 import { errorText, post } from '../api.ts';
-import { CheckIcon, WarningIcon } from '../components/icons.tsx';
+import { WarningIcon } from '../components/icons.tsx';
+import { Stepper } from '../components/Stepper.tsx';
 import { backupLabel } from '../format.ts';
+import { COLORS, TILES } from '../planColors.ts';
 import { usePrefs } from '../usePrefs.ts';
 
 type Phase = 'loading' | 'plan' | 'running' | 'done' | 'error';
 type Resolution = 'keep' | 'apply';
-
-const COLORS: Record<Exclude<Action, 'unchanged'>, 'success' | 'accent' | 'danger' | 'warning'> = {
-  add: 'success',
-  replace: 'accent',
-  delete: 'danger',
-  conflict: 'warning',
-};
-
-// Full class names, so Tailwind finds them.
-const TILES: Record<Exclude<Action, 'unchanged'>, string> = {
-  add: 'bg-success-soft text-success-soft-foreground',
-  replace: 'bg-accent-soft text-accent-soft-foreground',
-  delete: 'bg-danger-soft text-danger-soft-foreground',
-  conflict: 'bg-warning-soft text-warning-soft-foreground',
-};
-
-function Stepper({ current }: { current: number }) {
-  const { t } = usePrefs();
-  return (
-    <ol aria-label={t.stepsLabel} className="m-0 grid list-none grid-cols-4 gap-2 p-0">
-      {t.steps.map((label, i) => {
-        const done = i < current;
-        const now = i === current;
-        return (
-          <li key={label} aria-current={now ? 'step' : undefined} className="flex flex-col gap-2">
-            <span className={`h-1 rounded-full ${done || now ? 'bg-accent' : 'bg-border'}`} aria-hidden="true" />
-            <span className={`flex items-center gap-2 text-sm ${now ? 'font-semibold' : ''} ${done || now ? '' : 'text-muted'}`}>
-              <span
-                className={`inline-flex size-[22px] items-center justify-center rounded-full text-xs font-semibold ${
-                  done || now ? 'bg-accent text-accent-foreground' : 'bg-surface-secondary text-muted'
-                }`}
-              >
-                {done ? <CheckIcon size={13} /> : i + 1}
-              </span>
-              {label}
-            </span>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
 
 function FileRow({ f }: { f: PlanFileView }) {
   const { t } = usePrefs();
@@ -156,7 +116,7 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
         </Button>
       </div>
 
-      <Stepper current={step} />
+      <Stepper current={step} steps={t.steps} label={t.stepsLabel} />
 
       {phase === 'loading' && (
         <div className="flex items-center gap-3 text-muted">
