@@ -21,6 +21,9 @@ async function start(): Promise<void> {
     throw e;
   });
   const win = new BrowserWindow({ width: 1280, height: 860, minWidth: 900, minHeight: 600, title: 'EdgeTX Radio Manager' });
+  // Electron's default menu has nothing the app needs on Windows, and Windows draws a stray white line under it in dark mode;
+  // macOS keeps it for Cmd+Q and copy and paste
+  if (process.platform !== 'darwin') win.removeMenu();
   // links to GitHub and other sites open in the browser, not in the app
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
