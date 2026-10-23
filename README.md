@@ -20,8 +20,8 @@ Every radio that EdgeTX supports works: radio types and SD card content come str
 
 Download the app from the [Releases](https://github.com/Mariator-pro/edgetx-radio-manager/releases) page:
 
-- **macOS**: the `.zip` file, `arm64` for Apple Silicon (M1 and newer) or `x64` for Intel Macs. Unzip it, open the `.dmg` inside and drag the app into Applications.
-- **Windows**: the `.zip` file. Unzip it and run the installer inside.
+- **macOS**: `edgetx-radio-manager-macos-arm64-v<version>.zip` for Apple Silicon (M1 and newer) or `edgetx-radio-manager-macos-x64-v<version>.zip` for Intel Macs. Unzip it, open the `.dmg` inside and drag the app into Applications.
+- **Windows**: `edgetx-radio-manager-win64-v<version>.zip`. Unzip it and run the installer inside.
 
 The app is not signed with an Apple or Microsoft certificate, so the system warns on first start:
 

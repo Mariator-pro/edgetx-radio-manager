@@ -79,7 +79,7 @@
       "identity": "-",
       "hardenedRuntime": false,
       "category": "public.app-category.utilities",
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "edgetx-radio-manager-macos-${arch}-v${version}.${ext}"
     },
     "win": {
       "target": [
@@ -92,6 +92,7 @@
       ]
     },
     "nsis": {
+      "artifactName": "edgetx-radio-manager-win64-v${version}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     },
