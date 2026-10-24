@@ -24,6 +24,11 @@ async function dropLuac(root: string, path: string): Promise<void> {
   if (path.endsWith('.lua')) await rm(join(root, `${path}c`), { force: true });
 }
 
+// The card root needs no mkdir, and Windows refuses one on a drive root with EPERM.
+export async function makeParent(root: string, path: string): Promise<void> {
+  if (path.includes('/')) await mkdir(dirname(join(root, path)), { recursive: true });
+}
+
 // Removes folders left empty by deletions, never the top-level card folders.
 async function dropEmptyDirs(root: string, path: string): Promise<void> {
   for (let dir = dirname(path); dir.includes('/'); dir = dirname(dir)) {
@@ -46,7 +51,7 @@ export async function applyPlan(
     const go = item.action !== 'conflict' || resolutions.get(item.path) === 'apply';
     if (!go) result.kept++;
     else if (item.wanted) {
-      await mkdir(dirname(join(root, item.path)), { recursive: true });
+      await makeParent(root, item.path);
       await writeFile(join(root, item.path), item.wanted.data);
       await dropLuac(root, item.path);
       result.written++;

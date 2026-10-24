@@ -1,6 +1,6 @@
-import { copyFile, mkdir, readdir, readFile, rm, rmdir, stat, utimes } from 'node:fs/promises';
+import { copyFile, readdir, readFile, rm, rmdir, stat, utimes } from 'node:fs/promises';
 import { dirname, join, relative, sep } from 'node:path';
-import type { ApplyProgress } from './apply.ts';
+import { makeParent, type ApplyProgress } from './apply.ts';
 import { backupFirmware, isBackupName, listFiles, type CardFile } from './backup.ts';
 import { AppError } from './errors.ts';
 import { isSafeName, type Paths } from './paths.ts';
@@ -92,7 +92,7 @@ export async function applyRestore(
         result.deleted++;
       } else {
         const from = join(plan.dir, item.path);
-        await mkdir(dirname(target), { recursive: true });
+        await makeParent(volume, item.path);
         await copyFile(from, target);
         const st = await stat(from);
         await utimes(target, st.atime, st.mtime);
