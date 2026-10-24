@@ -26,6 +26,11 @@ export async function post<T = void>(path: string, body: unknown = {}): Promise<
   return answer<T>(await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
 }
 
+// A file as the request body, e.g. a firmware file chosen on the flash page.
+export async function postFile<T>(path: string, file: File): Promise<T> {
+  return answer<T>(await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file }));
+}
+
 // The error in the interface language; errors without a known code keep the server's English text.
 export function errorText(t: Texts, e: ApiError | ErrorInfo | unknown): string {
   const info: ErrorInfo = e instanceof ApiError ? e.info : e instanceof Error ? { message: e.message } : (e as ErrorInfo);

@@ -40,6 +40,7 @@ export interface RadioView {
   name: string;
   firmware?: string;
   firmwareAvailable?: string;
+  firmwareNames: Record<string, string>; // version without "v" -> release title, for the downloaded ones
   belowMin: boolean;
   language?: string; // voice output language set on the radio
   sounds: string[]; // sound packs on this radio, one per language
@@ -59,7 +60,7 @@ export interface StateView {
 
 export interface ProgressEvent {
   op: string;
-  step?: 'backup' | 'write' | 'waiting' | 'flash';
+  step?: 'backup' | 'write' | 'download' | 'waiting' | 'flash';
   text: string; // English, for the log; the interface builds its own text from the fields below
   source?: string; // download: the source being checked or loaded
   file?: string; // download: the file being loaded; flash: the firmware file
@@ -175,13 +176,31 @@ export interface FirmwareView {
   board: string;
   method?: 'uf2' | 'dfu'; // from the newest downloaded firmware
   installed?: string; // last seen on the card
-  versions: string[]; // downloaded, newest first
+  versions: string[]; // downloaded, newest first; release candidates only when switched on
+  prereleases: string[]; // which of them are release candidates
+  names: Record<string, string>; // tag -> release title, e.g. 'EdgeTX "Queen Anne's Revenge" v2.12.5'; missing for older downloads
+  includePrereleases: boolean;
   dfuUtil?: boolean; // DFU only: dfu-util installed
+}
+
+// Releases on GitHub with a file for the radio that are not downloaded yet; flashing one downloads it first.
+export interface FirmwareCatalogView {
+  versions: { tag: string; name?: string; prerelease?: boolean }[];
+}
+
+// A firmware file the user chose, checked against the radio; without board it has no EdgeTX identification.
+export interface FirmwareFileView {
+  name: string;
+  size: number;
+  method: 'uf2' | 'dfu';
+  board?: string;
+  version?: string;
 }
 
 export interface FlashResultView {
   method: 'uf2' | 'dfu';
   file: string;
+  version?: string; // the EdgeTX version now on the radio, when known
 }
 
 export interface DownloadResultView {

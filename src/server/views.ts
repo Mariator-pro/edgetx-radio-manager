@@ -86,13 +86,16 @@ export async function radioView(
     .filter((x) => (x.on && x.available && x.available !== x.installed) || (!x.on && x.installed))
     .map((x) => x.name);
   const backups = board ? await listBackups(p, board) : [];
-  const fw = sources.find((x) => x.kind === 'firmware')?.newest?.tag.replace(/^v/, '');
+  const fwSource = sources.find((x) => x.kind === 'firmware');
+  const fw = fwSource?.newest?.tag.replace(/^v/, '');
+  const fwVersions = fwSource ? await localVersions(p, fwSource.name) : [];
   return {
     volume: card.volume,
     board,
     name: radioName(types, board),
     firmware: card.firmware,
     firmwareAvailable: fw,
+    firmwareNames: Object.fromEntries(fwVersions.filter((v) => v.name).map((v) => [v.tag.replace(/^v/, ''), v.name!])),
     belowMin: !!card.firmware && isBelowMin(card.firmware),
     language: card.language,
     sounds: soundsOf(r),

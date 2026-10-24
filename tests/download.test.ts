@@ -14,10 +14,12 @@ const source = (name: string) => defaultSettings().sources.find((s) => s.name ==
 
 const release = (tag: string, assets: string[]): Release => ({
   tag,
+  name: `EdgeTX "Test" ${tag}`,
   published: '2026-09-18T14:00:00Z',
   url: `https://github.com/x/y/releases/tag/${tag}`,
   zipball: `https://api.github.com/repos/x/y/zipball/${tag}`,
   assets: assets.map((name) => ({ name, url: `https://dl/${name}`, size: name.length })),
+  prerelease: tag.includes('-rc') || tag === 'nightly',
 });
 
 const settingsWith = (radios: Settings['radios']): Settings => ({ ...defaultSettings(), radios });
@@ -106,11 +108,12 @@ describe('rememberRadio', () => {
 describe('downloadAll', () => {
   const api = (r: Release) => ({
     tag_name: r.tag,
+    name: r.name,
     published_at: r.published,
     html_url: r.url,
     zipball_url: r.zipball,
     assets: r.assets.map((a) => ({ name: a.name, browser_download_url: a.url, size: a.size })),
-    prerelease: r.tag.includes('-rc'),
+    prerelease: r.prerelease,
   });
 
   // Fake GitHub: newest release and release list per repo, file downloads return the file name as content.
@@ -165,7 +168,7 @@ describe('downloadAll', () => {
     const dir = join(p.packages, 'edgetx-firmware', 'v2.12.5');
     expect((await readdir(dir)).sort()).toEqual(['edgetx-firmware-v2.12.5.zip', 'release.json']);
     expect(await readFile(join(dir, 'edgetx-firmware-v2.12.5.zip'), 'utf8')).toBe('edgetx-firmware-v2.12.5.zip');
-    expect((await localVersions(p, 'edgetx-firmware'))[0]?.tag).toBe('v2.12.5');
+    expect((await localVersions(p, 'edgetx-firmware'))[0]).toMatchObject({ tag: 'v2.12.5', name: 'EdgeTX "Test" v2.12.5' });
 
     const second = await downloadAll(p, s, fakeGitHub(releases, calls));
     expect(second[0]!.status).toBe('current');
@@ -182,7 +185,7 @@ describe('downloadAll', () => {
     expect(calls.some((c) => c.includes('gps-homer'))).toBe(false);
   });
 
-  it('also downloads the two firmware releases below the newest, without pre-releases', async () => {
+  it('downloads only the newest firmware release; older ones come when flashed', async () => {
     const p = paths(await tempDir());
     const s = settingsWith({});
     s.sources = [source('edgetx-firmware')];
@@ -190,12 +193,9 @@ describe('downloadAll', () => {
     const lists = { 'EdgeTX/edgetx': ['v2.13.0-rc1', 'v2.12.5', 'v2.11.6', 'v2.12.4', 'v2.12.3', 'v2.12.2'].map(fw) };
     const calls: string[] = [];
     const results = await downloadAll(p, s, fakeGitHub({ 'EdgeTX/edgetx': fw('v2.12.5') }, calls, {}, lists));
-    expect(results.map((r) => [r.tag, r.status])).toEqual([
-      ['v2.12.5', 'new'],
-      ['v2.12.4', 'new'],
-      ['v2.12.3', 'new'],
-    ]);
-    expect((await readdir(join(p.packages, 'edgetx-firmware'))).sort()).toEqual(['v2.12.3', 'v2.12.4', 'v2.12.5']);
+    expect(results.map((r) => [r.tag, r.status])).toEqual([['v2.12.5', 'new']]);
+    expect(await readdir(join(p.packages, 'edgetx-firmware'))).toEqual(['v2.12.5']);
+    expect(calls.some((c) => c.includes('/releases?'))).toBe(false);
   });
 
   it('loads only the one file of a one-file source from the newest main commit', async () => {

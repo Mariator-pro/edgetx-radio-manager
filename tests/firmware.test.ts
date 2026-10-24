@@ -1,7 +1,20 @@
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { findUf2Drive, firmwareFile, flashFirmware, flashMethod, flashUf2, parseDfuList, parseUf2Info, waitFor } from '../src/core/firmware.ts';
+import { defaultSettings } from '../src/core/settings.ts';
+import {
+  checkFirmwareFile,
+  firmwareCatalog,
+  findUf2Drive,
+  firmwareFile,
+  firmwareId,
+  flashFirmware,
+  flashMethod,
+  flashUf2,
+  parseDfuList,
+  parseUf2Info,
+  waitFor,
+} from '../src/core/firmware.ts';
 import { versionDir } from '../src/core/packages.ts';
 import { paths, type Paths } from '../src/core/paths.ts';
 import { makeZip, tempDir, writeTree } from './helpers.ts';
@@ -17,6 +30,24 @@ async function withFirmware(): Promise<Paths> {
   );
   return p;
 }
+
+// A UF2 file as EdgeTX builds it: 512-byte blocks with 256 bytes of payload each.
+function uf2(payload: Buffer): Buffer {
+  const blocks: Buffer[] = [];
+  for (let at = 0; at < payload.length; at += 256) {
+    const b = Buffer.alloc(512);
+    b.writeUInt32LE(0x0a324655, 0);
+    b.writeUInt32LE(0x9e5d5157, 4);
+    const part = payload.subarray(at, at + 256);
+    b.writeUInt32LE(part.length, 16);
+    part.copy(b, 32);
+    blocks.push(b);
+  }
+  return Buffer.concat(blocks);
+}
+
+// The identification string where the real tx15 and tx16s firmware v2.12.5 has it, between other bytes.
+const withId = (id: string, before = 100) => Buffer.concat([Buffer.alloc(before, 0xff), Buffer.from(`${id}\0`), Buffer.alloc(300, 0)]);
 
 const UF2_INFO = 'UF2 Bootloader v2.12.5\r\nModel: RadioMaster TX16S MK3\r\nBoard-ID: tx16smk3\r\nDate: Oct 18 2026\r\n';
 
@@ -102,5 +133,72 @@ esac
     const waiting = waitFor(async () => undefined, abort.signal, 60_000, 10);
     abort.abort();
     await expect(waiting).rejects.toThrow('Cancelled');
+  });
+
+  it('reads radio type and version from the firmware, also across UF2 blocks', () => {
+    expect(firmwareId(withId('BOOT10edgetx-tx16s-v2.12.5 (0ebe2e98)'))).toEqual({ board: 'tx16s', version: 'v2.12.5' });
+    expect(firmwareId(withId('edgetx-x9e-hall-v2.13.0-rc1 (12345678)'))).toEqual({ board: 'x9e-hall', version: 'v2.13.0-rc1' });
+    // without a radio type: "edgetx-v2.12.5" is the bare version string
+    expect(firmwareId(withId('edgetx-v2.12.5 (0ebe2e98) https://edgetx-user-manual/x'))).toBeUndefined();
+    // the string starts 10 bytes before a block boundary, so it is split over two blocks
+    expect(firmwareId(uf2(withId('edgetx-tx15-v2.12.5 (0ebe2e98)', 246)))).toEqual({ board: 'tx15', version: 'v2.12.5' });
+  });
+
+  it('checks an own file: extension, how the radio flashes, and the radio type inside', () => {
+    const tx15 = uf2(withId('edgetx-tx15-v2.12.5 (0ebe2e98)'));
+    expect(checkFirmwareFile('my.uf2', tx15, 'tx15', 'uf2')).toEqual({ method: 'uf2', board: 'tx15', version: 'v2.12.5' });
+    expect(() => checkFirmwareFile('notes.txt', tx15, 'tx15', 'uf2')).toThrow(/not a firmware file/);
+    expect(() => checkFirmwareFile('my.bin', withId('edgetx-tx15-v2.12.5'), 'tx15', 'uf2')).toThrow(/takes \.uf2 files/);
+    expect(() => checkFirmwareFile('fake.uf2', Buffer.from('no uf2 blocks'), 'tx15')).toThrow(/not a firmware file/);
+    expect(() => checkFirmwareFile('mk3.uf2', uf2(withId('edgetx-tx16smk3-v2.12.5')), 'tx15', 'uf2')).toThrow(/built for tx16smk3, not for tx15/);
+    // no identification: allowed, but without a radio type the caller has to confirm
+    expect(checkFirmwareFile('odd.bin', Buffer.alloc(2048, 0xff), 'tx16s', 'dfu')).toEqual({ method: 'dfu' });
+  });
+
+  it('lists the firmware releases from 2.12 on with their radio types, reading only the end of each zip', async () => {
+    const p = paths(await tempDir());
+    const zip = makeZip({ 'tx15-0ebe2e9.uf2': 'U'.repeat(100_000), 'tx16s-0ebe2e9.bin': 'B', 'x9e-hall-0ebe2e9.bin': 'H', 'fw.json': '{}' });
+    const asset = (tag: string) => ({ name: `edgetx-firmware-${tag}.zip`, browser_download_url: `https://dl/${tag}.zip`, size: zip.length });
+    const releases = ['v2.12.5', 'v2.12.4', 'v2.11.8', 'nightly', 'v2.12.0-rc4', 'v2.11.0-rc4'].map((tag) => ({
+      tag_name: tag,
+      name: `EdgeTX "Test" ${tag}`,
+      published_at: '',
+      html_url: '',
+      zipball_url: '',
+      assets: [asset(tag)],
+      prerelease: tag === 'nightly' || tag.includes('-rc'),
+    }));
+    const ranges: string[] = [];
+    const fetchFn = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/releases?')) return Response.json(releases);
+      const range = new Headers(init?.headers).get('Range')!;
+      ranges.push(`${url} ${range}`);
+      const [, a, b] = range.match(/bytes=(\d+)-(\d+)/)!;
+      // v2.12.4's server ignores Range and sends the whole file
+      if (url.includes('v2.12.4')) return new Response(zip);
+      return new Response(zip.subarray(Number(a), Number(b) + 1), { status: 206 });
+    }) as typeof fetch;
+    const source = defaultSettings().sources.find((x) => x.kind === 'firmware')!;
+
+    const catalog = await firmwareCatalog(p, source, fetchFn);
+    expect(catalog.map((e) => [e.tag, e.name, e.boards.sort()])).toEqual([
+      ['v2.12.5', 'EdgeTX "Test" v2.12.5', ['tx15', 'tx16s', 'x9e-hall']],
+      ['v2.12.4', 'EdgeTX "Test" v2.12.4', ['tx15', 'tx16s', 'x9e-hall']],
+    ]);
+    expect(ranges.some((r) => r.includes('v2.11.8'))).toBe(false);
+
+    // known releases come from catalog.json, without asking for the zip again
+    ranges.length = 0;
+    expect((await firmwareCatalog(p, source, fetchFn)).map((e) => e.tag)).toEqual(['v2.12.5', 'v2.12.4']);
+    expect(ranges).toEqual([]);
+
+    // with release candidates from 2.12 on, never nightly
+    const withRc = await firmwareCatalog(p, source, fetchFn, true);
+    expect(withRc.map((e) => [e.tag, e.prerelease])).toEqual([
+      ['v2.12.5', false],
+      ['v2.12.4', false],
+      ['v2.12.0-rc4', true],
+    ]);
   });
 });

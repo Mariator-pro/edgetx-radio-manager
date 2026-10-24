@@ -1,11 +1,14 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AppError } from './errors.ts';
+import { listReleases, type FetchFn } from './github.ts';
 import { versionDir } from './packages.ts';
 import type { Paths } from './paths.ts';
-import { readZip, zipNames } from './zip.ts';
+import { isBelowMin, MIN_EDGETX } from './radios.ts';
+import type { Source } from './settings.ts';
+import { readZip, remoteZipNames, zipNames } from './zip.ts';
 
 // UF2 radios flash by copying to the bootloader's drive; the others over USB DFU.
 export type FlashMethod = 'uf2' | 'dfu';
@@ -38,6 +41,80 @@ export async function firmwareFile(p: Paths, tag: string, board: string): Promis
     if (re.test(name)) return { name: name.slice(name.lastIndexOf('/') + 1), data };
   }
   throw new AppError('noFirmwareFor', { board, tag });
+}
+
+// UF2 blocks of 512 bytes: magic words at 0 and 4, payload size at 16, payload from 32.
+function uf2Payload(data: Buffer): Buffer | undefined {
+  if (data.length < 512 || data.readUInt32LE(0) !== 0x0a324655 || data.readUInt32LE(4) !== 0x9e5d5157) return undefined;
+  const parts: Buffer[] = [];
+  for (let at = 0; at + 512 <= data.length; at += 512) parts.push(data.subarray(at + 32, at + 32 + Math.min(data.readUInt32LE(at + 16), 476)));
+  return Buffer.concat(parts);
+}
+
+// The identification EdgeTX builds into every firmware, e.g. "edgetx-tx16s-v2.12.5 (0ebe2e98)";
+// "x9e-hall" stays whole because the version must follow the radio type.
+export function firmwareId(data: Buffer): { board: string; version: string } | undefined {
+  const text = (uf2Payload(data) ?? data).toString('latin1');
+  const m = text.match(/edgetx-([a-z0-9]+(?:-[a-z0-9]+)*?)-v?(\d+\.\d+\.\d+[^\s()\0]*)/);
+  return m ? { board: m[1]!, version: `v${m[2]!}` } : undefined;
+}
+
+export interface FirmwareFileCheck {
+  method: FlashMethod;
+  board?: string; // from the identification; without it the file can't be checked
+  version?: string;
+}
+
+// A firmware file chosen by the user: .uf2 or .bin as the radio needs it (method, when known), and built for this radio.
+export function checkFirmwareFile(name: string, data: Buffer, board: string, method?: FlashMethod): FirmwareFileCheck {
+  const ext = name.toLowerCase().match(/\.(uf2|bin)$/)?.[1];
+  if (!ext) throw new AppError('notFirmwareFile', { file: name });
+  const fileMethod = methodOf(`.${ext}`);
+  if (method && fileMethod !== method) throw new AppError('wrongFirmwareType', { file: name, ext: method === 'uf2' ? '.uf2' : '.bin' });
+  if (fileMethod === 'uf2' && !uf2Payload(data)) throw new AppError('notFirmwareFile', { file: name });
+  const id = firmwareId(data);
+  if (id && id.board !== board) throw new AppError('wrongFirmwareBoard', { file: name, fileBoard: id.board, board });
+  return { method: fileMethod, ...id };
+}
+
+export interface CatalogEntry {
+  tag: string;
+  name?: string;
+  published: string;
+  prerelease: boolean;
+  boards: string[]; // radio types the firmware zip has a file for
+}
+
+// "v2.13.0-rc1"; EdgeTX's other pre-release, the rolling "nightly", is left out.
+export const isReleaseCandidate = (tag: string) => /-rc\d+$/i.test(tag);
+
+// Firmware releases on GitHub from MIN_EDGETX on, with prereleases also the release candidates, each with the radio types it supports.
+// The types come from the zip's file list, read from GitHub without downloading the zip, and are kept
+// in catalog.json next to the downloads: a release doesn't change.
+export async function firmwareCatalog(p: Paths, source: Source, fetchFn: FetchFn = fetch, prereleases = false): Promise<CatalogEntry[]> {
+  const file = join(p.packages, source.name, 'catalog.json');
+  const known = JSON.parse(await readFile(file, 'utf8').catch(() => '{}')) as Record<string, string[]>;
+  const candidates = prereleases ? (await listReleases(source.repo, fetchFn, true)).filter((r) => isReleaseCandidate(r.tag)) : [];
+  const releases = [...(await listReleases(source.repo, fetchFn)), ...candidates].filter((r) => !isBelowMin(r.tag.replace(/^v/, ''), MIN_EDGETX));
+  let added = false;
+  const entries = await Promise.all(
+    releases.map(async (r): Promise<CatalogEntry | undefined> => {
+      if (!known[r.tag]) {
+        const zip = r.assets.find((a) => /^edgetx-firmware-.*\.zip$/.test(a.name));
+        if (!zip) return undefined;
+        const names = await remoteZipNames(zip.url, zip.size, fetchFn).catch(() => undefined);
+        if (!names) return undefined;
+        known[r.tag] = [...new Set(names.map((n) => n.match(/^(?:.*\/)?(.+)-[0-9a-f]+\.(?:uf2|bin)$/)?.[1]).filter((b): b is string => !!b))];
+        added = true;
+      }
+      return { tag: r.tag, ...(r.name ? { name: r.name } : {}), published: r.published, prerelease: r.prerelease, boards: known[r.tag]! };
+    }),
+  );
+  if (added) {
+    await mkdir(join(p.packages, source.name), { recursive: true });
+    await writeFile(file, `${JSON.stringify(known, null, 2)}\n`);
+  }
+  return entries.filter((e): e is CatalogEntry => !!e);
 }
 
 export interface Uf2Drive {
@@ -153,11 +230,15 @@ export interface FlashOptions {
   timeoutMs?: number;
 }
 
-// Waits for the radio in its bootloader (UF2 drive) or DFU mode, then writes the firmware.
+// Waits for the radio in its bootloader (UF2 drive) or DFU mode, then writes the firmware of a downloaded release.
 export async function flashFirmware(p: Paths, board: string, tag: string, o: FlashOptions): Promise<{ method: FlashMethod; file: string }> {
+  return flashFile(board, await firmwareFile(p, tag, board), o);
+}
+
+// The same for any firmware file; checkFirmwareFile comes first for one the user chose.
+export async function flashFile(board: string, fw: { name: string; data: Buffer }, o: FlashOptions): Promise<{ method: FlashMethod; file: string }> {
   const say = o.onProgress ?? (() => {});
-  const fw = await firmwareFile(p, tag, board);
-  const method = methodOf(fw.name);
+  const method = methodOf(fw.name.toLowerCase());
   if (method === 'uf2') {
     say({ step: 'waiting', text: 'Waiting for the bootloader drive …', file: fw.name });
     const drive = await waitFor(async () => findUf2Drive(await o.volumes()), o.signal, o.timeoutMs);

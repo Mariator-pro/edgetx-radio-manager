@@ -5,9 +5,19 @@ import { extname, join, normalize, sep } from 'node:path';
 import { applyPlan, type Resolution } from '../core/apply.ts';
 import { backupCard, deleteBackup, isBackupName, listBackups, pruneBackups } from '../core/backup.ts';
 import { findCards, readCard, type RadioCard } from '../core/card.ts';
-import { downloadAll, downloadMain, type DownloadEvent } from '../core/download.ts';
+import { downloadAll, downloadMain, downloadTag, type DownloadEvent } from '../core/download.ts';
 import { AppError, errorInfo, type ErrorArgs, type ErrorCode } from '../core/errors.ts';
-import { dfuUtilAvailable, flashFirmware, flashMethod } from '../core/firmware.ts';
+import {
+  checkFirmwareFile,
+  dfuUtilAvailable,
+  firmwareCatalog,
+  flashFile,
+  flashFirmware,
+  flashMethod,
+  type CatalogEntry,
+  type FirmwareFileCheck,
+  type FlashOptions,
+} from '../core/firmware.ts';
 import { deleteVersion, localVersions, mainInfo } from '../core/packages.ts';
 import { isSafeName, type Paths } from '../core/paths.ts';
 import { isBelowMin, MIN_EDGETX, radioName, radioTypes } from '../core/radios.ts';
@@ -29,7 +39,7 @@ import {
 import { addSource, checkSource, removeSource } from '../core/sources.ts';
 import { prepareUpdate } from '../core/update.ts';
 import { listVolumes } from '../platform/volumes.ts';
-import type { FirmwareView, FlashResultView, ProgressEvent, RestoreResultView, SourceCheckView, UpdateResultView } from './api.ts';
+import type { FirmwareCatalogView, FirmwareFileView, FirmwareView, FlashResultView, ProgressEvent, RestoreResultView, SourceCheckView, UpdateResultView } from './api.ts';
 import { backupViews, packageViews, planView, restorePlanView, stateView, voiceViews } from './views.ts';
 
 export interface ServerOptions {
@@ -64,6 +74,22 @@ async function body<T>(req: IncomingMessage): Promise<T> {
   return (chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}) as T;
 }
 
+const CATALOG_MS = 10 * 60_000;
+
+// A firmware file at most; firmware is a few MB.
+const MAX_UPLOAD = 32 * 1024 * 1024;
+
+async function rawBody(req: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const c of req) {
+    size += (c as Buffer).length;
+    if (size > MAX_UPLOAD) throw new HttpError(413, 'invalidRequest', { what: 'file too large' });
+    chunks.push(c as Buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
 function json(res: ServerResponse, data: unknown, status = 200): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(data ?? null));
@@ -84,6 +110,10 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
   const clients = new Set<ServerResponse>();
   let busy: string | undefined;
   let flashAbort: AbortController | undefined;
+  // the firmware file chosen last on the flash page, until it is flashed or another one is chosen
+  let customFirmware: { board: string; name: string; data: Buffer; check: FirmwareFileCheck } | undefined;
+  // the firmware releases on GitHub, asked for at most every 10 minutes: GitHub allows 60 requests an hour
+  let catalog: { at: number; prereleases: boolean; entries: CatalogEntry[] } | undefined;
 
   const send = (event: string, data: unknown) => {
     const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -170,6 +200,38 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
     await saveSettings(p, s);
     return r;
   };
+
+  const firmwareView = async (board: string): Promise<FirmwareView> => {
+    const all = await localVersions(p, 'edgetx-firmware', !!s.firmwarePrereleases);
+    const stable = all.find((v) => !v.prerelease)?.tag;
+    const method = stable ? await flashMethod(p, stable, board) : undefined;
+    const view: FirmwareView = {
+      board,
+      method,
+      installed: s.radios[board]?.firmware,
+      versions: all.map((v) => v.tag),
+      prereleases: all.filter((v) => v.prerelease).map((v) => v.tag),
+      names: Object.fromEntries(all.filter((v) => v.name).map((v) => [v.tag, v.name!])),
+      includePrereleases: !!s.firmwarePrereleases,
+    };
+    if (method === 'dfu') view.dfuUtil = await dfuUtilAvailable();
+    return view;
+  };
+
+  const flashWith = async (fn: (o: FlashOptions) => Promise<FlashResultView>): Promise<FlashResultView> =>
+    op('flash', async () => {
+      flashAbort = new AbortController();
+      try {
+        return await fn({
+          volumes: listVolumes,
+          signal: flashAbort.signal,
+          onProgress: (pr) =>
+            progress({ op: 'flash', step: pr.step === 'waiting' ? 'waiting' : 'flash', text: pr.text, file: pr.file, done: pr.pct, total: 100 }),
+        });
+      } finally {
+        flashAbort = undefined;
+      }
+    });
 
   const routes: Record<string, (req: IncomingMessage, q: URLSearchParams) => Promise<unknown>> = {
     'GET /api/state': () => stateView(p, s, cards, boards, busy),
@@ -266,28 +328,61 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
         return { ...r, backup: b?.name };
       });
     },
-    'GET /api/firmware': async (_req, q) => {
+    'GET /api/firmware': (_req, q) => firmwareView(q.get('board') ?? ''),
+    'GET /api/firmware/catalog': async (_req, q) => {
       const board = q.get('board') ?? '';
-      const versions = (await localVersions(p, 'edgetx-firmware')).map((v) => v.tag);
-      const method = versions[0] ? await flashMethod(p, versions[0], board) : undefined;
-      const view: FirmwareView = { board, method, installed: s.radios[board]?.firmware, versions };
-      if (method === 'dfu') view.dfuUtil = await dfuUtilAvailable();
+      const src = s.sources.find((x) => x.kind === 'firmware');
+      const have = new Set((await localVersions(p, 'edgetx-firmware', true)).map((v) => v.tag));
+      const prereleases = !!s.firmwarePrereleases;
+      if (src && (!catalog || catalog.prereleases !== prereleases || Date.now() - catalog.at > CATALOG_MS)) {
+        catalog = { at: Date.now(), prereleases, entries: await firmwareCatalog(p, src, fetch, prereleases) };
+      }
+      const entries = catalog?.entries ?? [];
+      const view: FirmwareCatalogView = {
+        versions: entries
+          .filter((e) => e.boards.includes(board) && !have.has(e.tag))
+          .map((e) => ({ tag: e.tag, ...(e.name ? { name: e.name } : {}), ...(e.prerelease ? { prerelease: true } : {}) })),
+      };
+      return view;
+    },
+    // Release candidates in the list or not; like any other version they are downloaded when flashed.
+    'POST /api/firmware/prereleases': async (req) => {
+      const { board, on } = await body<{ board: string; on: boolean }>(req);
+      s.firmwarePrereleases = on;
+      await saveSettings(p, s);
+      return firmwareView(board);
+    },
+    'POST /api/firmware/file': async (req, q) => {
+      const board = q.get('board') ?? '';
+      const name = q.get('name') ?? '';
+      if (!board || !isSafeName(name)) throw new HttpError(400, 'invalidRequest', { what: 'file' });
+      customFirmware = undefined;
+      const data = await rawBody(req);
+      const check = checkFirmwareFile(name, data, board, (await firmwareView(board)).method);
+      customFirmware = { board, name, data, check };
+      const view: FirmwareFileView = { name, size: data.length, ...check };
       return view;
     },
     'POST /api/firmware/flash': async (req) => {
-      const { board, tag } = await body<{ board: string; tag: string }>(req);
-      return op('flash', async (): Promise<FlashResultView> => {
-        flashAbort = new AbortController();
-        try {
-          return await flashFirmware(p, board, tag, {
-            volumes: listVolumes,
-            signal: flashAbort.signal,
-            onProgress: (pr) =>
-              progress({ op: 'flash', step: pr.step === 'waiting' ? 'waiting' : 'flash', text: pr.text, file: pr.file, done: pr.pct, total: 100 }),
-          });
-        } finally {
-          flashAbort = undefined;
-        }
+      const { board, tag, file, force } = await body<{ board: string; tag?: string; file?: boolean; force?: boolean }>(req);
+      if (!file) {
+        return flashWith(async (fo) => {
+          // a version from the catalog is downloaded first, and then stays like any other download
+          const src = s.sources.find((x) => x.kind === 'firmware');
+          if (tag && src && !(await localVersions(p, src.name, true)).some((v) => v.tag === tag)) {
+            progress({ op: 'flash', step: 'download', text: `Downloading ${tag}`, file: tag });
+            await downloadTag(p, s, src, tag);
+          }
+          return { ...(await flashFirmware(p, board, tag ?? '', fo)), version: tag };
+        });
+      }
+      const fw = customFirmware;
+      if (!fw || fw.board !== board) throw new HttpError(400, 'invalidRequest', { what: 'file' });
+      if (!fw.check.board && !force) throw new HttpError(400, 'unknownFirmwareFile', { file: fw.name });
+      return flashWith(async (fo) => {
+        const r = await flashFile(board, fw, fo);
+        customFirmware = undefined;
+        return { ...r, version: fw.check.version };
       });
     },
     'POST /api/firmware/cancel': async () => {

@@ -69,6 +69,13 @@ Files that you changed on the card, or that did not come from a package, show up
 
 "Flash firmware" on the firmware card opens the flash page. Pick the EdgeTX version (the newest downloaded one is preselected), click "Start flashing" and follow the steps to put the radio into its bootloader. The app waits up to five minutes for the radio. Afterwards, run an SD card update so the card matches the new firmware.
 
+The list also shows the older EdgeTX versions from 2.12 on that have a file for your radio, also those not downloaded yet. To find them the app reads only the end of each firmware zip on GitHub, a few KB, and remembers the result. A version that is not downloaded yet is downloaded when you click "Start flashing", and then stays like any other download. "Check for updates" itself only downloads the newest firmware.
+
+Two more options sit below the version list:
+
+- **Show release candidates**: also lists the test versions EdgeTX publishes before a release (e.g. `v2.12.0-rc4`), from 2.12 on, like EdgeTX Buddy. Like the older versions they are downloaded when you flash one. The newest finished release stays preselected, and the SD content stays at the newest release.
+- **Choose file**: flashes a `.uf2` or `.bin` file of your own, e.g. a firmware you built yourself. The app reads the radio type and version that EdgeTX builds into every firmware and refuses a file for another radio or of the wrong kind. A file without this identification can only be flashed after ticking "Flash it anyway".
+
 ![The flash page with the bootloader steps for a RadioMaster TX15](docs/screenshots/flash.png)
 
 ### 5. Add your own Lua scripts and widgets
@@ -146,7 +153,7 @@ npm run cli -- <command> [options]
 | `backup` | Back up the whole SD card of the connected radio |
 | `update` | Show the plan, then back up and update the card |
 | `restore [backup]` | Without a name, list the backups of the connected radio with EdgeTX version, reason and note; with one (e.g. `restore 2026-10-23_2015`), show the plan, then back up the card and restore the backup |
-| `flash [version]` | Flash firmware, without a version the newest downloaded one (e.g. `flash v2.12.5`) |
+| `flash [version]` | Flash firmware, without a version the newest downloaded one; any other release is downloaded first (e.g. `flash v2.12.2` or `flash v2.12.0-rc4`); `flash --file <path>` flashes a `.uf2` or `.bin` of your own |
 | `sources` | List sources; `sources add <owner/repo>`, `sources remove <name>` |
 | `ui` | Open the browser interface (like `npm start`) |
 
@@ -155,6 +162,7 @@ Options:
 - `--volume <path>`: use this drive instead of automatic detection
 - `--board <id>`: radio type when the card has no `RADIO/radio.yml` yet (e.g. `tx16s`)
 - `--no-backup`: restore without backing up the card first
+- `--force`: with `flash --file`, flash a file that has no EdgeTX identification
 
 Typical flow: `download`, connect the radio in "USB Storage" mode, `update`.
 

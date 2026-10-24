@@ -10,16 +10,19 @@ export interface Asset {
 
 export interface Release {
   tag: string;
+  name?: string; // e.g. 'EdgeTX "Queen Anne's Revenge" v2.12.5'
   published: string;
   url: string;
   zipball: string;
   assets: Asset[];
+  prerelease: boolean;
 }
 
 const HEADERS = { Accept: 'application/vnd.github+json', 'User-Agent': 'edgetx-radio-manager' };
 
 interface ApiRelease {
   tag_name: string;
+  name?: string | null;
   published_at: string;
   html_url: string;
   zipball_url: string;
@@ -38,10 +41,10 @@ export function releaseByTag(repo: string, tag: string, fetchFn: FetchFn = fetch
   return getRelease(`https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(tag)}`, fetchFn);
 }
 
-// The newest 30 releases without drafts and pre-releases, newest first.
-export async function listReleases(repo: string, fetchFn: FetchFn = fetch): Promise<Release[]> {
+// The newest 30 releases without drafts, newest first: the finished ones, or with prereleases only the pre-releases.
+export async function listReleases(repo: string, fetchFn: FetchFn = fetch, prereleases = false): Promise<Release[]> {
   const list = await getJson<ApiRelease[]>(`https://api.github.com/repos/${repo}/releases?per_page=30`, fetchFn);
-  return (list ?? []).filter((r) => !r.draft && !r.prerelease).map(toRelease);
+  return (list ?? []).filter((r) => !r.draft && !!r.prerelease === prereleases).map(toRelease);
 }
 
 export interface Commit {
@@ -82,9 +85,11 @@ async function getRelease(url: string, fetchFn: FetchFn): Promise<Release | unde
 function toRelease(r: ApiRelease): Release {
   return {
     tag: r.tag_name,
+    ...(r.name ? { name: r.name } : {}),
     published: r.published_at,
     url: r.html_url,
     zipball: r.zipball_url,
     assets: r.assets.map((a) => ({ name: a.name, url: a.browser_download_url, size: a.size })),
+    prerelease: !!r.prerelease,
   };
 }

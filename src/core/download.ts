@@ -5,7 +5,7 @@ import { Readable } from 'node:stream';
 import type { ReadableStream } from 'node:stream/web';
 import { pipeline } from 'node:stream/promises';
 import { AppError, errorInfo, type ErrorInfo } from './errors.ts';
-import { latestCommit, latestRelease, listReleases, releaseByTag, type FetchFn, type Release } from './github.ts';
+import { latestCommit, latestRelease, releaseByTag, type FetchFn, type Release } from './github.ts';
 import { mainDir, mainInfo, mainVersion, versionDir, type MainInfo, type ReleaseInfo } from './packages.ts';
 import type { Paths } from './paths.ts';
 import { soundsOf, type Settings, type Source } from './settings.ts';
@@ -30,17 +30,6 @@ export type DownloadEvent =
   | { type: 'file'; source: string; file: string; size?: number };
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-// Firmware releases kept besides the newest one, so a radio can go back to them.
-export const OLDER_FIRMWARE = 2;
-
-// "v2.12.5" against "v2.12.4": the numbers count, a leading "v" and suffixes don't.
-export function compareVersions(a: string, b: string): number {
-  const x = a.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
-  const y = b.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
-  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
-  return 0;
-}
 
 // Sound pack zip of one voice; "en" must not match "en_gb-ryan": the voice id is followed directly by the version.
 export function soundPackPattern(voice: string): RegExp {
@@ -135,27 +124,15 @@ async function downloadRelease(
     await fetchTo(f.url, target, fetchFn);
     files.push(f.name);
   }
-  const info: ReleaseInfo = { tag: release.tag, published: release.published, url: release.url };
+  const info: ReleaseInfo = {
+    tag: release.tag,
+    ...(release.name ? { name: release.name } : {}),
+    published: release.published,
+    url: release.url,
+    ...(release.prerelease ? { prerelease: true } : {}),
+  };
   await writeFile(join(dir, 'release.json'), `${JSON.stringify(info, null, 2)}\n`);
   return { source: source.name, status: files.length > 0 ? 'new' : 'current', tag: release.tag, files };
-}
-
-// The releases just below the newest one by version number, for flashing an older firmware.
-export async function downloadOlderFirmware(
-  p: Paths,
-  s: Settings,
-  source: Source,
-  newest: string,
-  fetchFn: FetchFn = fetch,
-  onEvent: (e: DownloadEvent) => void = () => {},
-): Promise<DownloadResult[]> {
-  const older = (await listReleases(source.repo, fetchFn))
-    .filter((r) => compareVersions(r.tag, newest) < 0)
-    .sort((a, b) => compareVersions(b.tag, a.tag))
-    .slice(0, OLDER_FIRMWARE);
-  const results: DownloadResult[] = [];
-  for (const r of older) results.push(await downloadRelease(p, s, source, r, fetchFn, onEvent));
-  return results;
 }
 
 // Newest commit on a project's default branch, as source archive in "_main/"; undefined when the repo has no commit.
@@ -192,24 +169,12 @@ export async function downloadAll(
 ): Promise<DownloadResult[]> {
   const results: DownloadResult[] = [];
   for (const source of s.sources) {
-    let newest: string | undefined;
     try {
-      const result = await downloadSource(p, s, source, fetchFn, onEvent);
-      newest = result.tag;
-      results.push(result);
+      results.push(await downloadSource(p, s, source, fetchFn, onEvent));
     } catch (e) {
       const error = errorInfo(e);
       results.push({ source: source.name, status: 'error', files: [], message: error.message, error });
       if (error.code === 'rateLimit') return results; // every further request fails the same way
-    }
-    if (source.kind === 'firmware' && newest) {
-      try {
-        results.push(...(await downloadOlderFirmware(p, s, source, newest, fetchFn, onEvent)));
-      } catch (e) {
-        const error = errorInfo(e);
-        results.push({ source: source.name, status: 'error', files: [], message: error.message, error });
-        if (error.code === 'rateLimit') return results;
-      }
     }
     if (source.kind !== 'project' || (source.file && !source.file.repoPath)) continue; // no main without a path in the repo
     try {

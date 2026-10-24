@@ -32,10 +32,17 @@ export function backupLabel(name: string): string {
   return m ? `${m[1]} ${m[2]}:${m[3]}${m[4] ? ` (${m[4]})` : ''}` : name;
 }
 
-// "2.12.5" newer than "v2.12.3"; a leading "v" is ignored, missing parts count as 0.
+// "2.12.5" newer than "v2.12.3", "v2.12.0" newer than "v2.12.0-rc4", which is newer than "-rc3";
+// a leading "v" is ignored, missing parts count as 0.
 export function isNewer(a: string, b: string): boolean {
-  const x = a.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
-  const y = b.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
-  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+  const parts = (v: string) => {
+    const [main = '', rc] = v.replace(/^v/, '').split(/-rc/i);
+    const n = main.split('.').map((x) => parseInt(x, 10) || 0);
+    // a release candidate comes before its release
+    return [n[0] ?? 0, n[1] ?? 0, n[2] ?? 0, rc === undefined ? Infinity : parseInt(rc, 10) || 0];
+  };
+  const x = parts(a);
+  const y = parts(b);
+  for (let i = 0; i < 4; i++) if (x[i] !== y[i]) return x[i]! > y[i]!;
   return false;
 }

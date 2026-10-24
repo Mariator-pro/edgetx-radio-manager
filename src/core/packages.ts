@@ -7,8 +7,10 @@ import type { Settings } from './settings.ts';
 // release.json next to the zips of one package version.
 export interface ReleaseInfo {
   tag: string;
+  name?: string; // the release's title on GitHub
   published: string;
   url: string;
+  prerelease?: boolean; // a release candidate of the firmware
 }
 
 // commit.json next to the source archive of a project's newest main commit.
@@ -36,8 +38,8 @@ export function mainVersion(info: MainInfo): string {
   return `main ${info.sha.slice(0, 7)}`;
 }
 
-// Downloaded versions of a package, newest release first.
-export async function localVersions(p: Paths, name: string): Promise<ReleaseInfo[]> {
+// Downloaded versions of a package, newest release first; pre-releases only when asked for.
+export async function localVersions(p: Paths, name: string, prereleases = false): Promise<ReleaseInfo[]> {
   const dirs = await readdir(join(p.packages, name), { withFileTypes: true }).catch(() => []);
   const infos = await Promise.all(
     dirs
@@ -47,7 +49,9 @@ export async function localVersions(p: Paths, name: string): Promise<ReleaseInfo
         return text === undefined ? undefined : (JSON.parse(text) as ReleaseInfo);
       }),
   );
-  return infos.filter((i): i is ReleaseInfo => i !== undefined).sort((a, b) => b.published.localeCompare(a.published));
+  return infos
+    .filter((i): i is ReleaseInfo => i !== undefined && (prereleases || !i.prerelease))
+    .sort((a, b) => b.published.localeCompare(a.published));
 }
 
 export async function folderSize(dir: string): Promise<number> {

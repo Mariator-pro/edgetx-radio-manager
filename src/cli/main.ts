@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline/promises';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { applyPlan, type Resolution } from '../core/apply.ts';
 import { backupCard, backupFirmware, listBackups, pruneBackups } from '../core/backup.ts';
 import { findCards, readCard, type RadioCard } from '../core/card.ts';
 import { localVersion } from '../core/content.ts';
-import { flashFirmware, flashMethod } from '../core/firmware.ts';
-import { downloadAll } from '../core/download.ts';
+import { checkFirmwareFile, firmwareFile, flashFile, flashMethod, type FlashMethod } from '../core/firmware.ts';
+import { downloadAll, downloadTag } from '../core/download.ts';
 import { AppError } from '../core/errors.ts';
 import { localVersions } from '../core/packages.ts';
 import { paths, type Paths } from '../core/paths.ts';
@@ -42,7 +43,7 @@ Commands:
   backup     copy the whole SD card of the connected radio
   update     show the plan, then back up the card and update it
   restore    list the backups of the connected radio; "restore <backup>" brings the card back to one
-  flash      flash firmware: "flash" for the newest download, "flash v2.12.5" for another
+  flash      flash firmware: "flash" for the newest download, "flash v2.12.2" or "flash v2.13.0-rc1" for another (downloaded first), "flash --file <path>" for an own .uf2 or .bin
   sources    list sources; "sources add <owner/repo>", "sources remove <name>"
   ui         open the browser interface
 
@@ -50,6 +51,7 @@ Options:
   --volume <path>   use this drive instead of detecting the radio
   --board <id>      radio type when the card has no RADIO/radio.yml, e.g. tx16s
   --no-backup       restore without backing up the card first
+  --force           flash an own file that has no EdgeTX identification
 `;
 
 class UserError extends Error {}
@@ -306,14 +308,26 @@ async function flash(p: Paths, s: Settings, tagArg?: string, volume?: string, bo
   if (!board) throw new UserError('Which radio? Connect it in "USB Storage" mode first, or pass --board.');
   const tag = tagArg ?? (await localVersions(p, 'edgetx-firmware'))[0]?.tag;
   if (!tag) throw new UserError('No firmware downloaded. Run "download" first.');
+  // any other release is downloaded first, like on the flash page
+  const src = s.sources.find((x) => x.kind === 'firmware');
+  if (src && !(await localVersions(p, src.name, true)).some((v) => v.tag === tag)) {
+    console.log(`Downloading EdgeTX ${tag} ...`);
+    if ((await downloadTag(p, s, src, tag)).status === 'no-release') throw new UserError(`EdgeTX has no release ${tag}.`);
+  }
   const method = await flashMethod(p, tag, board).catch((e: Error) => {
     throw new UserError(e.message);
   });
   console.log(`Flashing EdgeTX ${tag} to the ${radioName(await radioTypes(p, s), board)} (was ${s.radios[board]?.firmware ?? 'unknown'}).\n`);
+  const file = await flashAndReport(board, await firmwareFile(p, tag, board), method);
+  console.log(`Done: ${file} written. The radio restarts with EdgeTX ${tag}.`);
+}
+
+// Prints the bootloader steps, waits for the radio and writes the firmware.
+async function flashAndReport(board: string, fw: { name: string; data: Buffer }, method: FlashMethod): Promise<string> {
   FLASH_STEPS[method].forEach((step, i) => console.log(`  ${i + 1}. ${step}`));
   console.log('\nWaiting for the radio (Ctrl+C to cancel) ...');
   let last = '';
-  const r = await flashFirmware(p, board, tag, {
+  const r = await flashFile(board, fw, {
     volumes: listVolumes,
     onProgress: (pr) => {
       const line = pr.pct !== undefined ? `${pr.text} ${pr.pct}%` : pr.text;
@@ -326,7 +340,25 @@ async function flash(p: Paths, s: Settings, tagArg?: string, volume?: string, bo
     throw new UserError(`\n${e.message}`);
   });
   if (process.stdout.isTTY) process.stdout.write('\n');
-  console.log(`Done: ${r.file} written. The radio restarts with EdgeTX ${tag}.`);
+  return r.file;
+}
+
+async function flashOwnFile(p: Paths, s: Settings, path: string, force: boolean, volume?: string, boardOpt?: string): Promise<void> {
+  const cards = await connectedCards(volume);
+  const board = boardOpt ?? (cards.length === 1 ? cards[0]!.board : undefined);
+  if (!board) throw new UserError('Which radio? Connect it in "USB Storage" mode first, or pass --board.');
+  const data = await readFile(path).catch(() => {
+    throw new UserError(`Cannot read ${path}`);
+  });
+  const name = basename(path);
+  const stable = (await localVersions(p, 'edgetx-firmware'))[0]?.tag;
+  const known = stable ? await flashMethod(p, stable, board).catch(() => undefined) : undefined;
+  const check = checkFirmwareFile(name, data, board, known);
+  if (!check.board && !force) throw new UserError(`${name} has no EdgeTX identification, so it cannot be checked. Pass --force to flash it anyway.`);
+  const what = check.version ? `EdgeTX ${check.version} (${name})` : name;
+  console.log(`Flashing ${what} to the ${radioName(await radioTypes(p, s), board)} (was ${s.radios[board]?.firmware ?? 'unknown'}).\n`);
+  const file = await flashAndReport(board, { name, data }, check.method);
+  console.log(`Done: ${file} written. The radio restarts${check.version ? ` with EdgeTX ${check.version}` : ''}.`);
 }
 
 async function sources(p: Paths, s: Settings, args: string[]): Promise<void> {
@@ -374,7 +406,14 @@ async function ui(p: Paths): Promise<void> {
 async function main(): Promise<void> {
   const { positionals, values } = parseArgs({
     allowPositionals: true,
-    options: { volume: { type: 'string' }, board: { type: 'string' }, 'no-backup': { type: 'boolean' }, help: { type: 'boolean', short: 'h' } },
+    options: {
+      volume: { type: 'string' },
+      board: { type: 'string' },
+      'no-backup': { type: 'boolean' },
+      file: { type: 'string' },
+      force: { type: 'boolean' },
+      help: { type: 'boolean', short: 'h' },
+    },
   });
   const [command] = positionals;
   if (!command || values.help) {
@@ -400,7 +439,7 @@ async function main(): Promise<void> {
     case 'ui':
       return ui(p);
     case 'flash':
-      return flash(p, s, positionals[1], values.volume, values.board);
+      return values.file ? flashOwnFile(p, s, values.file, !!values.force, values.volume, values.board) : flash(p, s, positionals[1], values.volume, values.board);
     default:
       throw new UserError(`Unknown command "${command}".\n\n${HELP}`);
   }

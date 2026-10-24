@@ -155,6 +155,23 @@ const en = {
   flashedText: (f: string, t: string) =>
     `${f} is on the radio; it restarts with EdgeTX ${t}. Then connect it in “USB Storage” mode to bring the SD card to the matching version.`,
   done: 'Done',
+  flashedFileText: (f: string) =>
+    `${f} is on the radio and it restarts. Then connect it in “USB Storage” mode to bring the SD card to the matching version.`,
+  releaseCandidates: 'Show release candidates',
+  releaseCandidate: 'release candidate',
+  releaseCandidateTitle: (v: string) => `${v} is a release candidate`,
+  releaseCandidateText: 'A test version before the next EdgeTX release that may still have bugs. Back up the SD card first; the SD content stays at the newest release.',
+  ownFile: 'Own firmware file',
+  ownFileHint: (ext: string) => `or a ${ext} file of your own, e.g. a self-built firmware`,
+  chooseFile: 'Choose file …',
+  checkingFile: 'Checking the file …',
+  fileFor: (v: string, r: string) => `EdgeTX ${v} for the ${r}`,
+  fileUnknown: 'No EdgeTX identification',
+  fileUnknownText: (f: string) =>
+    `${f} does not show which radio it was built for, so Radio Manager cannot check it. A wrong file can stop the radio from starting; it then only comes back through its bootloader or DFU mode.`,
+  flashAnyway: 'Flash it anyway',
+  useDownloaded: 'Use a downloaded version',
+  downloadingVersion: (v: string) => `Downloading ${v} …`,
 
   kinds: { firmware: 'Firmware', sdcard: 'SD content', sounds: 'Sounds', project: 'Project' },
   addSource: 'Add a source',

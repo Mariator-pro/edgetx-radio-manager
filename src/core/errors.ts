@@ -31,6 +31,10 @@ export const ERRORS = {
 
   firmwareNotDownloaded: (p: { tag: string }) => `Firmware ${p.tag} is not downloaded`,
   noFirmwareFor: (p: { board: string; tag: string }) => `No firmware for ${p.board} in ${p.tag}`,
+  notFirmwareFile: (p: { file: string }) => `${p.file} is not a firmware file (.uf2 or .bin)`,
+  wrongFirmwareType: (p: { file: string; ext: string }) => `${p.file} does not fit this radio, it takes ${p.ext} files`,
+  wrongFirmwareBoard: (p: { file: string; fileBoard: string; board: string }) => `${p.file} is built for ${p.fileBoard}, not for ${p.board}`,
+  unknownFirmwareFile: (p: { file: string }) => `${p.file} has no EdgeTX identification; confirm to flash it anyway`,
   wrongRadio: (p: { connected: string; board: string }) => `The connected radio is a ${p.connected}, the firmware is for ${p.board}`,
   dfuUtilMissing: () => 'dfu-util is not installed (macOS: brew install dfu-util)',
   noDfuRadio: () => 'No radio in DFU mode found',

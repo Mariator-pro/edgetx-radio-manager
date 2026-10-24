@@ -54,6 +54,7 @@ export interface Settings {
   keptBackups: Record<string, string[]>; // board -> backup folder names never pruned
   backupInfo: Record<string, Record<string, BackupInfo>>; // board -> backup folder name -> reason and note
   lastCheck?: string; // last download run
+  firmwarePrereleases?: boolean; // flash page also offers the firmware release candidates
   knownDefaults?: string[]; // default sources already offered; a removed one isn't added again
 }
 

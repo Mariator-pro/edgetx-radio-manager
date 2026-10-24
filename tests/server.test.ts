@@ -108,6 +108,18 @@ describe('server', () => {
     expect(errorText(TEXTS.de, new Error('boom'))).toBe('boom');
   });
 
+  it('checks an own firmware file and flashes one without identification only when confirmed', async () => {
+    const upload = (name: string, data: Buffer) => fetch(`${url}/api/firmware/file?board=tx16s&name=${name}`, { method: 'POST', body: data });
+    const odd = (await (await upload('odd.bin', Buffer.alloc(2048, 0xff))).json()) as Record<string, unknown>;
+    expect(odd).toEqual({ name: 'odd.bin', size: 2048, method: 'dfu' });
+    const unconfirmed = await fetch(`${url}/api/firmware/flash`, { method: 'POST', body: JSON.stringify({ board: 'tx16s', file: true }) });
+    expect(unconfirmed.status).toBe(400);
+    expect(((await unconfirmed.json()) as { code: string }).code).toBe('unknownFirmwareFile');
+    const wrong = await upload('mk3.bin', Buffer.from('\0edgetx-tx16smk3-v2.12.5 (0ebe2e98)\0'));
+    expect(((await wrong.json()) as { code: string }).code).toBe('wrongFirmwareBoard');
+    expect(await get('/api/firmware?board=tx16s')).toMatchObject({ prereleases: [], includePrereleases: false });
+  });
+
   it('refuses unknown routes and paths outside its folders', async () => {
     expect((await fetch(`${url}/api/nothing`)).status).toBe(404);
     expect((await fetch(`${url}/api/backups/delete`, { method: 'POST', body: JSON.stringify({ board: '..', name: 'x' }) })).status).toBe(400);

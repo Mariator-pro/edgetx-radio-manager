@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { isNewer } from '../src/ui/format.ts';
 import { LANGUAGES, TEXTS } from '../src/ui/texts.ts';
 
 // Calls every text with sample values, so each language's shape can be compared with English.
@@ -24,5 +25,11 @@ describe('interface texts', () => {
     expect(TEXTS.ru.backupCount(11)).toBe('11 копий');
     expect(TEXTS.ru.backupCount(22)).toBe('22 копии');
     expect(TEXTS.cs.backupCount(5)).toBe('5 záloh');
+  });
+
+  it('sorts a release candidate after its release and before the version below', () => {
+    const tags = ['v2.11.8', 'v2.12.0-rc3', 'v2.12.5', 'v2.12.0', 'v2.12.0-rc4'];
+    expect([...tags].sort((a, b) => (isNewer(a, b) ? -1 : isNewer(b, a) ? 1 : 0))).toEqual(['v2.12.5', 'v2.12.0', 'v2.12.0-rc4', 'v2.12.0-rc3', 'v2.11.8']);
+    expect(isNewer('2.12.5', 'v2.12.0-rc4')).toBe(true);
   });
 });

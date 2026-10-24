@@ -1,5 +1,7 @@
 import { buffer } from 'node:stream/consumers';
 import yauzl from 'yauzl';
+import { AppError } from './errors.ts';
+import type { FetchFn } from './github.ts';
 
 // All file entries of a zip, read into memory (packages are a few MB up to ~50 MB).
 export function readZip(path: string): Promise<Map<string, Buffer>> {
@@ -41,4 +43,31 @@ export function zipNames(path: string): Promise<string[]> {
       zip.readEntry();
     });
   });
+}
+
+// File names in a zip on a web server, from the central directory at its end: a few KB instead of the whole file.
+export async function remoteZipNames(url: string, size: number, fetchFn: FetchFn = fetch): Promise<string[]> {
+  const range = async (start: number, end: number) => {
+    const res = await fetchFn(url, { headers: { Range: `bytes=${start}-${end}`, 'User-Agent': 'edgetx-radio-manager' } }).catch(() => {
+      throw new AppError('noConnection');
+    });
+    if (!res.ok) throw new AppError('downloadFailed', { status: res.status, url });
+    const data = Buffer.from(await res.arrayBuffer());
+    // a server that ignores Range sends the whole file
+    return res.status === 206 ? data : data.subarray(start, end + 1);
+  };
+  const tailStart = Math.max(0, size - 22 - 65_535); // end record and the longest possible zip comment
+  const tail = await range(tailStart, size - 1);
+  const end = tail.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  if (end < 0) throw new Error(`no zip directory in ${url}`);
+  const dirSize = tail.readUInt32LE(end + 12);
+  const dirStart = tail.readUInt32LE(end + 16);
+  const dir = dirStart >= tailStart ? tail.subarray(dirStart - tailStart, dirStart - tailStart + dirSize) : await range(dirStart, dirStart + dirSize - 1);
+  const names: string[] = [];
+  for (let at = 0; at + 46 <= dir.length && dir.readUInt32LE(at) === 0x02014b50; ) {
+    const length = dir.readUInt16LE(at + 28);
+    names.push(dir.toString('utf8', at + 46, at + 46 + length));
+    at += 46 + length + dir.readUInt16LE(at + 30) + dir.readUInt16LE(at + 32);
+  }
+  return names.filter((n) => !n.endsWith('/'));
 }

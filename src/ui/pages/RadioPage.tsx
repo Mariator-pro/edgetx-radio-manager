@@ -268,6 +268,8 @@ export function RadioPage(props: {
   const n = radio.updates.length;
   const newer = !!radio.firmwareAvailable && (!radio.firmware || isNewer(radio.firmwareAvailable, radio.firmware));
   const firmwareDone = !!radio.firmware && !newer && !radio.belowMin;
+  // the full release title of the version the card shows, e.g. 'EdgeTX "Queen Anne's Revenge" v2.12.5'
+  const shownName = radio.firmwareNames[(newer ? radio.firmwareAvailable : radio.firmware) ?? ''];
   const sdPrimary = !radio.belowMin && n > 0;
   const chip = (label: string, color: 'default' | 'success' | 'warning') => (
     <Chip size="sm" variant="soft" color={color}>
@@ -328,6 +330,7 @@ export function RadioPage(props: {
                   )}
                   <span>{newer ? radio.firmwareAvailable : (radio.firmware ?? t.unknown)}</span>
                 </div>
+                {shownName && <span className="text-sm text-muted">{shownName}</span>}
               </Step>
 
               <Step
