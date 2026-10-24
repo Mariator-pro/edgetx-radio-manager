@@ -73,7 +73,7 @@ The list also shows the older EdgeTX versions from 2.12 on that have a file for 
 
 Two more options sit below the version list:
 
-- **Show release candidates**: also lists the test versions EdgeTX publishes before a release (e.g. `v2.12.0-rc4`), from 2.12 on, like EdgeTX Buddy. Like the older versions they are downloaded when you flash one. The newest finished release stays preselected, and the SD content stays at the newest release.
+- **Show release candidates**: also lists the test versions EdgeTX publishes before a release (e.g. `v2.12.0-rc4`), from 2.12 on. Like the older versions they are downloaded when you flash one. The newest finished release stays preselected, and the SD content stays at the newest release.
 - **Choose file**: flashes a `.uf2` or `.bin` file of your own, e.g. a firmware you built yourself. The app reads the radio type and version that EdgeTX builds into every firmware and refuses a file for another radio or of the wrong kind. A file without this identification can only be flashed after ticking "Flash it anyway".
 
 ![The flash page with the bootloader steps for a RadioMaster TX15](docs/screenshots/flash.png)
