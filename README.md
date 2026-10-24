@@ -2,7 +2,7 @@
 
 Keep your EdgeTX radio up to date without copying files by hand. Plug in the radio, and the app shows what is new: firmware, SD card content, voice packs and your Lua scripts and widgets from GitHub. It backs up the SD card before every change and never silently overwrites files you changed yourself.
 
-Desktop app for macOS and Windows, in English and German. A browser interface and a command line tool are included as well.
+Desktop app for macOS, Windows and Linux, in twelve languages (English by default, the others in a menu at the bottom of the sidebar). A browser interface and a command line tool are included as well.
 
 ![The radio page: firmware, SD card and backup status of a connected RadioMaster TX15](docs/screenshots/radio.png)
 
@@ -22,11 +22,13 @@ Download the app from the [Releases](https://github.com/Mariator-pro/edgetx-radi
 
 - **macOS**: `edgetx-radio-manager-macos-arm64-v<version>.zip` for Apple Silicon (M1 and newer) or `edgetx-radio-manager-macos-x64-v<version>.zip` for Intel Macs. Unzip it, open the `.dmg` inside and drag the app into Applications.
 - **Windows**: `edgetx-radio-manager-win64-v<version>.zip`. Unzip it and run the installer inside.
+- **Linux** (x64): `edgetx-radio-manager-linux-v<version>.zip`. Unzip it and start the `.AppImage` inside, for example with a double click or `./edgetx-radio-manager-linux-v<version>.AppImage`. If it does not start, the system may lack FUSE 2: on Ubuntu 24.04 and newer install it with `sudo apt install libfuse2t64`, on older Ubuntu and Debian with `sudo apt install libfuse2`.
 
 The app is not signed with an Apple or Microsoft certificate, so the system warns on first start:
 
 - **macOS**: the first start shows "Apple could not verify ... is free of malware". Click "Done" (not "Move to Trash"), open System Settings, Privacy & Security, scroll down and click "Open Anyway" next to the blocked app, confirm with your password or Touch ID, then start the app again and choose "Open". Later starts need nothing.
 - **Windows**: if a SmartScreen window appears, click "More info" and then "Run anyway".
+- **Linux**: no warning. If the file manager does not start the AppImage, mark it as executable (`chmod +x`).
 
 ### Only for radios that flash over DFU
 
@@ -34,6 +36,12 @@ Radios with a UF2 bootloader (for example RadioMaster TX15 and TX16S Mk III) get
 
 - macOS: `brew install dfu-util`
 - Windows: download `dfu-util` and put it in the `PATH`, and install the WinUSB driver for the radio in DFU mode with [Zadig](https://zadig.akeo.ie/)
+- Linux: install it with the package manager, e.g. `sudo apt install dfu-util`, and allow access to the radio in DFU mode without root with a udev rule:
+
+  ```sh
+  echo 'SUBSYSTEMS=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="df11", MODE="0664", TAG+="uaccess"' | sudo tee /etc/udev/rules.d/45-edgetx-dfu.rules
+  sudo udevadm control --reload-rules
+  ```
 
 ## Using it
 
@@ -104,11 +112,11 @@ EdgeTX Radio Manager/
 └── Backups/<board>/       one folder per backup, named by date and time
 ```
 
-On macOS the desktop app keeps its window data (language, theme) in the same folder.
+On macOS the desktop app keeps its window data (language, theme) in the same folder, on Windows next to it in `%APPDATA%\EdgeTX Radio Manager\`, on Linux in `~/.config/EdgeTX Radio Manager/`.
 
 ## Running from source
 
-Needs Node.js 22.18 or newer (TypeScript runs directly, without a build step for the command line). Drive detection works on macOS and Windows; on Linux use `--volume` or `RADIO_MANAGER_VOLUMES`.
+Needs Node.js 22.18 or newer (TypeScript runs directly, without a build step for the command line). Drive detection works on macOS, Windows and Linux (there: FAT and exFAT drives listed in `/proc/mounts`).
 
 ```sh
 git clone https://github.com/Mariator-pro/edgetx-radio-manager.git

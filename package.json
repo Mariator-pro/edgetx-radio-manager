@@ -91,7 +91,19 @@
         }
       ]
     },
-    "nsis": {
+    "linux": {
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "category": "Utility",
+    "artifactName": "edgetx-radio-manager-linux-v${version}.${ext}"
+  },
+  "nsis": {
       "artifactName": "edgetx-radio-manager-win64-v${version}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true

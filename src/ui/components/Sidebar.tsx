@@ -1,7 +1,7 @@
-import { Button, Spinner, ToggleButton, ToggleButtonGroup } from '@heroui/react';
+import { Button, ListBox, Select, Spinner, ToggleButton, ToggleButtonGroup } from '@heroui/react';
 import type { ProgressEvent, StateView } from '../../server/api.ts';
 import { dateTime } from '../format.ts';
-import type { Lang } from '../texts.ts';
+import { LANGUAGES, type Lang } from '../texts.ts';
 import { usePrefs, type Theme } from '../usePrefs.ts';
 import { BackupsIcon, MoonIcon, PackagesIcon, RadioIcon, RefreshIcon, SourcesIcon, SunIcon } from './icons.tsx';
 
@@ -29,6 +29,7 @@ export function Sidebar(props: {
       : t.checkingSource(progress.source)
     : t.checking;
   // Always dark: the "dark" class gives its HeroUI controls dark colours in the light theme too.
+  // The language list opens outside the sidebar, so it carries the class and its text colour itself.
   // On wide screens it stays in place while long pages scroll, so its bottom row stays visible.
   // Its width there is a whole number: a fractional one moves with the Windows scrollbar and puts
   // the edges of the toggle buttons on half pixels, which shows as a thin gap between them.
@@ -97,7 +98,7 @@ export function Sidebar(props: {
       </div>
 
       <div className="mt-auto flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <div className="flex items-center gap-2 px-1">
           <ToggleButtonGroup
             aria-label={t.theme}
             selectionMode="single"
@@ -115,23 +116,27 @@ export function Sidebar(props: {
               <MoonIcon size={16} />
             </ToggleButton>
           </ToggleButtonGroup>
-          <ToggleButtonGroup
+          <Select
             aria-label={t.language}
-            selectionMode="single"
-            disallowEmptySelection
-            selectedKeys={new Set([lang])}
-            onSelectionChange={(keys) => {
-              const v = [...keys][0];
-              if (v) setLang(String(v) as Lang);
-            }}
+            className="min-w-0 flex-1"
+            selectedKey={lang}
+            onSelectionChange={(k) => k !== null && setLang(String(k) as Lang)}
           >
-            <ToggleButton id="de" aria-label="Deutsch">
-              DE
-            </ToggleButton>
-            <ToggleButton id="en" aria-label="English">
-              EN
-            </ToggleButton>
-          </ToggleButtonGroup>
+            <Select.Trigger className="rounded-3xl border-0 bg-default shadow-none hover:bg-default-hover data-[hovered=true]:bg-default-hover">
+              <Select.Value />
+              <Select.Indicator />
+            </Select.Trigger>
+            <Select.Popover className="dark text-foreground">
+              <ListBox>
+                {LANGUAGES.map((l) => (
+                  <ListBox.Item key={l.id} id={l.id} textValue={l.name}>
+                    {l.name}
+                    <ListBox.ItemIndicator />
+                  </ListBox.Item>
+                ))}
+              </ListBox>
+            </Select.Popover>
+          </Select>
         </div>
 
         <div className="flex flex-col gap-2 rounded-xl bg-zinc-800 p-3">

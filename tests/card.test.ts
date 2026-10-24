@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { findCards, installedVersion, parseRadioYml, readCard } from '../src/core/card.ts';
 import { isBelowMin, parseRadioTypes, radioName } from '../src/core/radios.ts';
+import { parseMounts } from '../src/platform/volumes.ts';
 import { SDCARD_JSON, tempDir, writeTree } from './helpers.ts';
 
 describe('radio.yml', () => {
@@ -13,6 +14,20 @@ describe('radio.yml', () => {
 
   it('leaves missing keys undefined', () => {
     expect(parseRadioYml('board: tx15\n')).toEqual({ board: 'tx15', firmware: undefined, language: undefined });
+  });
+});
+
+describe('Linux drives', () => {
+  it('takes FAT and exFAT mounts from /proc/mounts, with spaces in names, but not the EFI partition', () => {
+    const mounts = [
+      '/dev/nvme0n1p2 / ext4 rw,relatime 0 0',
+      '/dev/nvme0n1p1 /boot/efi vfat rw,relatime 0 0',
+      '/dev/sda1 /media/pilot/TX15 vfat rw,nosuid,nodev,uid=1000 0 0',
+      '/dev/sdb1 /run/media/pilot/RADIO\\040CARD exfat rw,nosuid 0 0',
+      '/dev/sdc /media/pilot/RPI-RP2 msdos rw 0 0',
+      'tmpfs /run tmpfs rw 0 0',
+    ].join('\n');
+    expect(parseMounts(mounts)).toEqual(['/media/pilot/TX15', '/run/media/pilot/RADIO CARD', '/media/pilot/RPI-RP2']);
   });
 });
 

@@ -1,4 +1,4 @@
-# A pushed tag like v0.2.0 builds the desktop app for macOS and Windows and attaches it to the GitHub release.
+# A pushed tag like v0.2.0 builds the desktop app for macOS, Windows and Linux and attaches it to the GitHub release.
 name: Release
 
 on:
@@ -17,6 +17,8 @@ jobs:
             target: --mac
           - os: windows-latest
             target: --win
+          - os: ubuntu-latest
+            target: --linux
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -28,11 +30,16 @@ jobs:
       - run: npm test
         if: runner.os == 'macOS'
       - run: npm run build
-      # macOS: ad-hoc signature (mac.identity "-" in package.json), no Apple certificate; Windows: unsigned
+      # macOS: ad-hoc signature (mac.identity "-" in package.json), no Apple certificate; Windows and Linux: unsigned
       - run: npx electron-builder ${{ matrix.target }} --publish never
       # Like EdgeTX Companion: each installer in its own zip, browsers warn far less about a zip than about an unsigned .exe
       - shell: pwsh
+        if: runner.os != 'Linux'
         run: Get-ChildItem release/*.exe, release/*.dmg | ForEach-Object { Compress-Archive -Path $_.FullName -DestinationPath ($_.FullName -replace '\.(exe|dmg)$', '.zip') }
+      # zip keeps the AppImage executable, Compress-Archive would not
+      - if: runner.os == 'Linux'
+        working-directory: release
+        run: for f in *.AppImage; do zip "${f%.AppImage}.zip" "$f"; done
       - uses: softprops/action-gh-release@v2
         with:
           files: |
