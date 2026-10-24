@@ -8,6 +8,7 @@ import { localVersions, mainDir } from '../src/core/packages.ts';
 import { paths } from '../src/core/paths.ts';
 import { defaultOrigin } from '../src/core/selection.ts';
 import { defaultSettings, loadSettings, rememberRadio, type Settings, type Source } from '../src/core/settings.ts';
+import { voiceViews } from '../src/server/views.ts';
 import { makeZip, tempDir } from './helpers.ts';
 
 const source = (name: string) => defaultSettings().sources.find((s) => s.name === name)!;
@@ -152,7 +153,7 @@ describe('downloadAll', () => {
     s.sources = [source('edgetx-firmware'), source('edgetx-sounds'), source('gps-homer'), source('lipo-nanny')];
     const releases = {
       'EdgeTX/edgetx': release('v2.12.5', ['edgetx-firmware-v2.12.5.zip']),
-      'EdgeTX/edgetx-sdcard-sounds': release('v2.12.3', ['edgetx-sdcard-sounds-en-2.12.3.zip']),
+      'EdgeTX/edgetx-sdcard-sounds': release('v2.12.3', ['edgetx-sdcard-sounds-en-2.12.3.zip', 'edgetx-sdcard-sounds-en_gb-ryan-2.12.3.zip']),
       'Mariator-pro/edgetx-lipo-nanny': 'fail' as const,
     };
     const calls: string[] = [];
@@ -169,6 +170,10 @@ describe('downloadAll', () => {
     expect((await readdir(dir)).sort()).toEqual(['edgetx-firmware-v2.12.5.zip', 'release.json']);
     expect(await readFile(join(dir, 'edgetx-firmware-v2.12.5.zip'), 'utf8')).toBe('edgetx-firmware-v2.12.5.zip');
     expect((await localVersions(p, 'edgetx-firmware'))[0]).toMatchObject({ tag: 'v2.12.5', name: 'EdgeTX "Test" v2.12.5' });
+    expect((await localVersions(p, 'edgetx-firmware'))[0]!.assets).toBeUndefined();
+    // the sound packs' file list, so the choice of voices needs no request of its own
+    expect((await localVersions(p, 'edgetx-sounds'))[0]!.assets).toEqual(['edgetx-sdcard-sounds-en-2.12.3.zip', 'edgetx-sdcard-sounds-en_gb-ryan-2.12.3.zip']);
+    expect((await voiceViews(p, s)).map((v) => v.id)).toEqual(['en', 'en_gb-ryan']);
 
     const second = await downloadAll(p, s, fakeGitHub(releases, calls));
     expect(second[0]!.status).toBe('current');

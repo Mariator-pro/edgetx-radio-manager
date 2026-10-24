@@ -9,7 +9,7 @@ import { applyPlan, type Resolution } from '../core/apply.ts';
 import { backupCard, backupFirmware, listBackups, pruneBackups } from '../core/backup.ts';
 import { findCards, readCard, type RadioCard } from '../core/card.ts';
 import { localVersion } from '../core/content.ts';
-import { checkFirmwareFile, firmwareFile, flashFile, flashMethod, type FlashMethod } from '../core/firmware.ts';
+import { checkFirmwareFile, firmwareFile, flashFile, flashMethod, knownMethod, type FlashMethod } from '../core/firmware.ts';
 import { downloadAll, downloadTag } from '../core/download.ts';
 import { AppError } from '../core/errors.ts';
 import { localVersions } from '../core/packages.ts';
@@ -218,7 +218,7 @@ async function update(p: Paths, s: Settings, volume?: string, boardOpt?: string)
   for (const d of setup.plan.filter((i) => i.action === 'delete')) console.log(`  delete  ${d.path}  (${d.pkg})`);
 
   if (n.add + n.replace + n.delete + n.conflict === 0) {
-    await applyPlan(card.volume, setup.plan, setup.contents);
+    await applyPlan(card.volume, setup);
     console.log('\nNothing to change: the SD card is already up to date.');
     return;
   }
@@ -229,7 +229,7 @@ async function update(p: Paths, s: Settings, volume?: string, boardOpt?: string)
   }
   await runBackup(p, s, card, board, { reason: 'update', changes: setup.changes });
   console.log('Updating ...');
-  const r = await applyPlan(card.volume, setup.plan, setup.contents, resolutions, (pr) => {
+  const r = await applyPlan(card.volume, setup, resolutions, (pr) => {
     if (process.stdout.isTTY) process.stdout.write(`\r  ${pr.done}/${pr.total}`);
   });
   if (process.stdout.isTTY) process.stdout.write('\n');
@@ -351,8 +351,7 @@ async function flashOwnFile(p: Paths, s: Settings, path: string, force: boolean,
     throw new UserError(`Cannot read ${path}`);
   });
   const name = basename(path);
-  const stable = (await localVersions(p, 'edgetx-firmware'))[0]?.tag;
-  const known = stable ? await flashMethod(p, stable, board).catch(() => undefined) : undefined;
+  const known = await knownMethod(p, await localVersions(p, 'edgetx-firmware', !!s.firmwarePrereleases), board);
   const check = checkFirmwareFile(name, data, board, known);
   if (!check.board && !force) throw new UserError(`${name} has no EdgeTX identification, so it cannot be checked. Pass --force to flash it anyway.`);
   const what = check.version ? `EdgeTX ${check.version} (${name})` : name;

@@ -226,3 +226,9 @@ export const FLASH_STEPS: Record<'uf2' | 'dfu', string[]> = {
     'The firmware is written over USB; the radio restarts when done.',
   ],
 };
+
+// A key made for each start of the server: the page gets it, other web pages in the browser don't,
+// so they can't use the API. Sent as a header, by the live connection (no headers there) in the address.
+export const TOKEN_HEADER = 'x-radio-manager-token';
+export const TOKEN_META = 'radio-manager-token';
+export const withToken = (html: string, token: string) => html.replace('</head>', `<meta name="${TOKEN_META}" content="${token}" />\n</head>`);

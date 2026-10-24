@@ -7,6 +7,12 @@ import type { PlanItem } from './plan.ts';
 // For a conflict: keep the card's file, or go ahead (write the package version, or delete).
 export type Resolution = 'keep' | 'apply';
 
+export interface ApplyInput {
+  plan: PlanItem[];
+  contents: PackageContent[];
+  held?: Pick<InstalledList, 'packages' | 'files'>; // packages switched on but not available: kept in the list as they are
+}
+
 export interface ApplyProgress {
   path: string;
   done: number;
@@ -40,8 +46,7 @@ async function dropEmptyDirs(root: string, path: string): Promise<void> {
 
 export async function applyPlan(
   root: string,
-  plan: PlanItem[],
-  contents: PackageContent[],
+  { plan, contents, held }: ApplyInput,
   resolutions: Map<string, Resolution> = new Map(),
   onProgress: (pr: ApplyProgress) => void = () => {},
 ): Promise<ApplyResult> {
@@ -63,20 +68,23 @@ export async function applyPlan(
     }
     onProgress({ path: item.path, done: n + 1, total: todo.length });
   }
-  await writeList(root, plan, contents);
+  await writeList(root, plan, contents, held);
   return result;
 }
 
 // Records every package file, kept conflicts included, so a changed file stays a conflict next time.
-async function writeList(root: string, plan: PlanItem[], contents: PackageContent[]): Promise<void> {
-  const files: Record<string, ListedFile> = {};
+async function writeList(root: string, plan: PlanItem[], contents: PackageContent[], held: ApplyInput['held']): Promise<void> {
+  const files: Record<string, ListedFile> = { ...held?.files };
   for (const item of plan) {
     if (item.wanted) files[item.path] = { sha256: item.wanted.sha, from: item.wanted.from, written: item.wanted.written };
   }
   const list: InstalledList = {
     tool: 1,
     updated: new Date().toISOString(),
-    packages: Object.fromEntries(contents.map((c) => [c.name, { version: c.version, origin: c.origin, ...(c.voices ? { voices: c.voices } : {}) }])),
+    packages: {
+      ...held?.packages,
+      ...Object.fromEntries(contents.map((c) => [c.name, { version: c.version, origin: c.origin, ...(c.voices ? { voices: c.voices } : {}) }])),
+    },
     files,
   };
   const path = join(root, LIST_FILE);

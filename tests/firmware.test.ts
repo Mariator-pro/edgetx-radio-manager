@@ -11,6 +11,7 @@ import {
   flashFirmware,
   flashMethod,
   flashUf2,
+  knownMethod,
   parseDfuList,
   parseUf2Info,
   waitFor,
@@ -58,6 +59,21 @@ describe('firmware', () => {
     expect(await flashMethod(p, 'v2.12.5', 'tx16smk3')).toBe('uf2');
     expect(await flashMethod(p, 'v2.12.5', 'tx15')).toBe('uf2');
     await expect(flashMethod(p, 'v2.12.5', 'x9e')).rejects.toThrow(/No firmware for x9e/);
+  });
+
+  it('knows the flash method from the newest stable version, else from older ones, then release candidates', async () => {
+    const p = await withFirmware();
+    for (const [tag, files] of Object.entries<Record<string, string>>({ 'v2.12.4': { 'old-1a.bin': 'B', 'both-1a.bin': 'B' }, 'v2.13.0-rc1': { 'new-1a.uf2': 'U', 'both-1a.uf2': 'U' } })) {
+      await mkdir(versionDir(p, 'edgetx-firmware', tag), { recursive: true });
+      await writeFile(join(versionDir(p, 'edgetx-firmware', tag), `edgetx-firmware-${tag}.zip`), makeZip(files));
+    }
+    const versions = [{ tag: 'v2.13.0-rc1', prerelease: true }, { tag: 'v2.12.5' }, { tag: 'v2.12.4' }];
+    expect(await knownMethod(p, versions, 'tx15')).toBe('uf2');
+    expect(await knownMethod(p, versions, 'old')).toBe('dfu');
+    expect(await knownMethod(p, versions, 'new')).toBe('uf2');
+    expect(await knownMethod(p, versions, 'both')).toBe('dfu');
+    expect(await knownMethod(p, versions, 'x9e')).toBeUndefined();
+    expect(await knownMethod(p, [], 'tx15')).toBeUndefined();
   });
 
   it('takes the file of the radio type from the firmware zip', async () => {

@@ -17,6 +17,19 @@ export interface InstalledList {
   files: Record<string, ListedFile>;
 }
 
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+// The list in the shape the tool writes it; anything else counts as no list.
+function isList(v: unknown): v is InstalledList {
+  return (
+    isObject(v) &&
+    isObject(v.packages) &&
+    isObject(v.files) &&
+    Object.values(v.packages).every((p) => isObject(p) && typeof p.version === 'string') &&
+    Object.values(v.files).every((f) => isObject(f) && typeof f.sha256 === 'string' && Array.isArray(f.from) && typeof f.written === 'string')
+  );
+}
+
 export interface RadioCard {
   volume: string;
   board?: string;
@@ -70,7 +83,8 @@ export async function readCard(volume: string): Promise<RadioCard | undefined> {
   const list = await readText(join(volume, LIST_FILE));
   if (list !== undefined) {
     try {
-      card.installed = JSON.parse(list) as InstalledList;
+      const parsed: unknown = JSON.parse(list);
+      if (isList(parsed)) card.installed = parsed;
     } catch {
       // broken list: treated as none, nothing gets deleted on update
     }

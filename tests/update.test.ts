@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { applyPlan } from '../src/core/apply.ts';
 import { readCard, type RadioCard } from '../src/core/card.ts';
-import { detectVersion, isExcluded, localContent, releaseContent, sameOnCard, sdPrefix, sha256, voicesChanged, type PackageContent } from '../src/core/content.ts';
+import { detectVersion, isExcluded, localContent, localVersion, releaseContent, sameOnCard, sdPrefix, sha256, voicesChanged, type PackageContent } from '../src/core/content.ts';
 import { versionDir } from '../src/core/packages.ts';
 import { paths, type Paths } from '../src/core/paths.ts';
 import { countActions, makePlan, mergePackages } from '../src/core/plan.ts';
@@ -142,7 +142,16 @@ describe('package content', () => {
     const c = await localContent({ name: 'gps-homer', repo: 'x/edgetx-gps-homer', kind: 'project', sdDir: 'src', localDir: repo });
     expect([...c!.files.keys()]).toEqual(['SCRIPTS/HOMER/core.lua']);
     expect(c!.files.get('SCRIPTS/HOMER/core.lua')!.data.toString()).toBe('v2');
-    expect(c!.version).toMatch(/^local [0-9a-f]{7,}\*$/);
+    expect(c!.version).toMatch(/^local [0-9a-f]{7,}\*[0-9a-f]{4}$/);
+
+    // every further change is another version; untracked files don't count
+    const source = { name: 'gps-homer', repo: 'x/edgetx-gps-homer', kind: 'project' as const, sdDir: 'src', localDir: repo };
+    await writeTree(repo, { 'src/SCRIPTS/HOMER/core.lua': 'v3' });
+    const v3 = await localVersion(source);
+    expect(v3).toMatch(/^local [0-9a-f]{7,}\*[0-9a-f]{4}$/);
+    expect(v3).not.toBe(c!.version);
+    await writeTree(repo, { 'src/SCRIPTS/HOMER/core.lua': 'v1' });
+    expect(await localVersion(source)).toMatch(/^local [0-9a-f]{7,}$/);
   });
 
   it('finds own checkouts next to the tool', async () => {
@@ -221,7 +230,7 @@ describe('plan and apply', () => {
       ['WIDGETS/A/main.lua', 'add'],
       ['WIDGETS/A/same.lua', 'unchanged'],
     ]);
-    await applyPlan(root, plan, contents);
+    await applyPlan(root, { plan, contents });
     expect(await readFile(join(root, 'WIDGETS/A/main.lua'), 'utf8')).toBe('new');
     expect(await readFile(join(root, 'WIDGETS/Mine/main.lua'), 'utf8')).toBe('mine');
     const card = (await readCard(root))!;
@@ -232,7 +241,7 @@ describe('plan and apply', () => {
   it('replaces, deletes what no package delivers any more, drops stale .luac and empty folders', async () => {
     const root = await newCard();
     const v1 = [pkg('a', 'release', 1, { 'SCRIPTS/A/core.lua': 'v1', 'SCRIPTS/A/old/gone.lua': 'g', 'SCRIPTS/TOOLS/T.lua': 't' })];
-    await applyPlan(root, await makePlan(root, mergePackages(v1)), v1);
+    await applyPlan(root, { plan: await makePlan(root, mergePackages(v1)), contents: v1 });
     await writeTree(root, { 'SCRIPTS/A/core.luac': 'compiled', 'SCRIPTS/A/old/gone.luac': 'compiled', 'SCRIPTS/TOOLS/Other.lua': 'edgetx' });
 
     const card = (await readCard(root))!;
@@ -242,7 +251,7 @@ describe('plan and apply', () => {
       ['SCRIPTS/A/core.lua', 'replace'],
       ['SCRIPTS/A/old/gone.lua', 'delete'],
     ]);
-    expect(await applyPlan(root, plan, v2)).toEqual({ written: 1, deleted: 1, kept: 0 });
+    expect(await applyPlan(root, { plan, contents: v2 })).toEqual({ written: 1, deleted: 1, kept: 0 });
     expect(await readFile(join(root, 'SCRIPTS/A/core.lua'), 'utf8')).toBe('v2');
     const left = await readdir(join(root, 'SCRIPTS'), { recursive: true });
     expect(left).not.toContain(join('A', 'core.luac'));
@@ -253,7 +262,7 @@ describe('plan and apply', () => {
   it('deletes a file only when no package delivers it any more', async () => {
     const root = await newCard();
     const both = [pkg('a', 'release', 1, { 'SCRIPTS/TOOLS/FB.lua': 'fb' }), pkg('b', 'release', 1, { 'SCRIPTS/TOOLS/FB.lua': 'fb' })];
-    await applyPlan(root, await makePlan(root, mergePackages(both)), both);
+    await applyPlan(root, { plan: await makePlan(root, mergePackages(both)), contents: both });
     const onlyB = [both[1]!];
     const plan = await makePlan(root, mergePackages(onlyB), (await readCard(root))!.installed);
     expect(countActions(plan)).toMatchObject({ delete: 0, unchanged: 1 });
@@ -262,7 +271,7 @@ describe('plan and apply', () => {
   it('reports conflicts and keeps the card file unless told otherwise', async () => {
     const root = await newCard({ 'WIDGETS/B/main.lua': 'hand-made' });
     const v1 = [pkg('a', 'release', 1, { 'WIDGETS/A/main.lua': 'v1', 'WIDGETS/A/extra.lua': 'e' })];
-    await applyPlan(root, await makePlan(root, mergePackages(v1)), v1);
+    await applyPlan(root, { plan: await makePlan(root, mergePackages(v1)), contents: v1 });
     await writeTree(root, { 'WIDGETS/A/main.lua': 'edited', 'WIDGETS/A/extra.lua': 'edited too' });
 
     const v2 = [pkg('a', 'release', 2, { 'WIDGETS/A/main.lua': 'v2', 'WIDGETS/B/main.lua': 'package' })];
@@ -272,7 +281,7 @@ describe('plan and apply', () => {
       ['WIDGETS/A/main.lua', 'conflict', 'modified'],
       ['WIDGETS/B/main.lua', 'conflict', 'unknown'],
     ]);
-    const r = await applyPlan(root, plan, v2, new Map([['WIDGETS/B/main.lua', 'apply']]));
+    const r = await applyPlan(root, { plan, contents: v2 }, new Map([['WIDGETS/B/main.lua', 'apply']]));
     expect(r).toEqual({ written: 1, deleted: 0, kept: 2 });
     expect(await readFile(join(root, 'WIDGETS/A/main.lua'), 'utf8')).toBe('edited');
     expect(await readFile(join(root, 'WIDGETS/B/main.lua'), 'utf8')).toBe('package');
@@ -342,6 +351,24 @@ describe('prepareUpdate', () => {
     const again = await prepareUpdate(p, s, card, 'tx16smk3');
     expect(again.missing).toEqual(['flight-wingman (release)', 'gps-homer (local)']);
   });
+
+  it('leaves a package that is on but not available as it is on the card and in the list', async () => {
+    const p = paths(await tempDir());
+    await writeRelease(p, 'edgetx-sdcard', 'v2.12.3', '2026-09-01T00:00:00Z', { 'c800x480.zip': { 'WIDGETS/BattAnalog/main.lua': 'b' } });
+    const elrs = { sha256: sha256(Buffer.from('lua')), from: ['elrs-lua'], written: 'elrs-lua' };
+    const list = { tool: 1, updated: '2026-10-01T00:00:00Z', packages: { 'elrs-lua': { version: '4.1.0', origin: 'release' } }, files: { 'SCRIPTS/TOOLS/elrs.lua': elrs } };
+    const root = await newCard({ 'SCRIPTS/TOOLS/elrs.lua': 'lua', '.radio-manager/installed.json': JSON.stringify(list) });
+    const s: Settings = defaultSettings();
+    s.radios.tx16smk3 = { language: 'en', sources: { 'edgetx-sdcard': { on: true, origin: 'release' }, 'elrs-lua': { on: true, origin: 'release' } } };
+    const setup = await prepareUpdate(p, s, (await readCard(root))!, 'tx16smk3');
+    expect(setup.missing).toContain('elrs-lua (release)');
+    expect(setup.plan.map((i) => [i.path, i.action])).toEqual([['WIDGETS/BattAnalog/main.lua', 'add']]);
+    await applyPlan(root, setup);
+    expect(await readFile(join(root, 'SCRIPTS/TOOLS/elrs.lua'), 'utf8')).toBe('lua');
+    const after = (await readCard(root))!.installed!;
+    expect(after.packages['elrs-lua']).toEqual(list.packages['elrs-lua']);
+    expect(after.files['SCRIPTS/TOOLS/elrs.lua']).toEqual(elrs);
+  });
 });
 
 
@@ -370,6 +397,21 @@ describe('new sources', () => {
     expect(findSdDir(['WIDGETS/X/main.lua', 'README.md'])).toBeUndefined();
     expect(findSdDir(['widget-v2/SD/WIDGETS/X/main.lua'])).toBe('SD');
     expect(findSdDir(['docs/readme.md'])).toBeNull();
+  });
+
+  it('adds only a source as the check makes it', async () => {
+    const { addSource } = await import('../src/core/sources.ts');
+    const s = defaultSettings();
+    for (const bad of [
+      { name: '..', repo: 'owner/..' },
+      { name: 'other', repo: 'owner/repo' },
+      { name: 'repo', repo: 'no-slash/../repo' },
+      { name: 'repo', repo: 'owner/repo', sdDir: '../src' },
+    ]) {
+      expect(() => addSource(s, { ...bad, kind: 'project' })).toThrow('Invalid request: source');
+    }
+    addSource(s, { name: 'repo', repo: 'owner/repo', kind: 'project', sdDir: 'a/src' });
+    expect(s.sources.at(-1)).toMatchObject({ name: 'repo', sdDir: 'a/src' });
   });
 });
 

@@ -43,11 +43,23 @@ describe('readCard', () => {
     await writeTree(root, {
       'RADIO/radio.yml': 'semver: 2.12.3\nboard: tx16smk3\nttsLanguage: "de"\n',
       'MODELS/model00.yml': '',
-      '.radio-manager/installed.json': JSON.stringify({ packages: { 'lipo-nanny': { version: 'v1.1.1', origin: 'release' } } }),
+      '.radio-manager/installed.json': JSON.stringify({ packages: { 'lipo-nanny': { version: 'v1.1.1', origin: 'release' } }, files: {} }),
     });
     const card = await readCard(root);
     expect(card).toMatchObject({ volume: root, board: 'tx16smk3', firmware: '2.12.3', language: 'de' });
     expect(card?.installed?.packages['lipo-nanny']?.version).toBe('v1.1.1');
+  });
+
+  it('takes a list in another shape as none', async () => {
+    const root = await tempDir();
+    await writeTree(root, { 'RADIO/radio.yml': 'semver: 2.12.3\nboard: tx16smk3\n', 'MODELS/model00.yml': '' });
+    const file = { sha256: 'abc', from: ['a'], written: 'a' };
+    for (const list of [{}, [], { packages: {}, files: { 'A/b.lua': { sha256: 'abc' } } }, { packages: { a: {} }, files: {} }, 'not json']) {
+      await writeTree(root, { '.radio-manager/installed.json': typeof list === 'string' ? list : JSON.stringify(list) });
+      expect((await readCard(root))?.installed).toBeUndefined();
+    }
+    await writeTree(root, { '.radio-manager/installed.json': JSON.stringify({ packages: { a: { version: 'v1' } }, files: { 'A/b.lua': file } }) });
+    expect((await readCard(root))?.installed?.files['A/b.lua']).toEqual(file);
   });
 
   it('reads the SD content version EdgeTX leaves on the card', async () => {

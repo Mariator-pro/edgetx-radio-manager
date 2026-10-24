@@ -11,6 +11,7 @@ export interface ReleaseInfo {
   published: string;
   url: string;
   prerelease?: boolean; // a release candidate of the firmware
+  assets?: string[]; // sound packs: every file of the release, for the choice of voices
 }
 
 // commit.json next to the source archive of a project's newest main commit.

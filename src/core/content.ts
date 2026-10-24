@@ -153,14 +153,15 @@ function git(dir: string) {
 
 const sdSub = (source: Source) => (source.sdDir ? `${source.sdDir.replace(/\/+$/, '')}/` : '');
 
-// "local <hash>", with "*" when the SD folder has uncommitted changes.
+// "local <hash>"; with uncommitted changes to tracked files of the SD folder "*" and a short fingerprint of
+// them, so every further change makes another version.
 export async function localVersion(source: Source): Promise<string | undefined> {
   if (!source.localDir) return undefined;
   const g = git(source.localDir);
   try {
     const hash = (await g('rev-parse', '--short', 'HEAD')).trim();
-    const dirty = (await g('status', '--porcelain', '--', sdSub(source) || '.')).trim() !== '';
-    return `local ${hash}${dirty ? '*' : ''}`;
+    const diff = await g('diff', 'HEAD', '--binary', '--', sdSub(source) || '.');
+    return diff === '' ? `local ${hash}` : `local ${hash}*${sha256(Buffer.from(diff)).slice(0, 4)}`;
   } catch {
     return undefined;
   }

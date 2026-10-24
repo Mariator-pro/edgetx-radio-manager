@@ -3,20 +3,24 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { versionDir } from '../src/core/packages.ts';
 import { paths } from '../src/core/paths.ts';
-import type { BackupView, PlanView, RestorePlanView, RestoreResultView, StateView, UpdateResultView } from '../src/server/api.ts';
-import { startServer } from '../src/server/server.ts';
-import { ApiError, errorText } from '../src/ui/api.ts';
+import { TOKEN_HEADER, TOKEN_META, type BackupView, type PlanView, type RestorePlanView, type RestoreResultView, type StateView, type UpdateResultView } from '../src/server/api.ts';
+import { oneAtATime, startServer } from '../src/server/server.ts';
+import { ApiError, errorText } from '../src/ui/errors.ts';
 import { TEXTS } from '../src/ui/texts.ts';
 import { makeZip, SDCARD_JSON, tempDir, writeTree } from './helpers.ts';
 
 let url = '';
+let token = '';
 let close = () => {};
 let card = '';
 let p = paths('');
 
-const get = async <T>(path: string) => (await fetch(url + path)).json() as Promise<T>;
+// Requests as the page makes them, with the server's key.
+const call = (path: string, init: RequestInit & { headers?: Record<string, string> } = {}) =>
+  fetch(url + path, { ...init, headers: { ...init.headers, [TOKEN_HEADER]: token } });
+const get = async <T>(path: string) => (await call(path)).json() as Promise<T>;
 const post = async <T>(path: string, body: unknown) =>
-  (await fetch(url + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json() as Promise<T>;
+  (await call(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json() as Promise<T>;
 
 beforeAll(async () => {
   p = paths(await tempDir());
@@ -30,6 +34,7 @@ beforeAll(async () => {
   process.env.RADIO_MANAGER_VOLUMES = card;
   const s = await startServer({ paths: p, port: 0, repoParent: await tempDir(), pollMs: 60_000 });
   url = s.url;
+  token = s.token;
   close = s.close;
 });
 
@@ -61,7 +66,7 @@ describe('server', () => {
 
   it('restores the backup from before the update, backing up first and keeping the restored one', async () => {
     const { lastBackup } = (await get<StateView>('/api/state')).radios[0]!;
-    const wrong = await fetch(`${url}/api/restore/plan`, { method: 'POST', body: JSON.stringify({ volume: card, board: 'tx15', name: lastBackup }) });
+    const wrong = await call('/api/restore/plan', { method: 'POST', body: JSON.stringify({ volume: card, board: 'tx15', name: lastBackup }) });
     expect(wrong.status).toBe(400);
     expect(((await wrong.json()) as { code: string }).code).toBe('wrongRadioForBackup');
 
@@ -87,7 +92,7 @@ describe('server', () => {
 
     await post('/api/backups/note', { board: 'tx16smk3', name: updateBackup.name, note: '  before the new SD content ' });
     expect((await get<BackupView[]>('/api/backups'))[0]!.items[1]!.note).toBe('before the new SD content');
-    const long = await fetch(`${url}/api/backups/note`, { method: 'POST', body: JSON.stringify({ board: 'tx16smk3', name: updateBackup.name, note: 'x'.repeat(201) }) });
+    const long = await call('/api/backups/note', { method: 'POST', body: JSON.stringify({ board: 'tx16smk3', name: updateBackup.name, note: 'x'.repeat(201) }) });
     expect(long.status).toBe(400);
     await post('/api/backups/note', { board: 'tx16smk3', name: updateBackup.name, note: '' });
     expect((await get<BackupView[]>('/api/backups'))[0]!.items[1]!.note).toBeUndefined();
@@ -99,7 +104,7 @@ describe('server', () => {
   });
 
   it('sends errors as codes the interface translates', async () => {
-    const res = await fetch(`${url}/api/radio/board`, { method: 'POST', body: JSON.stringify({ volume: card, board: 'nope' }) });
+    const res = await call('/api/radio/board', { method: 'POST', body: JSON.stringify({ volume: card, board: 'nope' }) });
     const data = (await res.json()) as { error: string; code: string; params: unknown };
     expect(res.status).toBe(400);
     expect(data).toEqual({ error: 'Unknown radio type: nope', code: 'unknownRadioType', params: { board: 'nope' } });
@@ -109,10 +114,10 @@ describe('server', () => {
   });
 
   it('checks an own firmware file and flashes one without identification only when confirmed', async () => {
-    const upload = (name: string, data: Buffer) => fetch(`${url}/api/firmware/file?board=tx16s&name=${name}`, { method: 'POST', body: data });
+    const upload = (name: string, data: Buffer) => call(`/api/firmware/file?board=tx16s&name=${name}`, { method: 'POST', body: data });
     const odd = (await (await upload('odd.bin', Buffer.alloc(2048, 0xff))).json()) as Record<string, unknown>;
     expect(odd).toEqual({ name: 'odd.bin', size: 2048, method: 'dfu' });
-    const unconfirmed = await fetch(`${url}/api/firmware/flash`, { method: 'POST', body: JSON.stringify({ board: 'tx16s', file: true }) });
+    const unconfirmed = await call('/api/firmware/flash', { method: 'POST', body: JSON.stringify({ board: 'tx16s', file: true }) });
     expect(unconfirmed.status).toBe(400);
     expect(((await unconfirmed.json()) as { code: string }).code).toBe('unknownFirmwareFile');
     const wrong = await upload('mk3.bin', Buffer.from('\0edgetx-tx16smk3-v2.12.5 (0ebe2e98)\0'));
@@ -121,7 +126,48 @@ describe('server', () => {
   });
 
   it('refuses unknown routes and paths outside its folders', async () => {
-    expect((await fetch(`${url}/api/nothing`)).status).toBe(404);
-    expect((await fetch(`${url}/api/backups/delete`, { method: 'POST', body: JSON.stringify({ board: '..', name: 'x' }) })).status).toBe(400);
+    expect((await call('/api/nothing')).status).toBe(404);
+    expect((await call('/api/backups/delete', { method: 'POST', body: JSON.stringify({ board: '..', name: 'x' }) })).status).toBe(400);
+    const flash = await call('/api/firmware/flash', { method: 'POST', body: JSON.stringify({ board: 'tx16s', tag: '../../Backups/tx16s/x' }) });
+    expect(await flash.json()).toMatchObject({ code: 'invalidRequest', params: { what: 'tag' } });
+  });
+
+  it('answers only with its key, which it puts into the page', async () => {
+    expect((await fetch(`${url}/api/packages`)).status).toBe(403);
+    expect((await fetch(`${url}/api/events`)).status).toBe(403);
+    expect((await fetch(`${url}/api/backups/delete`, { method: 'POST', headers: { [TOKEN_HEADER]: 'wrong' }, body: '{}' })).status).toBe(403);
+    const events = await fetch(`${url}/api/events?token=${token}`);
+    expect(events.status).toBe(200);
+    await events.body?.cancel();
+
+    const staticDir = await tempDir();
+    await writeFile(join(staticDir, 'index.html'), '<html><head><title>x</title></head></html>');
+    const other = await startServer({ paths: p, port: 0, staticDir, pollMs: 60_000 });
+    try {
+      const page = await fetch(`${other.url}/radio`);
+      expect(page.headers.get('cache-control')).toBe('no-store');
+      expect(await page.text()).toContain(`<meta name="${TOKEN_META}" content="${other.token}" />`);
+      expect(other.token).not.toBe(token);
+    } finally {
+      other.close();
+    }
+  });
+});
+
+describe('oneAtATime', () => {
+  it('makes up for a forced call that came while one ran, and drops a plain one', async () => {
+    const calls: boolean[] = [];
+    let release = () => {};
+    const call = oneAtATime(async (force) => {
+      calls.push(force);
+      if (calls.length === 1) await new Promise<void>((r) => (release = r));
+    });
+    const first = call();
+    await call(true);
+    await call();
+    expect(calls).toEqual([false]);
+    release();
+    await first;
+    expect(calls).toEqual([false, true]);
   });
 });

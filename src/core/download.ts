@@ -130,6 +130,7 @@ async function downloadRelease(
     published: release.published,
     url: release.url,
     ...(release.prerelease ? { prerelease: true } : {}),
+    ...(source.kind === 'sounds' ? { assets: release.assets.map((a) => a.name) } : {}),
   };
   await writeFile(join(dir, 'release.json'), `${JSON.stringify(info, null, 2)}\n`);
   return { source: source.name, status: files.length > 0 ? 'new' : 'current', tag: release.tag, files };

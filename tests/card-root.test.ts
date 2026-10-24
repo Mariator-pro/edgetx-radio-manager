@@ -32,7 +32,7 @@ describe('files at the card root', () => {
     const root = await newCard();
     const files = new Map(['edgetx.sdcard.version', 'WIDGETS/A/main.lua'].map((path) => [path, { data: Buffer.from(path), sha: sha256(Buffer.from(path)), time: 1 }]));
     const contents: PackageContent[] = [{ name: 'edgetx-sdcard', origin: 'release', version: 'v1', files }];
-    await applyPlan(root, await makePlan(root, mergePackages(contents)), contents);
+    await applyPlan(root, { plan: await makePlan(root, mergePackages(contents)), contents });
     expect(await readFile(join(root, 'edgetx.sdcard.version'), 'utf8')).toBe('edgetx.sdcard.version');
     expect(await readFile(join(root, 'WIDGETS/A/main.lua'), 'utf8')).toBe('WIDGETS/A/main.lua');
   });

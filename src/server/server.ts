@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, normalize, sep } from 'node:path';
@@ -13,7 +14,7 @@ import {
   firmwareCatalog,
   flashFile,
   flashFirmware,
-  flashMethod,
+  knownMethod,
   type CatalogEntry,
   type FirmwareFileCheck,
   type FlashOptions,
@@ -39,7 +40,18 @@ import {
 import { addSource, checkSource, removeSource } from '../core/sources.ts';
 import { prepareUpdate } from '../core/update.ts';
 import { listVolumes } from '../platform/volumes.ts';
-import type { FirmwareCatalogView, FirmwareFileView, FirmwareView, FlashResultView, ProgressEvent, RestoreResultView, SourceCheckView, UpdateResultView } from './api.ts';
+import {
+  TOKEN_HEADER,
+  withToken,
+  type FirmwareCatalogView,
+  type FirmwareFileView,
+  type FirmwareView,
+  type FlashResultView,
+  type ProgressEvent,
+  type RestoreResultView,
+  type SourceCheckView,
+  type UpdateResultView,
+} from './api.ts';
 import { backupViews, packageViews, planView, restorePlanView, stateView, voiceViews } from './views.ts';
 
 export interface ServerOptions {
@@ -95,13 +107,37 @@ function json(res: ServerResponse, data: unknown, status = 200): void {
   res.end(JSON.stringify(data ?? null));
 }
 
+// One call at a time; a forced call while one runs is made up for right after it instead of dropped.
+export function oneAtATime(fn: (force: boolean) => Promise<void>): (force?: boolean) => Promise<void> {
+  let running = false;
+  let again = false;
+  const call = async (force = false): Promise<void> => {
+    if (running) {
+      again ||= force;
+      return;
+    }
+    running = true;
+    try {
+      await fn(force);
+    } finally {
+      running = false;
+    }
+    if (again) {
+      again = false;
+      await call(true);
+    }
+  };
+  return call;
+}
+
 function openFolder(dir: string): void {
   const cmd = process.platform === 'win32' ? 'explorer' : process.platform === 'darwin' ? 'open' : 'xdg-open';
   execFile(cmd, [dir], () => {});
 }
 
-export async function startServer(o: ServerOptions): Promise<{ url: string; close: () => void }> {
+export async function startServer(o: ServerOptions): Promise<{ url: string; token: string; close: () => void }> {
   const p = o.paths;
+  const token = randomBytes(24).toString('base64url');
   const s: Settings = await loadSettings(p);
   if (o.repoParent && findLocalRepos(s, o.repoParent)) await saveSettings(p, s);
 
@@ -140,22 +176,15 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
   };
 
   let lastKey = '';
-  let polling = false;
-  const poll = async (force = false) => {
-    if (polling) return;
-    polling = true;
-    try {
-      const now = await findCards(await listVolumes());
-      const key = JSON.stringify(now.map((c) => [c.volume, c.board, c.firmware, c.language, c.sdcardVersion, c.installed?.updated]));
-      if (key === lastKey && !force) return;
-      lastKey = key;
-      cards = now;
-      for (const c of cards) await adopt(c);
-      await pushState();
-    } finally {
-      polling = false;
-    }
-  };
+  const poll = oneAtATime(async (force) => {
+    const now = await findCards(await listVolumes());
+    const key = JSON.stringify(now.map((c) => [c.volume, c.board, c.firmware, c.language, c.sdcardVersion, c.installed?.updated]));
+    if (key === lastKey && !force) return;
+    lastKey = key;
+    cards = now;
+    for (const c of cards) await adopt(c);
+    await pushState();
+  });
 
   // One long operation at a time; the state shows which one runs.
   const op = async <T>(name: string, fn: () => Promise<T>): Promise<T> => {
@@ -203,8 +232,7 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
 
   const firmwareView = async (board: string): Promise<FirmwareView> => {
     const all = await localVersions(p, 'edgetx-firmware', !!s.firmwarePrereleases);
-    const stable = all.find((v) => !v.prerelease)?.tag;
-    const method = stable ? await flashMethod(p, stable, board) : undefined;
+    const method = await knownMethod(p, all, board);
     const view: FirmwareView = {
       board,
       method,
@@ -312,7 +340,7 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
       return op('update', async (): Promise<UpdateResultView> => {
         const setup = await prepareUpdate(p, s, c, board);
         const b = await runBackup(c, board, { reason: 'update', changes: setup.changes });
-        const r = await applyPlan(c.volume, setup.plan, setup.contents, new Map(Object.entries(resolutions ?? {})), (pr) =>
+        const r = await applyPlan(c.volume, setup, new Map(Object.entries(resolutions ?? {})), (pr) =>
           progress({ op: 'update', step: 'write', text: pr.path, done: pr.done, total: pr.total }),
         );
         return { ...r, backup: b.name };
@@ -373,12 +401,14 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
     'POST /api/firmware/flash': async (req) => {
       const { board, tag, file, force } = await body<{ board: string; tag?: string; file?: boolean; force?: boolean }>(req);
       if (!file) {
+        if (tag !== undefined && !isSafeName(tag)) throw new HttpError(400, 'invalidRequest', { what: 'tag' });
         return flashWith(async (fo) => {
           // a version from the catalog is downloaded first, and then stays like any other download
           const src = s.sources.find((x) => x.kind === 'firmware');
           if (tag && src && !(await localVersions(p, src.name, true)).some((v) => v.tag === tag)) {
             progress({ op: 'flash', step: 'download', text: `Downloading ${tag}`, file: tag });
-            await downloadTag(p, s, src, tag);
+            const r = await downloadTag(p, s, src, tag);
+            if (r.status === 'no-release') throw new AppError('noRelease', { repo: `${src.repo} ${tag}` });
           }
           return { ...(await flashFirmware(p, board, tag ?? '', fo)), version: tag };
         });
@@ -457,13 +487,22 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
     let file = normalize(join(root, decodeURIComponent(urlPath)));
     if (!file.startsWith(root + sep) && file !== root) throw new HttpError(404, 'notFound');
     if (!(await stat(file).catch(() => undefined))?.isFile()) file = join(root, 'index.html');
-    res.writeHead(200, { 'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream' });
-    res.end(await readFile(file));
+    if (extname(file) !== '.html') {
+      res.writeHead(200, { 'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream' });
+      res.end(await readFile(file));
+      return;
+    }
+    // never cached: an old page would carry the key of an earlier start
+    res.writeHead(200, { 'Content-Type': TYPES['.html'], 'Cache-Control': 'no-store' });
+    res.end(withToken(await readFile(file, 'utf8'), token));
   };
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     try {
+      if (url.pathname.startsWith('/api/') && (req.headers[TOKEN_HEADER] ?? url.searchParams.get('token')) !== token) {
+        throw new HttpError(403, 'invalidRequest', { what: 'token' });
+      }
       if (url.pathname === '/api/events') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
         clients.add(res);
@@ -492,6 +531,7 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
   const address = server.address();
   return {
     url: `http://localhost:${typeof address === 'object' && address ? address.port : o.port}`,
+    token,
     close: () => {
       clearInterval(timer);
       for (const c of clients) c.end();

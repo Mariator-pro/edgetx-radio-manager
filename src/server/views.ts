@@ -4,7 +4,6 @@ import { join, sep } from 'node:path';
 import { backupFirmware, listBackups } from '../core/backup.ts';
 import { installedVersion, type RadioCard } from '../core/card.ts';
 import { detectVersion, localVersion, sameOnCard, voicesChanged } from '../core/content.ts';
-import { latestRelease } from '../core/github.ts';
 import { folderSize, installedOn, localVersions, mainInfo, mainVersion, versionDir } from '../core/packages.ts';
 import type { Paths } from '../core/paths.ts';
 import { countActions, type PlanItem } from '../core/plan.ts';
@@ -212,18 +211,13 @@ export async function backupViews(p: Paths, s: Settings): Promise<BackupView[]> 
 
 const SOUND_ZIP = /^edgetx-sdcard-sounds-(.+)-\d[\d.]*\.zip$/;
 
-// All sound packs: from the newest sounds release on GitHub, offline from the downloaded zips.
+// All sound packs: from the file list of the newest sounds release as the last check for updates found it,
+// for older downloads without that list from the downloaded zips.
 export async function voiceViews(p: Paths, s: Settings): Promise<VoiceView[]> {
   const src = s.sources.find((x) => x.kind === 'sounds');
-  let names: string[] = [];
-  try {
-    names = src ? ((await latestRelease(src.repo))?.assets.map((a) => a.name) ?? []) : [];
-  } catch {
-    // offline: what was downloaded
-  }
-  if (names.length === 0 && src) {
-    for (const v of await localVersions(p, src.name)) names.push(...(await readdir(versionDir(p, src.name, v.tag))));
-  }
+  const versions = src ? await localVersions(p, src.name) : [];
+  const names = versions[0]?.assets ?? [];
+  if (names.length === 0) for (const v of versions) names.push(...(await readdir(versionDir(p, src!.name, v.tag))));
   const ids = new Set(names.map((n) => n.match(SOUND_ZIP)?.[1]).filter((id): id is string => !!id));
   for (const r of Object.values(s.radios)) for (const id of soundsOf(r)) ids.add(id);
   const label = (id: string) => {

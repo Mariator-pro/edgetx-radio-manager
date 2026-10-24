@@ -5,9 +5,11 @@ import { downloadSource } from './download.ts';
 import { AppError } from './errors.ts';
 import type { FetchFn } from './github.ts';
 import { versionDir } from './packages.ts';
-import type { Paths } from './paths.ts';
+import { isSafeName, type Paths } from './paths.ts';
 import type { Settings, Source } from './settings.ts';
 import { readZip } from './zip.ts';
+
+const REPO = /^[\w.-]+\/[\w.-]+$/;
 
 export interface SourceCheck {
   source: Source;
@@ -37,7 +39,7 @@ export function findSdDir(names: string[]): string | undefined | null {
 
 // Downloads the newest release of a new repo and finds its SD folder; nothing is added yet.
 export async function checkSource(p: Paths, s: Settings, repo: string, fetchFn: FetchFn = fetch): Promise<SourceCheck> {
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new AppError('repoFormat');
+  if (!REPO.test(repo)) throw new AppError('repoFormat');
   const name = repo.split('/')[1]!;
   if (s.sources.some((x) => x.name === name || x.repo.toLowerCase() === repo.toLowerCase())) throw new AppError('alreadySource', { name: repo });
   const source: Source = { name, repo, kind: 'project' };
@@ -55,6 +57,9 @@ export async function checkSource(p: Paths, s: Settings, repo: string, fetchFn: 
 
 // Adds a checked source; a radio connected right now gets it switched on.
 export function addSource(s: Settings, source: Source, connectedBoard?: string): void {
+  // as checkSource makes it: named after its repo, the SD folder inside the download
+  const safe = REPO.test(source.repo) && source.name === source.repo.split('/')[1] && isSafeName(source.name);
+  if (!safe || (source.sdDir && !source.sdDir.split('/').every(isSafeName))) throw new AppError('invalidRequest', { what: 'source' });
   s.sources.push(source);
   const sel = connectedBoard ? s.radios[connectedBoard]?.sources : undefined;
   if (sel) sel[source.name] = { on: true, origin: 'release' };

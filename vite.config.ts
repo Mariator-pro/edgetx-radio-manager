@@ -7,16 +7,20 @@ import { defineConfig, type Plugin } from 'vite';
 const API_PORT = 5174;
 const { version } = JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json'), 'utf8')) as { version: string };
 
-// In development the API server runs inside Vite; Vite forwards /api to it.
+// In development the API server runs inside Vite; Vite forwards /api to it and puts its key into the page.
 function apiServer(): Plugin {
+  let page = (html: string) => html;
   return {
     name: 'radio-manager-api',
     apply: 'serve',
     async configureServer() {
       const { startServer } = await import('./src/server/server.ts');
+      const { withToken } = await import('./src/server/api.ts');
       const { paths } = await import('./src/core/paths.ts');
-      await startServer({ paths: paths(), port: API_PORT, repoParent: resolve(import.meta.dirname, '..') });
+      const { token } = await startServer({ paths: paths(), port: API_PORT, repoParent: resolve(import.meta.dirname, '..') });
+      page = (html) => withToken(html, token);
     },
+    transformIndexHtml: (html) => page(html),
   };
 }
 

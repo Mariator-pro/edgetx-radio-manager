@@ -34,6 +34,16 @@ export async function flashMethod(p: Paths, tag: string, board: string): Promise
   return methodOf(name);
 }
 
+// The flash method before a version is chosen: from the newest downloaded stable version, or else from the
+// first other one (older stable ones, then release candidates) with a file for this radio.
+export async function knownMethod(p: Paths, versions: { tag: string; prerelease?: boolean }[], board: string): Promise<FlashMethod | undefined> {
+  for (const v of [...versions.filter((x) => !x.prerelease), ...versions.filter((x) => x.prerelease)]) {
+    const method = await flashMethod(p, v.tag, board).catch(() => undefined);
+    if (method) return method;
+  }
+  return undefined;
+}
+
 // The firmware file of one radio type from the downloaded firmware zip.
 export async function firmwareFile(p: Paths, tag: string, board: string): Promise<{ name: string; data: Buffer }> {
   const re = boardFile(board);
