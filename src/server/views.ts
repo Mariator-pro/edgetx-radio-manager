@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { join, sep } from 'node:path';
 import { backupFirmware, listBackups } from '../core/backup.ts';
 import { installedVersion, type RadioCard } from '../core/card.ts';
-import { detectVersion, localVersion, sameOnCard } from '../core/content.ts';
+import { detectVersion, localVersion, sameOnCard, voicesChanged } from '../core/content.ts';
 import { latestRelease } from '../core/github.ts';
 import { folderSize, installedOn, localVersions, mainInfo, mainVersion, versionDir } from '../core/packages.ts';
 import type { Paths } from '../core/paths.ts';
@@ -64,6 +64,7 @@ export async function radioView(
     // another label for the same files (e.g. "local abc1234" and "main abc1234") is no update
     const same =
       choice.on && !!listed && !!available && listed !== available && src.kind === 'project' && (await sameOnCard(p, src, card, choice.origin));
+    const voices = choice.on && src.kind === 'sounds' && (!!listed || !!card.soundLanguages) && voicesChanged(card, src.name, soundsOf(r));
     return {
       name: src.name,
       repo: src.repo,
@@ -75,6 +76,7 @@ export async function radioView(
       installed: same ? available : (listed ?? found?.version),
       found: found?.version ? ('match' as const) : found?.onCard ? ('unknown' as const) : undefined,
       available,
+      ...(voices ? { voicesChanged: true } : {}),
       hasRelease: !!view?.newest,
       hasMain: !!view?.main,
       releaseOnly: !!src.file && !src.file.repoPath,
@@ -83,7 +85,7 @@ export async function radioView(
   }));
   // switched off and on the card: listed by the tool, or copied by hand as an exact downloaded version
   const updates = radioSources
-    .filter((x) => (x.on && x.available && x.available !== x.installed) || (!x.on && x.installed))
+    .filter((x) => (x.on && ((x.available && x.available !== x.installed) || x.voicesChanged)) || (!x.on && x.installed))
     .map((x) => x.name);
   const backups = board ? await listBackups(p, board) : [];
   const fwSource = sources.find((x) => x.kind === 'firmware');

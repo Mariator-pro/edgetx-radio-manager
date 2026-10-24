@@ -28,6 +28,7 @@ export interface RadioSourceView {
   installed?: string;
   found?: 'match' | 'unknown'; // copied to the card by hand: version found by comparing files, or not found
   available?: string;
+  voicesChanged?: boolean; // sound packs: other languages or voices chosen than are on the card
   hasRelease: boolean;
   hasMain: boolean;
   releaseOnly: boolean; // one file without a path in the repo: no main commit, no local checkout

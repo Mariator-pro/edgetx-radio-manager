@@ -32,6 +32,7 @@ export const zh: Texts = {
   notInstalled: '未安装',
   versionUnknown: '在卡上，版本未知',
   removedNext: '将被卸载',
+  voicesChanged: '语言已更改',
   tagNew: '新',
   tagRequired: '必需',
   tagLocal: '本地',

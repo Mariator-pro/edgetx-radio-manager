@@ -32,6 +32,7 @@ export const da: Texts = {
   notInstalled: 'ikke installeret',
   versionUnknown: 'på kortet, version ukendt',
   removedNext: 'bliver afinstalleret',
+  voicesChanged: 'sprog ændret',
   tagNew: 'Ny',
   tagRequired: 'Påkrævet',
   tagLocal: 'Lokal',

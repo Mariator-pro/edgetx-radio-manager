@@ -8,7 +8,7 @@ import { localVersions, mainDir, mainInfo, mainVersion, versionDir } from './pac
 import type { Paths } from './paths.ts';
 import type { RadioCard } from './card.ts';
 import { radioTypesIn } from './radios.ts';
-import type { Source, SourceKind } from './settings.ts';
+import { voiceLanguage, type Source, type SourceKind } from './settings.ts';
 import { readZip } from './zip.ts';
 
 const run = promisify(execFile);
@@ -27,6 +27,7 @@ export interface PackageContent {
   origin: Origin;
   version: string;
   files: Map<string, PkgFile>;
+  voices?: string[]; // sound packs: the voices whose zips are in it
 }
 
 // Radio-specific choice of zips: SD content by the release's sdcard.json, sound packs by language and voice.
@@ -103,12 +104,28 @@ export async function releaseContent(p: Paths, source: Source, ctx: RadioContext
     if (data) files.set(source.file.card, { data, sha: sha256(data), time });
     return { name: source.name, origin: 'release', version: newest.tag, files };
   }
-  for (const zip of await zipsFor(dir, source, ctx)) {
+  const zips = await zipsFor(dir, source, ctx);
+  for (const zip of zips) {
     const entries = await readZip(join(dir, zip));
     const prefix = sdPrefix([...entries.keys()], source.sdDir);
     if (prefix !== undefined) addFiles(files, entries, prefix, source.kind, time);
   }
-  return { name: source.name, origin: 'release', version: newest.tag, files };
+  const voices = source.kind === 'sounds' ? (ctx.voices ?? []).filter((v) => zips.some((z) => soundPackPattern(v).test(z))).sort() : undefined;
+  return { name: source.name, origin: 'release', version: newest.tag, files, ...(voices ? { voices } : {}) };
+}
+
+// Sound packs: the voices a radio wants differ from those the list on the card says were put there. Without voices in
+// the list (written before it had them) the languages count: one missing on the card, or one whose files the list
+// has from this package although it is no longer wanted, which the update deletes.
+export function voicesChanged(card: RadioCard, name: string, wanted: string[]): boolean {
+  const listed = card.installed?.packages[name]?.voices;
+  if (listed) return [...listed].sort().join() !== [...wanted].sort().join();
+  const langs = wanted.map(voiceLanguage);
+  const onCard = card.soundLanguages ?? [];
+  const fromPackage = Object.entries(card.installed?.files ?? {})
+    .filter(([, f]) => f.from.includes(name))
+    .map(([path]) => path.match(/^SOUNDS\/([^/]+)\//)?.[1]);
+  return langs.some((l) => !onCard.includes(l)) || fromPackage.some((l) => !!l && !langs.includes(l));
 }
 
 // The downloaded newest main commit of a project; undefined when it isn't downloaded.

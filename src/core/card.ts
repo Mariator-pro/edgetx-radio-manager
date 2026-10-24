@@ -13,7 +13,7 @@ export interface ListedFile {
 export interface InstalledList {
   tool: number;
   updated: string;
-  packages: Record<string, { version: string; origin: 'release' | 'main' | 'local' }>;
+  packages: Record<string, { version: string; origin: 'release' | 'main' | 'local'; voices?: string[] }>; // voices: sound packs only
   files: Record<string, ListedFile>;
 }
 

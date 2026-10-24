@@ -46,6 +46,7 @@ const en = {
   notInstalled: 'not installed',
   versionUnknown: 'on the card, version unknown',
   removedNext: 'will be uninstalled',
+  voicesChanged: 'languages changed',
   tagNew: 'New',
   tagRequired: 'Required',
   tagLocal: 'Local',

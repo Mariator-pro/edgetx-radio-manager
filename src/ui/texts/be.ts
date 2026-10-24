@@ -39,6 +39,7 @@ export const be: Texts = {
   notInstalled: 'не ўсталявана',
   versionUnknown: 'на картцы, версія невядомая',
   removedNext: 'будзе выдалена',
+  voicesChanged: 'мовы зменены',
   tagNew: 'Новае',
   tagRequired: 'Абавязкова',
   tagLocal: 'Лакальна',

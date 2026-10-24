@@ -71,7 +71,7 @@ async function writeList(root: string, plan: PlanItem[], contents: PackageConten
   const list: InstalledList = {
     tool: 1,
     updated: new Date().toISOString(),
-    packages: Object.fromEntries(contents.map((c) => [c.name, { version: c.version, origin: c.origin }])),
+    packages: Object.fromEntries(contents.map((c) => [c.name, { version: c.version, origin: c.origin, ...(c.voices ? { voices: c.voices } : {}) }])),
     files,
   };
   const path = join(root, LIST_FILE);

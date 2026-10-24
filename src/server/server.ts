@@ -1,11 +1,11 @@
 import { execFile } from 'node:child_process';
-import { readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, normalize, sep } from 'node:path';
 import { applyPlan, type Resolution } from '../core/apply.ts';
 import { backupCard, deleteBackup, isBackupName, listBackups, pruneBackups } from '../core/backup.ts';
 import { findCards, readCard, type RadioCard } from '../core/card.ts';
-import { downloadAll, downloadMain, downloadTag, type DownloadEvent } from '../core/download.ts';
+import { downloadAll, downloadMain, downloadSource, downloadTag, soundPackPattern, type DownloadEvent } from '../core/download.ts';
 import { AppError, errorInfo, type ErrorArgs, type ErrorCode } from '../core/errors.ts';
 import {
   checkFirmwareFile,
@@ -18,7 +18,7 @@ import {
   type FirmwareFileCheck,
   type FlashOptions,
 } from '../core/firmware.ts';
-import { deleteVersion, localVersions, mainInfo } from '../core/packages.ts';
+import { deleteVersion, localVersions, mainInfo, versionDir } from '../core/packages.ts';
 import { isSafeName, type Paths } from '../core/paths.ts';
 import { isBelowMin, MIN_EDGETX, radioName, radioTypes } from '../core/radios.ts';
 import { applyRestore, planRestore } from '../core/restore.ts';
@@ -276,6 +276,13 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; clos
       if (new Set(langs).size !== langs.length) throw new HttpError(400, 'oneVoicePerLanguage');
       (s.radios[board] ??= {}).sounds = [...sounds].sort();
       await saveSettings(p, s);
+      // a newly chosen voice is downloaded right away, so the next update has it
+      const src = s.sources.find((x) => x.kind === 'sounds');
+      const newest = src && (await localVersions(p, src.name))[0];
+      const have = newest ? await readdir(versionDir(p, src.name, newest.tag)).catch(() => []) : [];
+      if (src && sounds.some((v) => !have.some((n) => soundPackPattern(v).test(n)))) {
+        return op('download', () => downloadSource(p, s, src, fetch, downloadProgress));
+      }
       await pushState();
     },
     'GET /api/voices': async () => voiceViews(p, s),

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { applyPlan } from '../src/core/apply.ts';
 import { readCard, type RadioCard } from '../src/core/card.ts';
-import { detectVersion, isExcluded, localContent, releaseContent, sameOnCard, sdPrefix, sha256, type PackageContent } from '../src/core/content.ts';
+import { detectVersion, isExcluded, localContent, releaseContent, sameOnCard, sdPrefix, sha256, voicesChanged, type PackageContent } from '../src/core/content.ts';
 import { versionDir } from '../src/core/packages.ts';
 import { paths, type Paths } from '../src/core/paths.ts';
 import { countActions, makePlan, mergePackages } from '../src/core/plan.ts';
@@ -152,6 +152,45 @@ describe('package content', () => {
     expect(findLocalRepos(s, parent)).toBe(true);
     expect(s.sources.find((x) => x.name === 'lipo-nanny')!.localDir).toBe(join(parent, 'edgetx-lipo-nanny'));
     expect(s.sources.find((x) => x.name === 'gps-homer')!.localDir).toBeUndefined();
+  });
+});
+
+describe('sound pack voices', () => {
+  const card = (voices?: string[], soundLanguages?: string[], listedLangs: string[] = []): RadioCard => ({
+    volume: '/x',
+    soundLanguages,
+    installed: {
+      tool: 1,
+      updated: '',
+      packages: { 'edgetx-sounds': { version: 'v2.12.3', origin: 'release', ...(voices ? { voices } : {}) } },
+      files: Object.fromEntries(
+        listedLangs.map((l) => [`SOUNDS/${l}/SYSTEM/hello.wav`, { sha256: '', from: ['edgetx-sounds'], written: 'edgetx-sounds' }]),
+      ),
+    },
+  });
+
+  it('sees another language or voice as a change, by the list on the card or else by the language folders', () => {
+    expect(voicesChanged(card(['de', 'en']), 'edgetx-sounds', ['en', 'de'])).toBe(false);
+    expect(voicesChanged(card(['de', 'en']), 'edgetx-sounds', ['de', 'en', 'fr'])).toBe(true);
+    expect(voicesChanged(card(['en']), 'edgetx-sounds', ['en_gb-ryan'])).toBe(true);
+    expect(voicesChanged(card(['de', 'en']), 'edgetx-sounds', ['en'])).toBe(true);
+    // no voices in the list yet: a language missing on the card, or one the list has from the package but no longer wanted
+    expect(voicesChanged(card(undefined, ['en']), 'edgetx-sounds', ['en', 'fr'])).toBe(true);
+    expect(voicesChanged(card(undefined, ['de', 'en'], ['de', 'en']), 'edgetx-sounds', ['en'])).toBe(true);
+    expect(voicesChanged(card(undefined, ['de', 'en'], ['de', 'en']), 'edgetx-sounds', ['de', 'en'])).toBe(false);
+    // "de" copied by hand, not in the list: the update leaves it, so removing it changes nothing
+    expect(voicesChanged(card(undefined, ['de', 'en'], ['en']), 'edgetx-sounds', ['en'])).toBe(false);
+  });
+
+  it('records which voices went into the sound pack content', async () => {
+    const p = paths(await tempDir());
+    const dir = versionDir(p, 'edgetx-sounds', 'v2.12.3');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'release.json'), JSON.stringify({ tag: 'v2.12.3', published: '2026-09-01T00:00:00Z', url: '' }));
+    await writeFile(join(dir, 'edgetx-sdcard-sounds-en-2.12.3.zip'), makeZip({ 'SOUNDS/en/SYSTEM/hello.wav': 'x' }));
+    const src = defaultSettings().sources.find((x) => x.kind === 'sounds')!;
+    // "fr" is chosen but not downloaded: it is not in the content, so the list won't claim it either
+    expect((await releaseContent(p, src, { voices: ['en', 'fr'] }))!.voices).toEqual(['en']);
   });
 });
 

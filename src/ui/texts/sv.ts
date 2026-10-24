@@ -32,6 +32,7 @@ export const sv: Texts = {
   notInstalled: 'inte installerad',
   versionUnknown: 'på kortet, okänd version',
   removedNext: 'avinstalleras',
+  voicesChanged: 'språk ändrade',
   tagNew: 'Ny',
   tagRequired: 'Krävs',
   tagLocal: 'Lokal',

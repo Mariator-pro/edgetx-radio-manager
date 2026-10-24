@@ -32,6 +32,7 @@ export const fr: Texts = {
   notInstalled: 'non installé',
   versionUnknown: 'sur la carte, version inconnue',
   removedNext: 'sera désinstallé',
+  voicesChanged: 'langues modifiées',
   tagNew: 'Nouveau',
   tagRequired: 'Obligatoire',
   tagLocal: 'Local',

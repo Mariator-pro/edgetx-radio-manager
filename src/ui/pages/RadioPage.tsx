@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Chip, CloseButton, Label, ListBox, Select, Switch, ToggleButton, ToggleButtonGroup } from '@heroui/react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { Fragment, type ReactNode, useEffect, useState } from 'react';
 import type { RadioSourceView, RadioView, VoiceView } from '../../server/api.ts';
 import { get, post } from '../api.ts';
 import { ArrowIcon, BackupsIcon, CheckIcon } from '../components/icons.tsx';
@@ -22,6 +22,9 @@ function Versions({ s }: { s: RadioSourceView }) {
           <ArrowIcon size={14} className="text-warning" />
           <span className="rounded-md bg-warning-soft px-2 py-0.5 text-warning-soft-foreground">{s.available}</span>
         </>
+      )}
+      {!changes && s.voicesChanged && (
+        <span className="rounded-md bg-warning-soft px-2 py-0.5 text-warning-soft-foreground">{t.voicesChanged}</span>
       )}
       {!s.on && s.installed && <span className="text-muted">{t.removedNext}</span>}
     </div>
@@ -126,7 +129,8 @@ function Step(props: { mark: ReactNode; done: boolean; primary?: boolean; title:
   );
 }
 
-function SoundsCard({ radio, run }: { radio: RadioView; run: Run }) {
+// The voices of the sound packs, right below the sounds source in the table: one small field per language.
+function SoundsRow({ radio, run }: { radio: RadioView; run: Run }) {
   const { t } = usePrefs();
   const [voices, setVoices] = useState<VoiceView[]>([]);
   useEffect(() => {
@@ -137,70 +141,69 @@ function SoundsCard({ radio, run }: { radio: RadioView; run: Run }) {
   const used = radio.sounds.map((id) => voices.find((v) => v.id === id)?.language ?? id.split(/[_-]/)[0]!);
   const addable = [...new Set(voices.map((v) => v.language))].filter((l) => !used.includes(l));
   return (
-    <Card>
-      <Card.Header>
-        <Card.Title>{t.sounds}</Card.Title>
-        {radio.language && <Card.Description>{t.ttsLanguage(name(radio.language))}</Card.Description>}
-      </Card.Header>
-      <Card.Content className="flex flex-col gap-3">
-        {radio.sounds.length === 0 && <p className="m-0 text-sm text-muted">{t.noSounds}</p>}
-        {radio.sounds.map((id, i) => {
-          const lang = used[i]!;
-          const options = voices.filter((v) => v.language === lang);
-          return (
-            <div key={id} className="flex items-end gap-2">
-              <Select
-                fullWidth
-                selectedKey={id}
-                aria-label={t.voiceFor(name(lang))}
-                onSelectionChange={(key) => key !== null && save(radio.sounds.map((x) => (x === id ? String(key) : x)))}
-              >
-                <Label>{name(lang)}</Label>
-                <Select.Trigger>
-                  <Select.Value />
-                  <Select.Indicator />
-                </Select.Trigger>
-                <Select.Popover>
-                  <ListBox>
-                    {(options.length > 0 ? options : [{ id, language: lang, label: id }]).map((v) => (
-                      <ListBox.Item key={v.id} id={v.id} textValue={v.label}>
-                        {v.label}
-                        <ListBox.ItemIndicator />
-                      </ListBox.Item>
-                    ))}
-                  </ListBox>
-                </Select.Popover>
-              </Select>
-              <CloseButton aria-label={t.removeLanguage(name(lang))} onPress={() => save(radio.sounds.filter((x) => x !== id))} />
-            </div>
-          );
-        })}
-        {addable.length > 0 && (
-          <Select
-            fullWidth
-            selectedKey={null}
-            placeholder={t.addLanguage}
-            aria-label={t.addLanguage}
-            onSelectionChange={(key) => key !== null && save([...radio.sounds, String(key)])}
-          >
-            <Select.Trigger>
-              <Select.Value />
-              <Select.Indicator />
-            </Select.Trigger>
-            <Select.Popover>
-              <ListBox>
-                {addable.map((l) => (
-                  <ListBox.Item key={l} id={l} textValue={name(l)}>
-                    {name(l)}
-                    <ListBox.ItemIndicator />
-                  </ListBox.Item>
-                ))}
-              </ListBox>
-            </Select.Popover>
-          </Select>
-        )}
-      </Card.Content>
-    </Card>
+    <tr>
+      <td colSpan={4} className="px-5 pt-0.5 pb-3">
+        <div role="group" aria-label={t.sounds} className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {radio.language && <span className="basis-full text-xs text-muted">{t.ttsLanguage(name(radio.language))}</span>}
+          {radio.sounds.length === 0 && <span className="basis-full text-xs text-muted">{t.noSounds}</span>}
+          {radio.sounds.map((id, i) => {
+            const lang = used[i]!;
+            const options = voices.filter((v) => v.language === lang);
+            return (
+              <div key={id} className="flex items-center gap-1.5">
+                <span className="text-sm font-medium">{name(lang)}</span>
+                <Select
+                  className="w-36"
+                  selectedKey={id}
+                  aria-label={t.voiceFor(name(lang))}
+                  onSelectionChange={(key) => key !== null && save(radio.sounds.map((x) => (x === id ? String(key) : x)))}
+                >
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {(options.length > 0 ? options : [{ id, language: lang, label: id }]).map((v) => (
+                        <ListBox.Item key={v.id} id={v.id} textValue={v.label}>
+                          {v.label}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+                <CloseButton aria-label={t.removeLanguage(name(lang))} onPress={() => save(radio.sounds.filter((x) => x !== id))} />
+              </div>
+            );
+          })}
+          {addable.length > 0 && (
+            <Select
+              className="w-48"
+              selectedKey={null}
+              placeholder={t.addLanguage}
+              aria-label={t.addLanguage}
+              onSelectionChange={(key) => key !== null && save([...radio.sounds, String(key)])}
+            >
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  {addable.map((l) => (
+                    <ListBox.Item key={l} id={l} textValue={name(l)}>
+                      {name(l)}
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+            </Select>
+          )}
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -371,52 +374,49 @@ export function RadioPage(props: {
             </div>
           </section>
 
-          <div className="flex flex-wrap items-start gap-6">
-            <Card className="min-w-0 flex-[999_1_560px] gap-0 overflow-hidden p-0">
-              <section aria-labelledby="sources">
-                <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-                  <div className="flex flex-col">
-                    <h2 id="sources" className="m-0 text-base font-semibold">
-                      {t.sourcesOnRadio}
-                    </h2>
-                    <span className="text-sm text-muted">{t.sourcesCount(radio.sources.length, radio.sources.filter((s) => s.on).length)}</span>
-                  </div>
-                  <Button variant="ghost" size="sm" onPress={onSources}>
-                    {t.addSource}
-                  </Button>
+          <Card className="min-w-0 gap-0 overflow-hidden p-0">
+            <section aria-labelledby="sources">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                <div className="flex flex-col">
+                  <h2 id="sources" className="m-0 text-base font-semibold">
+                    {t.sourcesOnRadio}
+                  </h2>
+                  <span className="text-sm text-muted">{t.sourcesCount(radio.sources.length, radio.sources.filter((s) => s.on).length)}</span>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[640px] border-collapse text-sm">
-                    <thead>
-                      <tr className="text-left text-xs text-muted">
-                        <th scope="col" className="px-5 py-2 font-medium">
-                          {t.colSource}
-                        </th>
-                        <th scope="col" className="px-3 py-2 font-medium">
-                          {t.colOrigin}
-                        </th>
-                        <th scope="col" className="px-3 py-2 font-medium">
-                          {t.colVersion}
-                        </th>
-                        <th scope="col" className="px-5 py-2 text-right font-medium">
-                          {t.colActive}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {radio.sources.map((s) => (
-                        <SourceRow key={s.name} radio={radio} s={s} run={run} />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </Card>
-
-            <aside className="flex min-w-0 flex-[1_1_280px] flex-col gap-4">
-              <SoundsCard radio={radio} run={run} />
-            </aside>
-          </div>
+                <Button variant="ghost" size="sm" onPress={onSources}>
+                  {t.addSource}
+                </Button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-muted">
+                      <th scope="col" className="px-5 py-2 font-medium">
+                        {t.colSource}
+                      </th>
+                      <th scope="col" className="px-3 py-2 font-medium">
+                        {t.colOrigin}
+                      </th>
+                      <th scope="col" className="px-3 py-2 font-medium">
+                        {t.colVersion}
+                      </th>
+                      <th scope="col" className="px-5 py-2 text-right font-medium">
+                        {t.colActive}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {radio.sources.map((s) => (
+                      <Fragment key={s.name}>
+                        <SourceRow radio={radio} s={s} run={run} />
+                        {s.kind === 'sounds' && s.on && <SoundsRow radio={radio} run={run} />}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </Card>
         </>
       )}
     </div>

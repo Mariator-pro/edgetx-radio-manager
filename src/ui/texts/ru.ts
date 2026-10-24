@@ -39,6 +39,7 @@ export const ru: Texts = {
   notInstalled: 'не установлено',
   versionUnknown: 'на карте, версия неизвестна',
   removedNext: 'будет удалено',
+  voicesChanged: 'языки изменены',
   tagNew: 'Новое',
   tagRequired: 'Обязательно',
   tagLocal: 'Локально',

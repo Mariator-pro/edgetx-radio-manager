@@ -39,6 +39,7 @@ export const uk: Texts = {
   notInstalled: 'не встановлено',
   versionUnknown: 'на картці, версія невідома',
   removedNext: 'буде видалено',
+  voicesChanged: 'мови змінено',
   tagNew: 'Нове',
   tagRequired: 'Обов’язково',
   tagLocal: 'Локально',

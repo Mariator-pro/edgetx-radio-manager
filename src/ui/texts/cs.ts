@@ -35,6 +35,7 @@ export const cs: Texts = {
   notInstalled: 'nenainstalováno',
   versionUnknown: 'na kartě, verze neznámá',
   removedNext: 'bude odinstalováno',
+  voicesChanged: 'jazyky změněny',
   tagNew: 'Nové',
   tagRequired: 'Povinné',
   tagLocal: 'Lokální',

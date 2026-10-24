@@ -32,6 +32,7 @@ export const it: Texts = {
   notInstalled: 'non installato',
   versionUnknown: 'sulla scheda, versione sconosciuta',
   removedNext: 'verrà disinstallato',
+  voicesChanged: 'lingue cambiate',
   tagNew: 'Nuovo',
   tagRequired: 'Obbligatorio',
   tagLocal: 'Locale',
