@@ -57,6 +57,7 @@ export interface Settings {
   lastCheck?: string; // last download run
   firmwarePrereleases?: boolean; // flash page also offers the firmware release candidates
   knownDefaults?: string[]; // default sources already offered; a removed one isn't added again
+  ui?: { lang?: string; theme?: 'light' | 'dark' }; // interface language and theme as last chosen
 }
 
 // Projects switched on for a newly detected radio; all other projects start switched off.

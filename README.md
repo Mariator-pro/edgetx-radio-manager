@@ -164,7 +164,7 @@ npm run build   # builds the browser interface into dist/ui, the desktop main pr
 npm start
 ```
 
-Starts the server on `http://127.0.0.1:5174` and opens the browser, with the same pages as the desktop app.
+Starts the server on a free port and opens the browser, with the same pages as the desktop app. If it already runs, `npm start` opens the running one again. Language and theme are kept in the data folder, so they stay the same in the browser and in the desktop app.
 
 ### Command line
 
@@ -208,7 +208,7 @@ npm run desktop   # builds everything and starts the app
 npm run dist      # builds the installers for your own system into release/
 ```
 
-The app starts the server itself (port 5175) and shows the interface in its own window; links to GitHub open in the browser. The licenses of the bundled open source packages are in `THIRD_PARTY_LICENSES.txt` in the app's resources folder, next to Electron's own license files.
+The app starts the server itself (on a free port) and shows the interface in its own window; links to GitHub open in the browser. The licenses of the bundled open source packages are in `THIRD_PARTY_LICENSES.txt` in the app's resources folder. Electron's own license files (`LICENSE.electron.txt`, `LICENSES.chromium.html`) are in the same folder on macOS and in the app folder on Windows and Linux.
 
 A new release is made with a tag: bump the version in `package.json`, then `git tag v0.2.0 && git push origin v0.2.0`. The GitHub workflow `.github/workflows/release.yml` builds the app for macOS, Windows and Linux and attaches the files to the release: one zip per installer for download, the portable Windows app as a zip, and for the app's own update on Windows and Linux the bare installer, the AppImage and their `latest*.yml` files.
 
@@ -241,7 +241,7 @@ Structure:
 - `src/cli/`: command line
 - `src/desktop/`: Electron main process, starts the server and shows the interface in its own window
 - `src/platform/`: drive detection, the only OS-specific part
-- `scripts/licenses.ts`: collects the license texts of all bundled packages during the build
+- `scripts/licenses.ts`: collects the license texts of all bundled packages and runtime dependencies during the build (also holds the Vite plugin that lists the bundled modules)
 - `docs/screenshots/`: the screenshots in this README
 
 ## License

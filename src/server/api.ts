@@ -333,4 +333,20 @@ export const FLASH_STEPS: Record<'uf2' | 'dfu', string[]> = {
 // so they can't use the API. Sent as a header, by the live connection (no headers there) in the address.
 export const TOKEN_HEADER = 'x-radio-manager-token';
 export const TOKEN_META = 'radio-manager-token';
-export const withToken = (html: string, token: string) => html.replace('</head>', `<meta name="${TOKEN_META}" content="${token}" />\n</head>`);
+
+// Language and theme, kept by the server: the port changes with every start, and the browser keeps
+// what a page stores per port, so it would forget them.
+export interface PrefsView {
+  lang?: string;
+  theme?: 'light' | 'dark';
+}
+export const PREFS_META = 'radio-manager-prefs';
+
+const attr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
+// The page gets the key and the stored choices, so it starts with them.
+export const withPageData = (html: string, token: string, prefs: PrefsView) =>
+  html.replace(
+    '</head>',
+    `<meta name="${TOKEN_META}" content="${token}" />\n<meta name="${PREFS_META}" content="${attr(JSON.stringify(prefs))}" />\n</head>`,
+  );

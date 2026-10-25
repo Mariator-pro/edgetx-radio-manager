@@ -4,8 +4,6 @@ import { paths } from '../core/paths.ts';
 import { startServer } from '../server/server.ts';
 import { appUpdates } from './update.ts';
 
-// Fixed port so the page keeps its origin and with it the stored language and theme; the CLI uses 5174.
-const PORT = 5175;
 // Space kept free around the window when it opens, in points.
 const WINDOW_MARGIN = 24;
 
@@ -15,16 +13,14 @@ if (process.platform === 'darwin') process.env.PATH = ['/opt/homebrew/bin', '/us
 async function start(): Promise<void> {
   // only the installed app updates itself, not a start from the source folder
   const updates = app.isPackaged ? appUpdates() : undefined;
-  const o = {
+  // any free port: language and theme are kept by the server, not by the page's address
+  const server = await startServer({
     paths: paths(),
+    port: 0,
     appUpdates: updates,
     staticDir: join(app.getAppPath(), 'dist', 'ui'),
     // own projects' checkouts next to this repo only when run from the source folder
     repoParent: app.isPackaged ? undefined : join(app.getAppPath(), '..'),
-  };
-  const server = await startServer({ ...o, port: PORT }).catch((e: NodeJS.ErrnoException) => {
-    if (e.code === 'EADDRINUSE') return startServer({ ...o, port: 0 });
-    throw e;
   });
   // At most 1280 × 860, but always inside the free screen area (no menu bar, dock or taskbar) with a margin, centred there.
   const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;

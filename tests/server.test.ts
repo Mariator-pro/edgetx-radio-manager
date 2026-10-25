@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { versionDir } from '../src/core/packages.ts';
 import { paths } from '../src/core/paths.ts';
-import { TOKEN_HEADER, TOKEN_META, type AppUpdateView, type BackupView, type PlanView, type RestorePlanView, type RestoreResultView, type StateView, type UpdateResultView } from '../src/server/api.ts';
+import { PREFS_META, TOKEN_HEADER, TOKEN_META, type AppUpdateView, type BackupView, type PlanView, type RestorePlanView, type RestoreResultView, type StateView, type UpdateResultView } from '../src/server/api.ts';
+import { noteServer, runningServer } from '../src/server/running.ts';
 import { oneAtATime, startServer } from '../src/server/server.ts';
 import { ApiError, errorText } from '../src/ui/errors.ts';
 import { TEXTS } from '../src/ui/texts.ts';
@@ -152,6 +153,47 @@ describe('server', () => {
     } finally {
       other.close();
     }
+  });
+
+  it('keeps language and theme and puts them into the page, whatever port it runs on', async () => {
+    const staticDir = await tempDir();
+    await writeFile(join(staticDir, 'index.html'), '<html><head><title>x</title></head></html>');
+    const dataDir = paths(await tempDir());
+    const first = await startServer({ paths: dataDir, port: 0, staticDir, pollMs: 60_000 });
+    const choose = (prefs: unknown) =>
+      fetch(`${first.url}/api/prefs`, { method: 'POST', headers: { [TOKEN_HEADER]: first.token }, body: JSON.stringify(prefs) });
+    try {
+      expect(await (await fetch(first.url)).text()).toContain(`<meta name="${PREFS_META}" content="{}" />`);
+      expect((await choose({ lang: 'de' })).status).toBe(200);
+      expect((await choose({ theme: 'dark' })).status).toBe(200);
+      expect((await choose({ lang: '../x' })).status).toBe(400);
+      expect((await choose({ theme: 'pink' })).status).toBe(400);
+    } finally {
+      first.close();
+    }
+    const second = await startServer({ paths: dataDir, port: 0, staticDir, pollMs: 60_000 });
+    try {
+      expect(await (await fetch(second.url)).text()).toContain(`<meta name="${PREFS_META}" content="{&quot;lang&quot;:&quot;de&quot;,&quot;theme&quot;:&quot;dark&quot;}" />`);
+    } finally {
+      second.close();
+    }
+  });
+
+  it('finds the running browser server through its note, and only while it answers', async () => {
+    const staticDir = await tempDir();
+    await writeFile(join(staticDir, 'index.html'), '<html><head></head></html>');
+    const file = join(await tempDir(), 'server.json');
+    expect(await runningServer(file)).toBeUndefined();
+    const s = await startServer({ paths: paths(await tempDir()), port: 0, staticDir, pollMs: 60_000 });
+    const forget = await noteServer(file, s.url);
+    expect(await runningServer(file)).toBe(s.url);
+    s.close();
+    expect(await runningServer(file)).toBeUndefined();
+    await forget();
+    expect(await readFile(file, 'utf8').catch(() => 'gone')).toBe('gone');
+    // a note of a process that is gone counts as no server
+    await writeFile(file, JSON.stringify({ url: s.url, pid: 2 ** 22 + 1 }));
+    expect(await runningServer(file)).toBeUndefined();
   });
 });
 

@@ -1,38 +1,44 @@
 import { useEffect, useState } from 'react';
+import { PREFS_META, type PrefsView } from '../server/api.ts';
+import { post } from './api.ts';
 import { LANGUAGES, TEXTS, type Lang } from './texts.ts';
 import { PrefsContext, type Theme } from './usePrefs.ts';
 
-// Per-browser choices; unreadable storage just means the default every time.
-function stored<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+// The choices the server keeps and puts into the page. The port changes with every start, and the browser
+// keeps what a page stores per port, so its own storage would forget them.
+function served(): PrefsView {
   try {
-    const v = localStorage.getItem(key);
-    if (v && (allowed as readonly string[]).includes(v)) return v as T;
+    return JSON.parse(document.querySelector<HTMLMetaElement>(`meta[name="${PREFS_META}"]`)?.content ?? '{}') as PrefsView;
   } catch {
-    // private window or blocked storage
+    return {};
   }
-  return fallback;
 }
 
-function store(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // not storable: the choice holds for this session only
-  }
-}
+const pick = <T extends string>(v: string | undefined, allowed: readonly T[], fallback: T): T =>
+  v && (allowed as readonly string[]).includes(v) ? (v as T) : fallback;
+
+// Kept for the next start; if that fails, the choice holds until the page is loaded again.
+const save = (prefs: PrefsView) => void post('/api/prefs', prefs).catch(() => {});
 
 export function PrefsProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLang] = useState<Lang>(() => stored('radio-manager:lang', LANGUAGES.map((l) => l.id), 'en'));
+  const [initial] = useState(served);
+  const [lang, setLang] = useState<Lang>(() => pick(initial.lang, LANGUAGES.map((l) => l.id), 'en'));
   const [theme, setTheme] = useState<Theme>(() =>
-    stored('radio-manager:theme', ['light', 'dark'] as const, window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+    pick(initial.theme, ['light', 'dark'] as const, window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
   );
   useEffect(() => {
     document.documentElement.lang = lang;
-    store('radio-manager:lang', lang);
   }, [lang]);
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
-    store('radio-manager:theme', theme);
   }, [theme]);
-  return <PrefsContext value={{ t: TEXTS[lang], lang, setLang, theme, setTheme }}>{children}</PrefsContext>;
+  const chooseLang = (l: Lang) => {
+    setLang(l);
+    save({ lang: l });
+  };
+  const chooseTheme = (t: Theme) => {
+    setTheme(t);
+    save({ theme: t });
+  };
+  return <PrefsContext value={{ t: TEXTS[lang], lang, setLang: chooseLang, theme, setTheme: chooseTheme }}>{children}</PrefsContext>;
 }

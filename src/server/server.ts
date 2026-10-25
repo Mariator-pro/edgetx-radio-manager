@@ -62,7 +62,7 @@ import { prepareUpdate } from '../core/update.ts';
 import { listVolumes } from '../platform/volumes.ts';
 import {
   TOKEN_HEADER,
-  withToken,
+  withPageData,
   type AppUpdateView,
   type FirmwareCatalogView,
   type FirmwareFileView,
@@ -71,6 +71,7 @@ import {
   type ImportView,
   type ModelRef,
   type ModelsResultView,
+  type PrefsView,
   type ProgressEvent,
   type RestoreResultView,
   type SourceCheckView,
@@ -191,7 +192,14 @@ function openFolder(dir: string): void {
   execFile(cmd, [dir], () => {});
 }
 
-export async function startServer(o: ServerOptions): Promise<{ url: string; token: string; close: () => void }> {
+export interface RunningServer {
+  url: string;
+  token: string;
+  page: (html: string) => string; // the page with this start's key and the stored choices
+  close: () => void;
+}
+
+export async function startServer(o: ServerOptions): Promise<RunningServer> {
   const p = o.paths;
   const token = randomBytes(24).toString('base64url');
   const s: Settings = await loadSettings(p);
@@ -650,6 +658,14 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; toke
         }),
       );
     },
+    'POST /api/prefs': async (req) => {
+      const { lang, theme } = await body<PrefsView>(req);
+      if ((lang !== undefined && !/^[a-z]{2}$/.test(lang)) || (theme !== undefined && theme !== 'light' && theme !== 'dark')) {
+        throw new HttpError(400, 'invalidRequest', { what: 'prefs' });
+      }
+      s.ui = { ...s.ui, ...(lang ? { lang } : {}), ...(theme ? { theme } : {}) };
+      await saveSettings(p, s);
+    },
     'POST /api/sources/remove': async (req) => {
       const { name } = await body<{ name: string }>(req);
       if (!removeSource(s, name)) throw new HttpError(400, 'onlyProjectsRemovable');
@@ -657,6 +673,8 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; toke
       await pushState();
     },
   };
+
+  const page = (html: string) => withPageData(html, token, s.ui ?? {});
 
   const serveStatic = async (res: ServerResponse, urlPath: string) => {
     const root = o.staticDir!;
@@ -670,7 +688,7 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; toke
     }
     // never cached: an old page would carry the key of an earlier start
     res.writeHead(200, { 'Content-Type': TYPES['.html'], 'Cache-Control': 'no-store' });
-    res.end(withToken(await readFile(file, 'utf8'), token));
+    res.end(page(await readFile(file, 'utf8')));
   };
 
   const server = createServer(async (req, res) => {
@@ -717,6 +735,7 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; toke
   return {
     url: `http://localhost:${typeof address === 'object' && address ? address.port : o.port}`,
     token,
+    page,
     close: () => {
       clearInterval(timer);
       for (const c of clients) c.end();

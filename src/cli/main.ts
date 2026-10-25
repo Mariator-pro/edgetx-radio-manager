@@ -54,6 +54,7 @@ import { addSource, checkSource, removeSource } from '../core/sources.ts';
 import { prepareUpdate } from '../core/update.ts';
 import { listVolumes } from '../platform/volumes.ts';
 import { FLASH_STEPS } from '../server/api.ts';
+import { noteServer, runningServer } from '../server/running.ts';
 import { startServer } from '../server/server.ts';
 
 const HELP = `Usage: radio-manager <command> [options]
@@ -666,15 +667,26 @@ async function sources(p: Paths, s: Settings, args: string[]): Promise<void> {
   }
 }
 
+function openBrowser(url: string): void {
+  if (process.platform === 'win32') execFile('cmd', ['/c', 'start', '', url]);
+  else execFile(process.platform === 'darwin' ? 'open' : 'xdg-open', [url]);
+}
+
 async function ui(p: Paths): Promise<void> {
   const staticDir = join(REPO_ROOT, 'dist', 'ui');
   if (!existsSync(join(staticDir, 'index.html'))) throw new UserError('Build the interface first: npm run build');
-  const server = await startServer({ paths: p, port: 5174, staticDir, repoParent: dirname(REPO_ROOT) }).catch((e: NodeJS.ErrnoException) => {
-    throw new UserError(e.code === 'EADDRINUSE' ? 'Port 5174 is in use; is radio-manager already running?' : e.message);
-  });
+  const running = await runningServer(p.server);
+  if (running) {
+    console.log(`Radio Manager already runs at ${running}`);
+    openBrowser(running);
+    return;
+  }
+  // a free port; a second start finds this one through the note
+  const server = await startServer({ paths: p, port: 0, staticDir, repoParent: dirname(REPO_ROOT) });
+  const forget = await noteServer(p.server, server.url);
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => void forget().finally(() => process.exit(0)));
   console.log(`Radio Manager runs at ${server.url} (Ctrl+C to stop)`);
-  if (process.platform === 'win32') execFile('cmd', ['/c', 'start', '', server.url]);
-  else execFile(process.platform === 'darwin' ? 'open' : 'xdg-open', [server.url]);
+  openBrowser(server.url);
   await new Promise(() => {});
 }
 
