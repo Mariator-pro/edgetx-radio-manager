@@ -23,6 +23,7 @@ Download the app from the [Releases](https://github.com/Mariator-pro/edgetx-radi
 
 - **macOS**: `edgetx-radio-manager-macos-arm64-v<version>.zip` for Apple Silicon (M1 and newer) or `edgetx-radio-manager-macos-x64-v<version>.zip` for Intel Macs. Unzip it, open the `.dmg` inside and drag the app into Applications.
 - **Windows**: `edgetx-radio-manager-win64-v<version>.zip`. Unzip it and run the installer inside.
+- **Windows, portable**: `edgetx-radio-manager-win64-portable-v<version>.zip`, no installation. Unzip it into a folder of its own (the files are at the top of the zip) and start `EdgeTX Radio Manager.exe`. Downloads, backups and settings go to the same folder as with the installed app.
 - **Linux** (x64): `edgetx-radio-manager-linux-v<version>.zip`. Unzip it and start the `.AppImage` inside, for example with a double click or `./edgetx-radio-manager-linux-v<version>.AppImage`. If it does not start, the system may lack FUSE 2: on Ubuntu 24.04 and newer install it with `sudo apt install libfuse2t64`, on older Ubuntu and Debian with `sudo apt install libfuse2`.
 
 The app is not signed with an Apple or Microsoft certificate, so the system warns on first start:
@@ -35,7 +36,8 @@ The app is not signed with an Apple or Microsoft certificate, so the system warn
 
 On start the app looks for a newer release and shows it at the top left:
 
-- **Windows and Linux**: "Update and restart" downloads the new version, installs it in place and starts it again. Your data and settings stay.
+- **Windows (installed) and Linux**: "Update and restart" downloads the new version, installs it in place and starts it again. Your data and settings stay.
+- **Windows (portable)**: "Download" opens the release page; unzip the new version and delete the old folder.
 - **macOS**: "Download" opens the release page. Install the new version like the first one; the app replaces the old one in Applications. macOS accepts an in-place update only for apps signed with an Apple certificate, which this one is not.
 
 ### Only for radios that flash over DFU
@@ -208,7 +210,7 @@ npm run dist      # builds the installers for your own system into release/
 
 The app starts the server itself (port 5175) and shows the interface in its own window; links to GitHub open in the browser. The licenses of the bundled open source packages are in `THIRD_PARTY_LICENSES.txt` in the app's resources folder, next to Electron's own license files.
 
-A new release is made with a tag: bump the version in `package.json`, then `git tag v0.2.0 && git push origin v0.2.0`. The GitHub workflow `.github/workflows/release.yml` builds the app for macOS, Windows and Linux and attaches the files to the release: one zip per installer for download, and for the app's own update on Windows and Linux the bare installer, the AppImage and their `latest*.yml` files.
+A new release is made with a tag: bump the version in `package.json`, then `git tag v0.2.0 && git push origin v0.2.0`. The GitHub workflow `.github/workflows/release.yml` builds the app for macOS, Windows and Linux and attaches the files to the release: one zip per installer for download, the portable Windows app as a zip, and for the app's own update on Windows and Linux the bare installer, the AppImage and their `latest*.yml` files.
 
 ## Development
 

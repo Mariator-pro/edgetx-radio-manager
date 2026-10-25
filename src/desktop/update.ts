@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { app } from 'electron';
 import { autoUpdater, type ProgressInfo } from 'electron-updater';
 import type { AppUpdateView } from '../server/api.ts';
@@ -6,13 +8,18 @@ import { isNewer } from '../ui/format.ts';
 
 const RELEASES = 'https://github.com/Mariator-pro/edgetx-radio-manager/releases';
 
-// Windows and Linux (AppImage) download and install a new release when asked to. macOS would only
-// accept an update signed with an Apple certificate, so there the page links to the download.
+// The installer puts its uninstaller next to the app; the portable zip has none, and updating it
+// with the installer would install a second copy.
+const installed = () => existsSync(join(dirname(process.execPath), `Uninstall ${basename(process.execPath)}`));
+
+// The installed Windows app and the Linux AppImage download and install a new release when asked to.
+// macOS would only accept an update signed with an Apple certificate, so there, as in the portable
+// Windows app, the page links to the download.
 export function appUpdates(): AppUpdates & { check: () => Promise<void> } {
-  const installable = process.platform !== 'darwin';
+  const installable = process.platform === 'linux' || (process.platform === 'win32' && installed());
   let found: AppUpdateView | undefined;
   let changed = () => {};
-  // first use creates the updater; on macOS it would set up Squirrel, which is never used there
+  // first use creates the updater, so only where it installs; on macOS it would set up Squirrel
   if (installable) autoUpdater.autoDownload = false;
 
   const newest = async (): Promise<string | undefined> => {

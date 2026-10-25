@@ -33,7 +33,7 @@ jobs:
       - run: npm run build
       # macOS: ad-hoc signature (mac.identity "-" in package.json), no Apple certificate; Windows and Linux: unsigned
       - run: npx electron-builder ${{ matrix.target }} --publish never
-      # Each installer in its own zip: browsers warn far less about a zip than about an unsigned .exe
+      # Each installer in its own zip (the portable Windows app is a zip already): browsers warn far less about a zip than about an unsigned .exe
       - shell: pwsh
         if: runner.os != 'Linux'
         run: Get-ChildItem release/*.exe, release/*.dmg | ForEach-Object { Compress-Archive -Path $_.FullName -DestinationPath ($_.FullName -replace '\.(exe|dmg)$', '.zip') }
