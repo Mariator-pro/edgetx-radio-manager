@@ -21,6 +21,13 @@ export const ERRORS = {
   wrongRadioForBackup: (p: { connected: string; board: string }) => `The connected radio is a ${p.connected}, the backup is from a ${p.board}`,
   restoreInterrupted: () => 'The SD card was removed during the restore. Connect it again and restore once more.',
 
+  modelNotFound: (p: { name: string }) => `Model ${p.name} not found`,
+  notModelFile: (p: { file: string }) => `${p.file} is not a model file (.yml or .etx)`,
+  importGone: () => 'The imported file is no longer loaded. Choose it again.',
+  modelsDontFit: (p: { names: string }) => `Not everything fits this radio (${p.names}); confirm to copy anyway`,
+  modelsInterrupted: (p: { done: string }) =>
+    `The SD card was removed while writing the models${p.done ? ` (done: ${p.done})` : ''}. Connect it again and start once more.`,
+
   repoFormat: () => 'Enter the repo as owner/name',
   alreadySource: (p: { name: string }) => `${p.name} is already a source`,
   noRelease: (p: { repo: string }) => `${p.repo} has no release`,

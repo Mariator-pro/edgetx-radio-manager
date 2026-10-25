@@ -5,6 +5,8 @@ import { errorText, post, useServer } from './api.ts';
 import { Sidebar, type Page } from './components/Sidebar.tsx';
 import { BackupsPage } from './pages/BackupsPage.tsx';
 import { FlashFlow } from './pages/FlashFlow.tsx';
+import { ModelsFlow } from './pages/ModelsFlow.tsx';
+import { ModelsPage, type ModelsRequest } from './pages/ModelsPage.tsx';
 import { PackagesPage } from './pages/PackagesPage.tsx';
 import { RadioPage } from './pages/RadioPage.tsx';
 import { RestoreFlow } from './pages/RestoreFlow.tsx';
@@ -44,6 +46,7 @@ export function App() {
   // The restore page keeps its radio too, so it can show the error when the card is pulled;
   // while the radio is connected it shows the live one.
   const [restoring, setRestoring] = useState<{ radio: RadioView; name: string }>();
+  const [modelsRequest, setModelsRequest] = useState<ModelsRequest>();
   const [notice, setNotice] = useState<Notice>();
   const known = useRef<Set<string>>(new Set());
 
@@ -118,6 +121,23 @@ export function App() {
             name={restoring.name}
             progress={progress}
             onBack={() => setPage('backups')}
+          />
+        ) : page === 'modelsFlow' && modelsRequest ? (
+          <ModelsFlow
+            key={JSON.stringify(modelsRequest)}
+            request={modelsRequest}
+            radio={state.radios.find((r) => r.volume === modelsRequest.radio.volume) ?? modelsRequest.radio}
+            progress={progress}
+            onBack={() => setPage('models')}
+          />
+        ) : page === 'models' ? (
+          <ModelsPage
+            state={state}
+            run={run}
+            onStart={(r) => {
+              setModelsRequest(r);
+              setPage('modelsFlow');
+            }}
           />
         ) : showRadio && page === 'update' ? (
           <UpdateFlow key={radio.volume} radio={radio} progress={progress} onBack={() => setPage('radio')} />

@@ -6,6 +6,26 @@ import { extname, join, normalize, sep } from 'node:path';
 import { applyPlan, type Resolution } from '../core/apply.ts';
 import { backupCard, deleteBackup, isBackupName, listBackups, pruneBackups } from '../core/backup.ts';
 import { findCards, readCard, type RadioCard } from '../core/card.ts';
+import { diffModels } from '../core/modeldiff.ts';
+import {
+  applyCopy,
+  applyDelete,
+  backupModels,
+  backupOrigin,
+  doesntFit,
+  exportName,
+  modelImage,
+  planCopy,
+  planDelete,
+  readCardState,
+  readImport,
+  sameNamed,
+  type CopyRequest,
+  type ImportedFile,
+  type ModelCache,
+  type ModelFile,
+  type ModelOrigin,
+} from '../core/models.ts';
 import { downloadAll, downloadMain, downloadSource, downloadTag, soundPackPattern, type DownloadEvent } from '../core/download.ts';
 import { AppError, errorInfo, type ErrorArgs, type ErrorCode } from '../core/errors.ts';
 import {
@@ -47,12 +67,25 @@ import {
   type FirmwareFileView,
   type FirmwareView,
   type FlashResultView,
+  type ImportView,
+  type ModelRef,
+  type ModelsResultView,
   type ProgressEvent,
   type RestoreResultView,
   type SourceCheckView,
   type UpdateResultView,
 } from './api.ts';
-import { backupViews, packageViews, planView, restorePlanView, stateView, voiceViews } from './views.ts';
+import {
+  backupViews,
+  copyItemView,
+  modelsPlanView,
+  modelsView,
+  packageViews,
+  planView,
+  restorePlanView,
+  stateView,
+  voiceViews,
+} from './views.ts';
 
 export interface ServerOptions {
   paths: Paths;
@@ -90,16 +123,30 @@ const CATALOG_MS = 10 * 60_000;
 
 // A firmware file at most; firmware is a few MB.
 const MAX_UPLOAD = 32 * 1024 * 1024;
+// An imported model file; a whole radio as .etx is well below.
+const MAX_IMPORT = 8 * 1024 * 1024;
 
-async function rawBody(req: IncomingMessage): Promise<Buffer> {
+async function rawBody(req: IncomingMessage, max = MAX_UPLOAD): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const c of req) {
     size += (c as Buffer).length;
-    if (size > MAX_UPLOAD) throw new HttpError(413, 'invalidRequest', { what: 'file too large' });
+    if (size > max) throw new HttpError(413, 'invalidRequest', { what: 'file too large' });
     chunks.push(c as Buffer);
   }
   return Buffer.concat(chunks);
+}
+
+// A file instead of JSON: a model picture, an exported model.
+class FileAnswer {
+  data: Buffer;
+  type: string;
+  download?: string; // file name to save it under
+  constructor(data: Buffer, type: string, download?: string) {
+    this.data = data;
+    this.type = type;
+    this.download = download;
+  }
 }
 
 function json(res: ServerResponse, data: unknown, status = 200): void {
@@ -150,6 +197,9 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; toke
   let customFirmware: { board: string; name: string; data: Buffer; check: FirmwareFileCheck } | undefined;
   // the firmware releases on GitHub, asked for at most every 10 minutes: GitHub allows 60 requests an hour
   let catalog: { at: number; prereleases: boolean; entries: CatalogEntry[] } | undefined;
+  // models of the backups, read once; model files imported on the models page, until closed or restarted
+  const modelCache: ModelCache = new Map();
+  const imports = new Map<string, ImportedFile>();
 
   const send = (event: string, data: unknown) => {
     const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -217,6 +267,12 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; toke
     return c;
   };
 
+  // a later backup can get the name of a deleted one, so its models are read again
+  const dropBackups = (board: string, names: string[]) => {
+    forgetBackups(s, board, names);
+    for (const n of names) modelCache.delete(join(p.backups, board, n));
+  };
+
   // info: why the backup is made; alsoKeep: the backup being restored, which the clean-up must not delete
   const runBackup = async (c: RadioCard, board: string, info: BackupInfo, alsoKeep?: string) => {
     let shown = -1;
@@ -225,9 +281,37 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; toke
       if (pct !== shown) progress({ op: busy ?? 'backup', step: 'backup', text: pr.file, done: (shown = pct), total: 100 });
     });
     (s.backupInfo[board] ??= {})[r.name] = info;
-    forgetBackups(s, board, await pruneBackups(p, board, s.backupsToKeep, [...(s.keptBackups[board] ?? []), ...(alsoKeep ? [alsoKeep] : [])]));
+    dropBackups(board, await pruneBackups(p, board, s.backupsToKeep, [...(s.keptBackups[board] ?? []), ...(alsoKeep ? [alsoKeep] : [])]));
     await saveSettings(p, s);
     return r;
+  };
+
+  // A model and where its image, checklist and scripts come from.
+  const resolveModel = async (ref: ModelRef): Promise<{ model: ModelFile; origin: ModelOrigin; board?: string }> => {
+    if ('import' in ref) {
+      const f = imports.get(ref.import);
+      if (!f) throw new HttpError(404, 'importGone');
+      const model = f.models.find((m) => m.file === ref.file);
+      if (!model) throw new HttpError(404, 'modelNotFound', { name: ref.file || f.name });
+      return { model, origin: f.origin, board: f.board };
+    }
+    if (!isSafeName(ref.board) || !isBackupName(ref.backup)) throw new HttpError(400, 'invalidRequest', { what: 'backup' });
+    const origin = await backupOrigin(p, ref.board, ref.backup);
+    const model = (await backupModels(p, ref.board, ref.backup, modelCache)).find((m) => m.file === ref.file);
+    if (!model) throw new HttpError(404, 'modelNotFound', { name: ref.file });
+    return { model, origin, board: ref.board };
+  };
+
+  type ModelsBody = { volume: string; copy?: { ref: ModelRef; mode?: 'replace' | 'add' }[]; delete?: string[] };
+
+  const modelsPlan = async ({ volume, copy = [], delete: del = [] }: ModelsBody) => {
+    const [c, board] = await cardAt(volume);
+    const card = await readCardState(c.volume);
+    const requests: CopyRequest[] = [];
+    for (const r of copy) requests.push({ ...(await resolveModel(r.ref)), ...(r.mode ? { mode: r.mode } : {}) });
+    const items = await planCopy(card, requests, await radioTypes(p, s));
+    const deletes = await planDelete(card, del);
+    return { c, board, items, deletes, refs: copy.map((r) => r.ref) };
   };
 
   const firmwareView = async (board: string): Promise<FirmwareView> => {
@@ -363,6 +447,75 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; toke
         return { ...r, backup: b?.name };
       });
     },
+    'GET /api/models': async (_req, q) => {
+      const board = q.get('board') ?? '';
+      if (board && !isSafeName(board)) throw new HttpError(400, 'invalidRequest', { what: 'board' });
+      const volume = q.get('volume');
+      const c = volume ? cards.find((x) => x.volume === volume) : undefined;
+      return modelsView(p, s, board, c && { volume: c.volume, board: boardOf(c) }, modelCache);
+    },
+    'GET /api/models/image': async (_req, q) => {
+      const img = await modelImage(p, q.get('board') ?? '', q.get('backup') ?? '', q.get('file') ?? '');
+      return new FileAnswer(img.data, img.type);
+    },
+    'GET /api/models/export': async (_req, q) => {
+      const { model } = await resolveModel({ board: q.get('board') ?? '', backup: q.get('backup') ?? '', file: q.get('file') ?? '' });
+      return new FileAnswer(model.data, 'application/x-yaml', exportName(model));
+    },
+    'POST /api/models/import': async (req, q) => {
+      const name = q.get('name') ?? '';
+      if (!isSafeName(name)) throw new HttpError(400, 'invalidRequest', { what: 'file' });
+      const f = await readImport(name, await rawBody(req, MAX_IMPORT));
+      const id = randomBytes(9).toString('base64url');
+      imports.set(id, f);
+      // only the last few stay in memory
+      for (const old of [...imports.keys()].slice(0, -5)) imports.delete(old);
+      const view: ImportView = {
+        id,
+        name,
+        ...(f.board ? { board: f.board, radio: radioName(await radioTypes(p, s), f.board) } : {}),
+        models: f.models.map((m) => ({ name: m.name, file: m.file, ...(m.semver ? { semver: m.semver } : {}), labels: m.labels })),
+      };
+      return view;
+    },
+    'POST /api/models/import/close': async (req) => {
+      const { id } = await body<{ id: string }>(req);
+      imports.delete(id);
+    },
+    'POST /api/models/plan': async (req) => {
+      const { c, board, items, deletes, refs } = await modelsPlan(await body<ModelsBody>(req));
+      return modelsPlanView(p, c.volume, board, items.map((i, n) => copyItemView(i, refs[n]!)), deletes, items.some(doesntFit));
+    },
+    'POST /api/models/run': async (req) => {
+      const b = await body<ModelsBody & { backupFirst: boolean; force?: boolean }>(req);
+      const { c, board, items, deletes } = await modelsPlan(b);
+      const misfits = items.filter(doesntFit);
+      if (misfits.length > 0 && !b.force) throw new HttpError(400, 'modelsDontFit', { names: misfits.map((i) => i.name).join(', ') });
+      return op('models', async (): Promise<ModelsResultView> => {
+        const names = [...items.map((i) => i.name), ...deletes.map((d) => d.name)];
+        const info: BackupInfo = items.length > 0 ? { reason: 'models', models: names } : { reason: 'deleteModels', models: names };
+        const backup = b.backupFirst ? await runBackup(c, board, info) : undefined;
+        const onProgress = (pr: { path: string; done: number; total: number }) =>
+          progress({ op: 'models', step: 'write', text: pr.path, done: pr.done, total: pr.total });
+        const copied = await applyCopy(c.volume, items, onProgress);
+        const moved = await applyDelete(c.volume, deletes, onProgress);
+        return { written: items.length > 0 ? copied.written : 0, moved: deletes.length > 0 ? moved.moved : 0, backup: backup?.name };
+      });
+    },
+    'POST /api/models/diff': async (req) => {
+      const { a, b, volume } = await body<{ a: ModelRef; b?: ModelRef; volume?: string }>(req);
+      const left = (await resolveModel(a)).model;
+      let right: ModelFile | undefined;
+      if (b) right = (await resolveModel(b)).model;
+      else {
+        const c = cards.find((x) => x.volume === volume);
+        if (!c) throw new HttpError(404, 'radioNotConnected');
+        const card = await readCardState(c.volume);
+        right = sameNamed(card.models, left.name, left.file);
+        if (!right) throw new HttpError(404, 'modelNotFound', { name: left.name });
+      }
+      return diffModels(left.doc, right.doc);
+    },
     'GET /api/firmware': (_req, q) => firmwareView(q.get('board') ?? ''),
     'GET /api/firmware/catalog': async (_req, q) => {
       const board = q.get('board') ?? '';
@@ -441,7 +594,7 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; toke
       const { board, name } = await body<{ board: string; name: string }>(req);
       await deleteBackup(p, board, name);
       s.keptBackups[board] = (s.keptBackups[board] ?? []).filter((n) => n !== name);
-      forgetBackups(s, board, [name]);
+      dropBackups(board, [name]);
       await saveSettings(p, s);
       await pushState();
     },
@@ -511,7 +664,15 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; toke
         return;
       }
       const route = routes[`${req.method} ${url.pathname}`];
-      if (route) return json(res, await route(req, url.searchParams));
+      if (route) {
+        const answer = await route(req, url.searchParams);
+        if (!(answer instanceof FileAnswer)) return json(res, answer);
+        const headers: Record<string, string> = { 'Content-Type': answer.type, 'Cache-Control': 'no-store' };
+        if (answer.download) headers['Content-Disposition'] = `attachment; filename*=UTF-8''${encodeURIComponent(answer.download)}`;
+        res.writeHead(200, headers);
+        res.end(answer.data);
+        return;
+      }
       if (url.pathname.startsWith('/api/') || !o.staticDir) throw new HttpError(404, 'notFound');
       await serveStatic(res, url.pathname);
     } catch (e) {

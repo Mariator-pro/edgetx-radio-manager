@@ -3,9 +3,9 @@ import type { ProgressEvent, StateView } from '../../server/api.ts';
 import { dateTime } from '../format.ts';
 import { LANGUAGES, type Lang } from '../texts.ts';
 import { usePrefs, type Theme } from '../usePrefs.ts';
-import { BackupsIcon, MoonIcon, PackagesIcon, RadioIcon, RefreshIcon, SourcesIcon, SunIcon } from './icons.tsx';
+import { BackupsIcon, ModelsIcon, MoonIcon, PackagesIcon, RadioIcon, RefreshIcon, SourcesIcon, SunIcon } from './icons.tsx';
 
-export type Page = 'radio' | 'update' | 'flash' | 'sources' | 'packages' | 'backups' | 'restore';
+export type Page = 'radio' | 'update' | 'flash' | 'sources' | 'packages' | 'backups' | 'restore' | 'models' | 'modelsFlow';
 
 export function Sidebar(props: {
   state?: StateView;
@@ -22,7 +22,10 @@ export function Sidebar(props: {
     { page: 'sources' as const, label: t.sources, Icon: SourcesIcon },
     { page: 'packages' as const, label: t.packages, Icon: PackagesIcon },
     { page: 'backups' as const, label: t.backups, Icon: BackupsIcon },
+    { page: 'models' as const, label: t.models, Icon: ModelsIcon },
   ];
+  // the guided flows count as part of the page they start from
+  const current = (target: Page) => page === target || (page === 'restore' && target === 'backups') || (page === 'modelsFlow' && target === 'models');
   const progressText = progress?.op === 'download' && progress.source
     ? progress.file
       ? `${progress.source}: ${progress.file}`
@@ -88,8 +91,8 @@ export function Sidebar(props: {
             key={target}
             type="button"
             onClick={() => onNavigate(target)}
-            aria-current={page === target || (page === 'restore' && target === 'backups') ? 'page' : undefined}
-            className={`${item} ${page === target || (page === 'restore' && target === 'backups') ? 'bg-zinc-800 text-white' : 'hover:bg-zinc-800/60'}`}
+            aria-current={current(target) ? 'page' : undefined}
+            className={`${item} ${current(target) ? 'bg-zinc-800 text-white' : 'hover:bg-zinc-800/60'}`}
           >
             <Icon />
             {label}

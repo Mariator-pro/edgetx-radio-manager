@@ -54,6 +54,18 @@ export const BackupsIcon = (p: IconProps) => (
   </Svg>
 );
 
+// A quadcopter seen from above.
+export const ModelsIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="6" cy="6" r="2.5" />
+    <circle cx="18" cy="6" r="2.5" />
+    <circle cx="6" cy="18" r="2.5" />
+    <circle cx="18" cy="18" r="2.5" />
+    <path d="M8 8l2.5 2.5M16 8l-2.5 2.5M8 16l2.5-2.5M16 16l-2.5-2.5" />
+    <rect x="10" y="10" width="4" height="4" rx="1" />
+  </Svg>
+);
+
 export const ArrowIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M5 12h14M13 6l6 6-6 6" />

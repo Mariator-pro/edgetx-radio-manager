@@ -25,7 +25,11 @@ function details(t: Texts, i: BackupItemView): string {
         ? `${t.beforeUpdate}${i.changes?.length ? `: ${i.changes.map((c) => changeText(t, c)).join(', ')}` : ''}`
         : i.reason === 'restore' && i.restoredFrom
           ? t.beforeRestore(backupLabel(i.restoredFrom))
-          : undefined;
+          : i.reason === 'models'
+            ? t.beforeModels(i.models?.join(', ') ?? '')
+            : i.reason === 'deleteModels'
+              ? t.beforeDeleteModels(i.models?.join(', ') ?? '')
+              : undefined;
   return [i.firmware && `EdgeTX ${i.firmware}`, reason].filter(Boolean).join(' · ');
 }
 

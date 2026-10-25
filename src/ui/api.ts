@@ -22,6 +22,9 @@ export async function post<T = void>(path: string, body: unknown = {}): Promise<
   return answer<T>(await fetch(path, { method: 'POST', headers: { [TOKEN_HEADER]: token(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
 }
 
+// An address the browser loads itself (a picture, a download), so the key goes into it.
+export const tokenUrl = (path: string) => `${path}${path.includes('?') ? '&' : '?'}token=${encodeURIComponent(token())}`;
+
 // A file as the request body, e.g. a firmware file chosen on the flash page.
 export async function postFile<T>(path: string, file: File): Promise<T> {
   return answer<T>(await fetch(path, { method: 'POST', headers: { [TOKEN_HEADER]: token(), 'Content-Type': 'application/octet-stream' }, body: file }));

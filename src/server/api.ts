@@ -1,4 +1,5 @@
 import type { ErrorInfo } from '../core/errors.ts';
+import type { DiffArea } from '../core/modeldiff.ts';
 
 // Shapes the server sends to the browser interface, shared by both sides (and the CLI);
 // imports only Node-free code, so the interface's type check doesn't pull in Node code.
@@ -122,6 +123,97 @@ export interface RestoreResultView {
   backup?: string; // the backup made first, unless left out
 }
 
+export interface ModelVersionView {
+  file: string;
+  backup: string; // newest backup with this content
+  since: string; // oldest backup with this content
+  semver?: string;
+  bitmap?: string;
+  labels: string[];
+}
+
+export interface ModelEntryView {
+  name: string;
+  file?: string; // set when a backup has two models of this name
+  versions: ModelVersionView[]; // newest first
+  card?: 'same' | 'changed' | 'missing'; // compared with the connected card
+  cardVersion?: number; // the version the card's model equals
+}
+
+export interface CardModelView {
+  name: string;
+  file: string;
+  semver?: string;
+  labels: string[];
+}
+
+export interface ModelsView {
+  board: string;
+  radio: string;
+  boards: { board: string; radio: string }[]; // radios with backups
+  entries: ModelEntryView[];
+  card?: { volume: string; board?: string; radio: string; models: CardModelView[] }; // the connected radio
+  onlyOnCard: CardModelView[]; // on the card of this radio type, in no backup
+}
+
+// A model in a backup, or in a file imported for the moment.
+export type ModelRef = { board: string; backup: string; file: string } | { import: string; file: string };
+
+export interface ImportView {
+  id: string;
+  name: string; // the file name
+  board?: string; // .etx: the radio it is from
+  radio?: string;
+  models: CardModelView[];
+}
+
+export type FileAction = 'add' | 'replace';
+
+export interface CopyItemView {
+  name: string;
+  ref: ModelRef;
+  mode: 'replace' | 'add';
+  canReplace: boolean;
+  target: string;
+  image?: { path: string; action: FileAction };
+  checklist?: { path: string; action: FileAction };
+  missing: { path: string; pkg?: string }[];
+  controls: string[];
+  module?: { model: string; radio?: string };
+  screen?: { model: string; radio: string };
+  newer?: { model: string; radio: string };
+  receiver?: { id: number; models: string[] };
+}
+
+export interface DeleteItemView {
+  name: string;
+  file: string;
+  moves: string[];
+  active: boolean;
+}
+
+export interface ModelsPlanView {
+  volume: string;
+  board: string;
+  copy: CopyItemView[];
+  delete: DeleteItemView[];
+  confirm: boolean; // some models don't fully fit the radio: "Copy anyway" first
+  backupDir: string;
+}
+
+export interface ModelsResultView {
+  written: number;
+  moved: number;
+  backup?: string;
+}
+
+export type { DiffArea };
+
+export interface DiffGroupView {
+  area: DiffArea;
+  entries: { path: string; from?: string; to?: string }[];
+}
+
 export interface PackageVersionView {
   tag: string;
   published: string;
@@ -146,9 +238,10 @@ export interface BackupItemView {
   bytes: number;
   kept: boolean;
   firmware?: string; // EdgeTX version in the backup's radio.yml
-  reason?: 'manual' | 'update' | 'restore'; // only backups made since the tool notes it
+  reason?: 'manual' | 'update' | 'restore' | 'models' | 'deleteModels'; // only backups made since the tool notes it
   changes?: PackageChangeView[]; // update: what it changed
   restoredFrom?: string; // restore: the backup put back afterwards
+  models?: string[]; // models, deleteModels: the models copied or deleted
   note?: string;
 }
 

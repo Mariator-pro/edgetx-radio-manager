@@ -6,6 +6,7 @@ import { installedVersion, type RadioCard } from '../core/card.ts';
 import { detectVersion, localVersion, sameOnCard, voicesChanged } from '../core/content.ts';
 import { folderSize, installedOn, localVersions, mainInfo, mainVersion, versionDir } from '../core/packages.ts';
 import type { Paths } from '../core/paths.ts';
+import { cardStatus, modelEntries, readModels, type CopyItem, type DeleteItem, type ModelCache, type ModelFile } from '../core/models.ts';
 import { countActions, type PlanItem } from '../core/plan.ts';
 import { isBelowMin, radioName, radioTypes, type RadioType } from '../core/radios.ts';
 import { updateSources } from '../core/selection.ts';
@@ -14,6 +15,11 @@ import type { RestorePlan } from '../core/restore.ts';
 import type { UpdateSetup } from '../core/update.ts';
 import type {
   BackupView,
+  CardModelView,
+  CopyItemView,
+  ModelRef,
+  ModelsPlanView,
+  ModelsView,
   PackageView,
   PlanFileView,
   PlanView,
@@ -207,6 +213,57 @@ export async function backupViews(p: Paths, s: Settings): Promise<BackupView[]> 
       return { board, radio: radioName(types, board), items };
     }),
   );
+}
+
+const cardModelView = (m: ModelFile): CardModelView => ({ name: m.name, file: m.file, ...(m.semver ? { semver: m.semver } : {}), labels: m.labels });
+
+// The models of a radio from its backups, compared with the connected card (card: its volume and type).
+export async function modelsView(
+  p: Paths,
+  s: Settings,
+  board: string,
+  card: { volume: string; board?: string } | undefined,
+  cache: ModelCache,
+): Promise<ModelsView> {
+  const types = await radioTypes(p, s);
+  const dirs = (await readdir(p.backups, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory()).map((e) => e.name);
+  const boards = [];
+  for (const b of dirs.sort()) if ((await listBackups(p, b)).length > 0) boards.push({ board: b, radio: radioName(types, b) });
+  const entries = await modelEntries(p, board, cache);
+  const onCard = card ? await readModels(card.volume) : [];
+  const view: ModelsView = {
+    board,
+    radio: radioName(types, board),
+    boards,
+    entries: entries.map((e) => {
+      const { versions, ...rest } = e;
+      const st = card ? cardStatus(e, onCard) : undefined;
+      return {
+        ...rest,
+        versions: versions.map(({ sha: _sha, ...v }) => v),
+        ...(st ? { card: st.status } : {}),
+        ...(st?.version !== undefined ? { cardVersion: st.version } : {}),
+      };
+    }),
+    onlyOnCard:
+      card && card.board === board ? onCard.filter((m) => !entries.some((e) => e.name === m.name)).map(cardModelView) : [],
+  };
+  if (card) view.card = { volume: card.volume, ...(card.board ? { board: card.board } : {}), radio: radioName(types, card.board), models: onCard.map(cardModelView) };
+  return view;
+}
+
+export function copyItemView(i: CopyItem, ref: ModelRef): CopyItemView {
+  const { model: _m, origin: _o, image, checklist, ...rest } = i;
+  return {
+    ...rest,
+    ref,
+    ...(image ? { image: { path: image.path, action: image.action } } : {}),
+    ...(checklist ? { checklist: { path: checklist.path, action: checklist.action } } : {}),
+  };
+}
+
+export function modelsPlanView(p: Paths, volume: string, board: string, copy: CopyItemView[], del: DeleteItem[], confirm: boolean): ModelsPlanView {
+  return { volume, board, copy, delete: del, confirm, backupDir: shortHome(join(p.backups, board)) };
 }
 
 const SOUND_ZIP = /^edgetx-sdcard-sounds-(.+)-\d[\d.]*\.zip$/;

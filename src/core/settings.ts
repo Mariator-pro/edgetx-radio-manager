@@ -39,9 +39,10 @@ export interface PackageChange {
 
 // Why a backup was made, and the user's own note on it.
 export interface BackupInfo {
-  reason?: 'manual' | 'update' | 'restore';
+  reason?: 'manual' | 'update' | 'restore' | 'models' | 'deleteModels';
   changes?: PackageChange[]; // update: what it changed
   restoredFrom?: string; // restore: the backup put back afterwards
+  models?: string[]; // models, deleteModels: the models copied to or deleted from the card
   note?: string;
 }
 

@@ -13,6 +13,7 @@ Desktop app for macOS, Windows and Linux, in twelve languages (English by defaul
 - **Updates the SD card** in one guided flow: shows exactly which files are added, replaced or deleted, backs up the card, then writes the changes.
 - **Flashes firmware**, with step by step instructions for entering the bootloader.
 - **Keeps backups** of the whole SD card, the last 10 per radio by default, and any backup you mark to keep, and restores them when needed.
+- **Manages models**: every model from the backups with its earlier versions, copied one by one back onto the radio or onto another radio, deleted from the card, exported, imported or compared.
 
 Every radio that EdgeTX supports works: radio types and SD card content come straight from the EdgeTX release.
 
@@ -86,13 +87,29 @@ On the "Sources" page, enter a GitHub repo (`owner/name`) and click "Check". The
 
 ### 6. Restore or keep backups
 
-The "Backups" page lists the backups per radio. Below each one it shows the EdgeTX version on the card at the time and why the backup was made: by hand, before restoring another backup, or before an SD update together with the packages that update changed. "Note" adds your own short text. Switch on "Keep" for a backup that should never be deleted, for example before a big EdgeTX upgrade. "Open folder" shows the backups on your computer, for example to copy a single model back by hand.
+The "Backups" page lists the backups per radio. Below each one it shows the EdgeTX version on the card at the time and why the backup was made: by hand, before restoring another backup, or before an SD update together with the packages that update changed. "Note" adds your own short text. Switch on "Keep" for a backup that should never be deleted, for example before a big EdgeTX upgrade. "Open folder" shows the backups on your computer.
 
 "Restore" brings the SD card back to exactly the state of that backup: changed and missing files come back, files added since then are deleted. It works only while a radio of the same type is connected. Before anything is written, the app shows the plan with every file, and points out when the backup was made with a different EdgeTX version than the one on the radio. "Back up the SD card first" is on by default, so a restore can be undone as well.
 
 ![The backups page with backups of two radios](docs/screenshots/backups.png)
 
 The "Packages" page lists every downloaded version. Nothing there is deleted automatically, and versions installed on a radio cannot be deleted.
+
+### 7. Copy, restore and compare models
+
+The "Models" page lists the models in the backups of a radio. Each model shows its picture, labels, EdgeTX version and whether the connected radio has it: "on the card", "on the card, changed" or "not on the card". Open a model to see its earlier versions (each different state in the backups is one version) and pick the one you want. "Compare" lists what differs between two versions, or between a version and the model on the card, grouped like the radio's model menus. Models that are on the card but in no backup yet show up as "only on the card".
+
+![The models page with the models of a RadioMaster TX16S MK3, one of them opened to its two versions](docs/screenshots/models.png)
+
+Tick one or more models, then:
+
+- **Copy to** puts them onto the connected radio. Only these models change; all other models and the radio settings stay as they are. A model with the same name on the card is replaced (you can switch to "Add as new model" instead), any other model is added under the next free number. The model picture and its checklist come along. The plan shows what does not come along (Lua scripts, voice files and widgets the model uses but the card lacks, with the package to switch on), and what does not fit when the model comes from another radio type: switches, pots or sliders the radio does not have, another internal module or another screen size. Such models are copied unchanged only after ticking "Copy anyway"; adjust them on the radio.
+- **Delete from SD card** moves them to `MODELS/DELETED/` on the card, like the radio does, so they can be fetched back.
+- **Export** saves each model as `<model name>.yml`.
+
+"Import file" reads a single model (`.yml`) or the models of an `.etx` file, which can then be copied like the others. Before copying or deleting, "Back up the SD card first" is on by default. The radio picks up new models and labels once USB is disconnected.
+
+To bring models onto a new SD card, put the card into the radio once (or create the folders `RADIO` and `MODELS` on it), so the app recognizes it.
 
 ## Where packages come from
 
@@ -155,14 +172,23 @@ npm run cli -- <command> [options]
 | `restore [backup]` | Without a name, list the backups of the connected radio with EdgeTX version, reason and note; with one (e.g. `restore 2026-10-23_2015`), show the plan, then back up the card and restore the backup |
 | `flash [version]` | Flash firmware, without a version the newest downloaded one; any other release is downloaded first (e.g. `flash v2.12.2` or `flash v2.12.0-rc4`); `flash --file <path>` flashes a `.uf2` or `.bin` of your own |
 | `sources` | List sources; `sources add <owner/repo>`, `sources remove <name>` |
+| `models` | List the models in the backups of the connected radio (or `--board`) with their versions, compared with the card |
+| `models copy <model> ...` | Show the plan, then back up the card and copy the newest version of these models onto it; `--from tx16smk3` takes them from another radio's backups, `--from tx16smk3/2026-10-23_1849` from one backup |
+| `models delete <model> ...` | Move models on the card to `MODELS/DELETED/`, after a backup |
+| `models export <model> ...` | Save models from the backups as `<model name>.yml` (`--out <folder>`, `--from`) |
+| `models import <file> [<model> ...]` | Copy models from a `.yml` or `.etx` file onto the card |
+| `models diff <model> [<backup> [<backup>]]` | Differences between two versions, without a second backup against the card |
 | `ui` | Open the browser interface (like `npm start`) |
 
 Options:
 
 - `--volume <path>`: use this drive instead of automatic detection
 - `--board <id>`: radio type when the card has no `RADIO/radio.yml` yet (e.g. `tx16s`)
-- `--no-backup`: restore without backing up the card first
-- `--force`: with `flash --file`, flash a file that has no EdgeTX identification
+- `--no-backup`: restore, copy or delete models without backing up the card first
+- `--force`: with `flash --file`, flash a file that has no EdgeTX identification; with `models copy` or `models import`, copy models that do not fully fit the radio
+- `--add`: with `models copy` or `models import`, add the models as new ones instead of replacing those of the same name
+- `--from <radio>[/<backup>]`: with `models copy`, `export` or `diff`, take the models from these backups
+- `--out <folder>`: with `models export`, where the files go (default: the current folder)
 
 Typical flow: `download`, connect the radio in "USB Storage" mode, `update`.
 
@@ -195,11 +221,12 @@ How it works under the hood:
 - **Backup**: copies the whole SD card, including file times, into a folder; old backups are pruned.
 - **Restore**: compares the backup with the card by size and file time (small files also by content) and writes only what differs; files the backup does not have are deleted.
 - **Update**: compares the packages with the card; files changed on the card come up as conflicts instead of being overwritten.
+- **Models**: reads `MODELS/model<n>.yml` from the backups and the card and groups them by model name. Copying writes the model file unchanged with the current time, so the radio reads it again; `labels.yml` and `radio.yml` are never written, the radio adds missing labels itself. What fits the radio is checked against the switches, pots and internal module listed in its `RADIO/radio.yml`.
 - **Firmware**: radios with a UF2 bootloader get the firmware via the drive, all others via USB DFU (`dfu-util`). The method follows from the firmware file for the radio type.
 
 Structure:
 
-- `src/core/`: logic (detection, download, backup, restore, update plan, firmware)
+- `src/core/`: logic (detection, download, backup, restore, update plan, firmware, models)
 - `src/server/`: HTTP API and server-sent events for progress and state
 - `src/ui/`: React interface (HeroUI, Tailwind)
 - `src/cli/`: command line

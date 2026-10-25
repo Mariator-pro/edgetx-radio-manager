@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -12,6 +12,27 @@ import { localVersion } from '../core/content.ts';
 import { checkFirmwareFile, firmwareFile, flashFile, flashMethod, knownMethod, type FlashMethod } from '../core/firmware.ts';
 import { downloadAll, downloadTag } from '../core/download.ts';
 import { AppError } from '../core/errors.ts';
+import { diffModels, type DiffArea } from '../core/modeldiff.ts';
+import {
+  applyCopy,
+  applyDelete,
+  backupModels,
+  backupOrigin,
+  cardStatus,
+  doesntFit,
+  exportName,
+  modelEntries,
+  planCopy,
+  planDelete,
+  readCardState,
+  readImport,
+  sameNamed,
+  type CardState,
+  type CopyItem,
+  type CopyRequest,
+  type DeleteItem,
+  type ModelFile,
+} from '../core/models.ts';
 import { localVersions } from '../core/packages.ts';
 import { paths, type Paths } from '../core/paths.ts';
 import { countActions, type PlanItem } from '../core/plan.ts';
@@ -43,6 +64,12 @@ Commands:
   backup     copy the whole SD card of the connected radio
   update     show the plan, then back up the card and update it
   restore    list the backups of the connected radio; "restore <backup>" brings the card back to one
+  models     list the models in the backups of the connected radio (or --board); then:
+             "models copy <model> ..."   newest version onto the connected card (--from <radio>[/<backup>])
+             "models delete <model> ..." move models on the card to MODELS/DELETED
+             "models export <model> ..." save as <model>.yml (--from, --out <folder>)
+             "models import <file> [<model> ...]" from a .yml or .etx file onto the card
+             "models diff <model> [<backup> [<backup>|card]]" differences, newest version against the card
   flash      flash firmware: "flash" for the newest download, "flash v2.12.2" or "flash v2.13.0-rc1" for another (downloaded first), "flash --file <path>" for an own .uf2 or .bin
   sources    list sources; "sources add <owner/repo>", "sources remove <name>"
   ui         open the browser interface
@@ -50,8 +77,11 @@ Commands:
 Options:
   --volume <path>   use this drive instead of detecting the radio
   --board <id>      radio type when the card has no RADIO/radio.yml, e.g. tx16s
-  --no-backup       restore without backing up the card first
-  --force           flash an own file that has no EdgeTX identification
+  --no-backup       restore or change models without backing up the card first
+  --force           flash an own file that has no EdgeTX identification; copy models that do not fully fit
+  --add             models copy/import: add as new models instead of replacing those of the same name
+  --from <radio>[/<backup>]  models copy/export/diff: take the models from these backups
+  --out <folder>    models export: where the files go (default: current folder)
 `;
 
 class UserError extends Error {}
@@ -247,7 +277,11 @@ function backupDetails(firmware?: string, info?: BackupInfo): string {
         ? `before update${info.changes?.length ? `: ${info.changes.map(changeText).join(', ')}` : ''}`
         : info?.reason === 'restore'
           ? `before restoring ${info.restoredFrom}`
-          : undefined;
+          : info?.reason === 'models'
+            ? `before copying models: ${info.models?.join(', ') ?? ''}`
+            : info?.reason === 'deleteModels'
+              ? `before deleting models: ${info.models?.join(', ') ?? ''}`
+              : undefined;
   return [firmware && `EdgeTX ${firmware}`, reason].filter(Boolean).join(' · ');
 }
 
@@ -298,6 +332,248 @@ async function restore(p: Paths, s: Settings, name?: string, noBackup = false, v
   });
   if (process.stdout.isTTY) process.stdout.write('\n');
   console.log(`Done: ${r.written} files written, ${r.deleted} deleted.`);
+}
+
+interface ModelOpts {
+  volume?: string;
+  board?: string;
+  from?: string;
+  add?: boolean;
+  force?: boolean;
+  noBackup?: boolean;
+  out?: string;
+}
+
+const AREAS: Record<DiffArea, string> = {
+  setup: 'Model setup',
+  flightModes: 'Flight modes',
+  inputs: 'Inputs',
+  mixes: 'Mixes',
+  outputs: 'Outputs',
+  curves: 'Curves',
+  logicalSwitches: 'Logical switches',
+  specialFunctions: 'Special functions',
+  telemetry: 'Telemetry',
+  customScripts: 'Custom scripts',
+  screens: 'Screens',
+  other: 'Other',
+};
+
+const matches = (m: { name: string; file: string }, want: string) => m.name.toLowerCase() === want.toLowerCase() || m.file.toLowerCase() === want.toLowerCase();
+
+// "tx16smk3" or "tx16smk3/2026-10-23_1849": the radio, and a backup or the newest one with the model.
+function parseFrom(from: string | undefined, board: string): { board: string; backup?: string } {
+  if (!from) return { board };
+  const [b, backup] = from.split('/');
+  if (!b || (backup !== undefined && !backup)) throw new UserError('Use --from <radio> or --from <radio>/<backup>.');
+  return { board: b, ...(backup ? { backup } : {}) };
+}
+
+// A model in the backups: from the given backup, else the newest one that has it.
+async function backupModel(p: Paths, board: string, want: string, backup?: string): Promise<{ model: ModelFile; backup: string }> {
+  for (const b of backup ? [backup] : await listBackups(p, board)) {
+    const model = (await backupModels(p, board, b)).find((m) => matches(m, want));
+    if (model) return { model, backup: b };
+  }
+  throw new UserError(`No model "${want}" in the backups of ${board}${backup ? `/${backup}` : ''}.`);
+}
+
+async function modelsList(p: Paths, s: Settings, o: ModelOpts): Promise<void> {
+  const cards = await connectedCards(o.volume);
+  const card = cards.length === 1 ? cards[0] : undefined;
+  const board = o.board ?? card?.board;
+  if (!board) throw new UserError('Which radio? Connect it in "USB Storage" mode, or pass --board.');
+  const radio = radioName(await radioTypes(p, s), board);
+  const entries = await modelEntries(p, board);
+  if (entries.length === 0) {
+    console.log(`No models in the backups of the ${radio} yet.`);
+    return;
+  }
+  const onCard = card ? (await readCardState(card.volume)).models : undefined;
+  console.log(`Models in the backups of the ${radio}${onCard ? `, compared with the card at ${card!.volume}` : ''}:`);
+  const STATUS = { same: 'on the card', changed: 'on the card, changed', missing: 'not on the card' };
+  for (const e of entries) {
+    const st = onCard ? `  ${STATUS[cardStatus(e, onCard).status]}` : '';
+    console.log(`  ${e.name}${e.file ? ` (${e.file})` : ''}${st}`);
+    for (const v of e.versions) {
+      const since = v.since !== v.backup ? ` (since ${v.since})` : '';
+      console.log(`      ${v.backup}${since}  ${v.file}${v.semver ? `  EdgeTX ${v.semver}` : ''}${v.labels.length ? `  ${v.labels.join(', ')}` : ''}`);
+    }
+  }
+  if (onCard && card?.board === board) {
+    const only = onCard.filter((m) => !entries.some((e) => e.name === m.name));
+    if (only.length > 0) console.log(`
+Only on the card: ${only.map((m) => `${m.name} (${m.file})`).join(', ')}`);
+  }
+}
+
+function printCopy(items: CopyItem[], from: (i: CopyItem) => string): void {
+  for (const i of items) {
+    console.log(`\n${i.name} (${from(i)}): ${i.mode === 'replace' ? `replaces ${i.target}` : `new as ${i.target}`}`);
+    if (i.image) console.log(`  ${i.image.path} (${i.image.action === 'add' ? 'new' : 'replaced'})`);
+    if (i.checklist) console.log(`  ${i.checklist.path} (${i.checklist.action === 'add' ? 'new' : 'replaced'})`);
+    for (const f of i.missing) console.log(`  Not copied, missing on the card: ${f.path}${f.pkg ? ` (turn on ${f.pkg} for this radio)` : ''}`);
+    if (i.controls.length) console.log(`  Not on this radio: ${i.controls.join(', ')}`);
+    if (i.module) console.log(`  Internal module: the model uses ${i.module.model}, the radio has ${i.module.radio ?? 'none'}`);
+    if (i.screen) console.log(`  Screen: made for ${i.screen.model}, the radio has ${i.screen.radio}`);
+    if (i.newer) console.log(`  Saved with EdgeTX ${i.newer.model}, the radio runs ${i.newer.radio}`);
+    if (i.receiver) console.log(`  Receiver number ${i.receiver.id} is also used by ${i.receiver.models.join(', ')}`);
+  }
+}
+
+function printDelete(items: DeleteItem[]): void {
+  for (const d of items) {
+    console.log(`\n${d.name}: ${d.moves.map((f) => `MODELS/${f}`).join(', ')} -> MODELS/DELETED/`);
+    if (d.active) console.log('  The radio has this model loaded and switches to another one.');
+  }
+}
+
+// Shows the plan, asks, backs up and writes; the same for copying, importing and deleting.
+async function runModels(p: Paths, s: Settings, card: RadioCard, board: string, copy: CopyItem[], del: DeleteItem[], o: ModelOpts): Promise<void> {
+  const misfits = copy.filter(doesntFit);
+  if (misfits.length > 0 && !o.force) {
+    throw new UserError(`\nNot everything fits this radio (${misfits.map((i) => i.name).join(', ')}). Pass --force to copy anyway.`);
+  }
+  const what = copy.length > 0 ? 'copy' : 'delete';
+  const q = o.noBackup ? `\n${what === 'copy' ? 'Copy' : 'Delete'} without a backup first? [y/N] ` : `\nBack up the card and ${what}? [y/N] `;
+  if ((await ask(q)) !== 'y') {
+    console.log('Nothing changed.');
+    return;
+  }
+  const names = [...copy.map((i) => i.name), ...del.map((d) => d.name)];
+  if (!o.noBackup) await runBackup(p, s, card, board, { reason: copy.length > 0 ? 'models' : 'deleteModels', models: names });
+  await applyCopy(card.volume, copy);
+  await applyDelete(card.volume, del);
+  console.log(
+    copy.length > 0
+      ? `Done: ${copy.length} ${copy.length === 1 ? 'model' : 'models'} on the card. The radio picks up the change once USB is disconnected.`
+      : `Done: ${del.length} ${del.length === 1 ? 'model' : 'models'} moved to MODELS/DELETED.`,
+  );
+}
+
+async function modelsCopy(p: Paths, s: Settings, names: string[], o: ModelOpts): Promise<void> {
+  if (names.length === 0) throw new UserError('Name the models to copy, e.g. models copy "Master Copter".');
+  const [card, board] = await cardAndBoard(p, s, o.volume, o.board);
+  const from = parseFrom(o.from, board);
+  const state: CardState = await readCardState(card.volume);
+  const requests: CopyRequest[] = [];
+  const sources = new Map<CopyRequest, string>();
+  for (const n of names) {
+    const { model, backup } = await backupModel(p, from.board, n, from.backup);
+    const r: CopyRequest = { model, origin: await backupOrigin(p, from.board, backup), ...(o.add ? { mode: 'add' as const } : {}) };
+    requests.push(r);
+    sources.set(r, `${from.board} ${backup}`);
+  }
+  const items = await planCopy(state, requests, await radioTypes(p, s));
+  console.log(`${radioName(await radioTypes(p, s), board)} at ${card.volume}`);
+  printCopy(items, (i) => sources.get(requests[items.indexOf(i)]!)!);
+  await runModels(p, s, card, board, items, [], o);
+}
+
+async function modelsImport(p: Paths, s: Settings, file: string | undefined, names: string[], o: ModelOpts): Promise<void> {
+  if (!file) throw new UserError('Name the file, e.g. models import Copter.yml');
+  const data = await readFile(file).catch(() => {
+    throw new UserError(`Cannot read ${file}`);
+  });
+  const f = await readImport(basename(file), data);
+  const chosen = names.map((n) => {
+    const m = f.models.find((x) => matches(x, n));
+    if (!m) throw new UserError(`No model "${n}" in ${file}.`);
+    return m;
+  });
+  if (chosen.length === 0) chosen.push(...f.models);
+  const [card, board] = await cardAndBoard(p, s, o.volume, o.board);
+  const items = await planCopy(
+    await readCardState(card.volume),
+    chosen.map((model) => ({ model, origin: f.origin, ...(o.add ? { mode: 'add' as const } : {}) })),
+    await radioTypes(p, s),
+  );
+  console.log(`${radioName(await radioTypes(p, s), board)} at ${card.volume}`);
+  printCopy(items, () => basename(file));
+  await runModels(p, s, card, board, items, [], o);
+}
+
+async function modelsDelete(p: Paths, s: Settings, names: string[], o: ModelOpts): Promise<void> {
+  if (names.length === 0) throw new UserError('Name the models to delete, e.g. models delete "Old Glider".');
+  const [card, board] = await cardAndBoard(p, s, o.volume, o.board);
+  const state = await readCardState(card.volume);
+  const files = names.map((n) => {
+    const hits = state.models.filter((m) => matches(m, n));
+    if (hits.length === 0) throw new UserError(`No model "${n}" on the card.`);
+    if (hits.length > 1) throw new UserError(`More than one model "${n}" on the card (${hits.map((m) => m.file).join(', ')}); name the file instead.`);
+    return hits[0]!.file;
+  });
+  const items = await planDelete(state, files);
+  console.log(`${radioName(await radioTypes(p, s), board)} at ${card.volume}`);
+  printDelete(items);
+  await runModels(p, s, card, board, [], items, o);
+}
+
+async function modelsExport(p: Paths, names: string[], o: ModelOpts): Promise<void> {
+  if (names.length === 0) throw new UserError('Name the models to export, e.g. models export "Master Copter".');
+  const cards = await connectedCards(o.volume);
+  const board = o.board ?? (cards.length === 1 ? cards[0]!.board : undefined);
+  const from = parseFrom(o.from, board ?? '');
+  if (!from.board) throw new UserError('Which radio? Connect it, or pass --board or --from.');
+  const out = resolve(o.out ?? '.');
+  await mkdir(out, { recursive: true });
+  for (const n of names) {
+    const { model, backup } = await backupModel(p, from.board, n, from.backup);
+    const target = join(out, exportName(model));
+    await writeFile(target, model.data);
+    console.log(`${model.name} (${from.board} ${backup}) -> ${target}`);
+  }
+}
+
+async function modelsDiff(p: Paths, name: string | undefined, a: string | undefined, b: string | undefined, o: ModelOpts): Promise<void> {
+  if (!name) throw new UserError('Name the model, e.g. models diff "Master Copter".');
+  const cards = await connectedCards(o.volume);
+  const card = cards.length === 1 ? cards[0] : undefined;
+  const from = parseFrom(o.from, o.board ?? card?.board ?? '');
+  if (!from.board) throw new UserError('Which radio? Connect it, or pass --board or --from.');
+  const left = await backupModel(p, from.board, name, a ?? from.backup);
+  let right: ModelFile;
+  let label: string;
+  if (b && b !== 'card') {
+    right = (await backupModel(p, from.board, name, b)).model;
+    label = b;
+  } else {
+    if (!card) throw new UserError('Connect the radio to compare with its card, or name a second backup.');
+    const m = sameNamed((await readCardState(card.volume)).models, left.model.name, left.model.file);
+    if (!m) throw new UserError(`No model "${left.model.name}" on the card.`);
+    right = m;
+    label = 'the card';
+  }
+  console.log(`${left.model.name}: ${from.board} ${left.backup} against ${label}`);
+  const groups = diffModels(left.model.doc, right.doc);
+  if (groups.length === 0) console.log('\nNo differences.');
+  for (const g of groups) {
+    console.log(`\n${AREAS[g.area]}`);
+    for (const e of g.entries) {
+      const change = e.from === undefined ? `added ${e.to}` : e.to === undefined ? `removed (was ${e.from})` : `${e.from} -> ${e.to}`;
+      console.log(`  ${e.path}: ${change}`);
+    }
+  }
+}
+
+async function models(p: Paths, s: Settings, args: string[], o: ModelOpts): Promise<void> {
+  const [sub, ...rest] = args;
+  switch (sub) {
+    case undefined:
+      return modelsList(p, s, o);
+    case 'copy':
+      return modelsCopy(p, s, rest, o);
+    case 'delete':
+      return modelsDelete(p, s, rest, o);
+    case 'export':
+      return modelsExport(p, rest, o);
+    case 'import':
+      return modelsImport(p, s, rest[0], rest.slice(1), o);
+    case 'diff':
+      return modelsDiff(p, rest[0], rest[1], rest[2], o);
+    default:
+      throw new UserError('Use "models", "models copy", "models delete", "models export", "models import" or "models diff".');
+  }
 }
 
 const REPO_ROOT = resolve(import.meta.dirname, '../..');
@@ -411,6 +687,9 @@ async function main(): Promise<void> {
       'no-backup': { type: 'boolean' },
       file: { type: 'string' },
       force: { type: 'boolean' },
+      add: { type: 'boolean' },
+      from: { type: 'string' },
+      out: { type: 'string' },
       help: { type: 'boolean', short: 'h' },
     },
   });
@@ -435,6 +714,16 @@ async function main(): Promise<void> {
       return restore(p, s, positionals[1], values['no-backup'], values.volume, values.board);
     case 'sources':
       return sources(p, s, positionals.slice(1));
+    case 'models':
+      return models(p, s, positionals.slice(1), {
+        volume: values.volume,
+        board: values.board,
+        from: values.from,
+        add: values.add,
+        force: values.force,
+        noBackup: values['no-backup'],
+        out: values.out,
+      });
     case 'ui':
       return ui(p);
     case 'flash':
