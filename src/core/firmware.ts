@@ -192,7 +192,7 @@ export async function listDfu(dfuUtil = 'dfu-util'): Promise<DfuDevice[]> {
   return parseDfuList((await run(dfuUtil, ['-l']).catch(() => ({ out: '' }))).out);
 }
 
-// Writes the .bin to the start of the internal flash and leaves DFU mode, like Companion.
+// Writes the .bin to the start of the internal flash and leaves DFU mode.
 export async function flashDfu(data: Buffer, onPercent: (pct: number) => void = () => {}, dfuUtil = 'dfu-util'): Promise<void> {
   const devices = (await listDfu(dfuUtil)).filter((d) => d.name.includes('Internal Flash'));
   if (devices.length === 0) throw new AppError('noDfuRadio');
