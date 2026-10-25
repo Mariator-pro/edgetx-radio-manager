@@ -15,6 +15,11 @@ export const da: Texts = {
   lastChecked: (d) => `Sidst kontrolleret ${d}`,
   notChecked: 'Endnu ikke kontrolleret',
   checkUpdates: 'Søg efter opdateringer',
+  appUpdateAvailable: (v) => `Radio Manager ${v} er tilgængelig`,
+  appUpdateInstall: 'Opdater og genstart',
+  appUpdateDownload: 'Download',
+  appDownloading: (pct) => `Downloader opdatering … ${pct} %`,
+  appRestarting: 'Genstarter …',
   theme: 'Udseende',
   light: 'Lyst',
   dark: 'Mørkt',
@@ -360,6 +365,8 @@ export const da: Texts = {
     dfuFailed: ({ detail }) => `dfu-util mislykkedes: ${detail}`,
     cancelled: () => 'Annulleret.',
     radioTimeout: () => 'Radioen meldte sig ikke i tide.',
+
+    appUpdateFailed: () => 'Opdateringen af appen kunne ikke downloades. Tjek internetforbindelsen, og prøv igen.',
 
     modelNotFound: ({ name }) => `Modellen ${name} blev ikke fundet.`,
     notModelFile: ({ file }) => `${file} er ikke en modelfil (.yml eller .etx).`,

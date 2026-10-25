@@ -15,6 +15,11 @@ export const fr: Texts = {
   lastChecked: (d) => `Dernière vérification ${d}`,
   notChecked: 'Pas encore vérifié',
   checkUpdates: 'Rechercher des mises à jour',
+  appUpdateAvailable: (v) => `Radio Manager ${v} est disponible`,
+  appUpdateInstall: 'Mettre à jour et redémarrer',
+  appUpdateDownload: 'Télécharger',
+  appDownloading: (pct) => `Téléchargement de la mise à jour … ${pct} %`,
+  appRestarting: 'Redémarrage …',
   theme: 'Apparence',
   light: 'Clair',
   dark: 'Sombre',
@@ -361,6 +366,8 @@ export const fr: Texts = {
     dfuFailed: ({ detail }) => `dfu-util a échoué : ${detail}`,
     cancelled: () => 'Annulé.',
     radioTimeout: () => 'La radiocommande n’est pas apparue à temps.',
+
+    appUpdateFailed: () => 'La mise à jour de l’application n’a pas pu être téléchargée. Vérifiez la connexion Internet et réessayez.',
 
     modelNotFound: ({ name }) => `Modèle ${name} introuvable.`,
     notModelFile: ({ file }) => `${file} n’est pas un fichier de modèle (.yml ou .etx).`,

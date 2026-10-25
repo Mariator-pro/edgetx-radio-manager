@@ -18,6 +18,11 @@ export const cs: Texts = {
   lastChecked: (d) => `Naposledy zkontrolováno ${d}`,
   notChecked: 'Zatím nezkontrolováno',
   checkUpdates: 'Hledat aktualizace',
+  appUpdateAvailable: (v) => `Je k dispozici Radio Manager ${v}`,
+  appUpdateInstall: 'Aktualizovat a restartovat',
+  appUpdateDownload: 'Stáhnout',
+  appDownloading: (pct) => `Stahuji aktualizaci … ${pct} %`,
+  appRestarting: 'Restartuji …',
   theme: 'Vzhled',
   light: 'Světlý',
   dark: 'Tmavý',
@@ -364,6 +369,8 @@ export const cs: Texts = {
     dfuFailed: ({ detail }) => `dfu-util selhal: ${detail}`,
     cancelled: () => 'Zrušeno.',
     radioTimeout: () => 'Vysílačka se včas neozvala.',
+
+    appUpdateFailed: () => 'Aktualizaci aplikace se nepodařilo stáhnout. Zkontrolujte připojení k internetu a zkuste to znovu.',
 
     modelNotFound: ({ name }) => `Model ${name} nenalezen.`,
     notModelFile: ({ file }) => `${file} není soubor modelu (.yml nebo .etx).`,

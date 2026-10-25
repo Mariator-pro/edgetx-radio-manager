@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { app, BrowserWindow, screen, shell } from 'electron';
 import { paths } from '../core/paths.ts';
 import { startServer } from '../server/server.ts';
+import { appUpdates } from './update.ts';
 
 // Fixed port so the page keeps its origin and with it the stored language and theme; the CLI uses 5174.
 const PORT = 5175;
@@ -12,8 +13,11 @@ const WINDOW_MARGIN = 24;
 if (process.platform === 'darwin') process.env.PATH = ['/opt/homebrew/bin', '/usr/local/bin', process.env.PATH].join(':');
 
 async function start(): Promise<void> {
+  // only the installed app updates itself, not a start from the source folder
+  const updates = app.isPackaged ? appUpdates() : undefined;
   const o = {
     paths: paths(),
+    appUpdates: updates,
     staticDir: join(app.getAppPath(), 'dist', 'ui'),
     // own projects' checkouts next to this repo only when run from the source folder
     repoParent: app.isPackaged ? undefined : join(app.getAppPath(), '..'),
@@ -49,6 +53,8 @@ async function start(): Promise<void> {
     void shell.openExternal(url);
   });
   await win.loadURL(server.url);
+  // without internet or GitHub the app runs on as it is
+  updates?.check().catch((e: unknown) => console.error('Update check failed:', e));
 }
 
 if (!app.requestSingleInstanceLock()) app.quit();

@@ -15,6 +15,11 @@ export const sv: Texts = {
   lastChecked: (d) => `Senast kontrollerad ${d}`,
   notChecked: 'Inte kontrollerad än',
   checkUpdates: 'Sök efter uppdateringar',
+  appUpdateAvailable: (v) => `Radio Manager ${v} finns tillgänglig`,
+  appUpdateInstall: 'Uppdatera och starta om',
+  appUpdateDownload: 'Ladda ner',
+  appDownloading: (pct) => `Laddar ner uppdatering … ${pct} %`,
+  appRestarting: 'Startar om …',
   theme: 'Utseende',
   light: 'Ljust',
   dark: 'Mörkt',
@@ -360,6 +365,8 @@ export const sv: Texts = {
     dfuFailed: ({ detail }) => `dfu-util misslyckades: ${detail}`,
     cancelled: () => 'Avbrutet.',
     radioTimeout: () => 'Radion dök inte upp i tid.',
+
+    appUpdateFailed: () => 'Det gick inte att ladda ner uppdateringen av appen. Kontrollera internetanslutningen och försök igen.',
 
     modelNotFound: ({ name }) => `Modellen ${name} hittades inte.`,
     notModelFile: ({ file }) => `${file} är ingen modellfil (.yml eller .etx).`,

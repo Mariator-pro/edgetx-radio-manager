@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { versionDir } from '../src/core/packages.ts';
 import { paths } from '../src/core/paths.ts';
-import { TOKEN_HEADER, TOKEN_META, type BackupView, type PlanView, type RestorePlanView, type RestoreResultView, type StateView, type UpdateResultView } from '../src/server/api.ts';
+import { TOKEN_HEADER, TOKEN_META, type AppUpdateView, type BackupView, type PlanView, type RestorePlanView, type RestoreResultView, type StateView, type UpdateResultView } from '../src/server/api.ts';
 import { oneAtATime, startServer } from '../src/server/server.ts';
 import { ApiError, errorText } from '../src/ui/errors.ts';
 import { TEXTS } from '../src/ui/texts.ts';
@@ -50,6 +50,7 @@ describe('server', () => {
     const r = state.radios[0]!;
     expect(r).toMatchObject({ board: 'tx16smk3', name: 'RadioMaster TX16S MK3', firmware: '2.12.3', belowMin: false, updates: ['edgetx-sdcard'] });
     expect(r.sources.find((x) => x.name === 'edgetx-sdcard')).toMatchObject({ on: true, fixed: true, available: 'v2.12.3' });
+    expect(state.appUpdate).toBeUndefined();
   });
 
   it('plans and runs an update with a backup first', async () => {
@@ -151,6 +152,56 @@ describe('server', () => {
     } finally {
       other.close();
     }
+  });
+});
+
+describe('app update', () => {
+  // a server with app updates as the desktop app gives it; install fails once on request
+  const start = async (installable: boolean, fail = false) => {
+    let changed = () => {};
+    const view: AppUpdateView = { version: '9.0.0', url: 'https://example.com/v9.0.0', installable };
+    const s = await startServer({
+      paths: paths(await tempDir()),
+      port: 0,
+      pollMs: 60_000,
+      appUpdates: {
+        view: () => view,
+        onChange: (fn) => (changed = fn),
+        install: async (onProgress) => {
+          if (fail) throw new Error('net::ERR_INTERNET_DISCONNECTED');
+          onProgress(50);
+          view.restarting = true;
+          changed();
+        },
+      },
+    });
+    const ask = (path: string, method = 'GET') => fetch(s.url + path, { method, headers: { [TOKEN_HEADER]: s.token } });
+    return { s, ask };
+  };
+
+  it('shows a newer release and installs it where the app can', async () => {
+    const { s, ask } = await start(true);
+    expect(((await (await ask('/api/state')).json()) as StateView).appUpdate).toMatchObject({ version: '9.0.0', installable: true });
+    expect((await ask('/api/app-update', 'POST')).status).toBe(200);
+    expect(((await (await ask('/api/state')).json()) as StateView).appUpdate?.restarting).toBe(true);
+    s.close();
+  });
+
+  it('only links to the download where the app cannot install it', async () => {
+    const { s, ask } = await start(false);
+    const r = await ask('/api/app-update', 'POST');
+    expect(r.status).toBe(400);
+    expect(((await r.json()) as { code: string }).code).toBe('invalidRequest');
+    s.close();
+  });
+
+  it('reports a failed download as a code the interface translates', async () => {
+    const { s, ask } = await start(true, true);
+    const r = await ask('/api/app-update', 'POST');
+    expect(r.status).toBe(400);
+    expect(((await r.json()) as { code: string }).code).toBe('appUpdateFailed');
+    expect(((await (await ask('/api/state')).json()) as StateView).busy).toBeUndefined();
+    s.close();
   });
 });
 

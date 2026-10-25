@@ -22,6 +22,11 @@ export const be: Texts = {
   lastChecked: (d) => `Апошняя праверка ${d}`,
   notChecked: 'Яшчэ не правяралася',
   checkUpdates: 'Праверыць абнаўленні',
+  appUpdateAvailable: (v) => `Даступны Radio Manager ${v}`,
+  appUpdateInstall: 'Абнавіць і перазапусціць',
+  appUpdateDownload: 'Спампаваць',
+  appDownloading: (pct) => `Спампоўка абнаўлення … ${pct} %`,
+  appRestarting: 'Перазапуск …',
   theme: 'Выгляд',
   light: 'Светлы',
   dark: 'Цёмны',
@@ -368,6 +373,8 @@ export const be: Texts = {
     dfuFailed: ({ detail }) => `Памылка dfu-util: ${detail}`,
     cancelled: () => 'Скасавана.',
     radioTimeout: () => 'Апаратура не з’явілася своечасова.',
+
+    appUpdateFailed: () => 'Не ўдалося спампаваць абнаўленне праграмы. Праверце падключэнне да інтэрнэту і паспрабуйце яшчэ раз.',
 
     modelNotFound: ({ name }) => `Мадэль ${name} не знойдзена.`,
     notModelFile: ({ file }) => `${file} не з’яўляецца файлам мадэлі (.yml або .etx).`,

@@ -1,4 +1,5 @@
-# A pushed tag like v0.2.0 builds the desktop app for macOS, Windows and Linux and attaches it to the GitHub release.
+# A pushed tag like v0.2.0 builds the desktop app for macOS, Windows and Linux and attaches it to the GitHub release,
+# together with the files the app's own update needs on Windows and Linux.
 name: Release
 
 on:
@@ -40,7 +41,13 @@ jobs:
       - if: runner.os == 'Linux'
         working-directory: release
         run: for f in *.AppImage; do zip "${f%.AppImage}.zip" "$f"; done
+      # The bare installer, AppImage, block map and latest*.yml are what the app's own update downloads on Windows and Linux
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             release/*.zip
+            release/*.exe
+            release/*.exe.blockmap
+            release/*.AppImage
+            release/latest.yml
+            release/latest-linux.yml

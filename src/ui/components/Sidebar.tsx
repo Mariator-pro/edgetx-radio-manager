@@ -14,8 +14,11 @@ export function Sidebar(props: {
   volume?: string;
   onNavigate: (page: Page, volume?: string) => void;
   onDownload: () => void;
+  onAppUpdate: () => void;
 }) {
-  const { state, progress, page, volume, onNavigate, onDownload } = props;
+  const { state, progress, page, volume, onNavigate, onDownload, onAppUpdate } = props;
+  const appUpdate = state?.appUpdate;
+  const updatingApp = state?.busy === 'appUpdate';
   const { t, lang, setLang, theme, setTheme } = usePrefs();
   const downloading = state?.busy === 'download';
   const overview = [
@@ -49,6 +52,28 @@ export function Sidebar(props: {
         <span className="font-semibold text-white">Radio Manager</span>
         <span className="text-xs text-zinc-400">v{__APP_VERSION__}</span>
       </div>
+
+      {appUpdate && (
+        <div className="flex flex-col gap-2 rounded-xl bg-zinc-800 p-3">
+          <span className="text-xs text-zinc-300">
+            {appUpdate.restarting
+              ? t.appRestarting
+              : updatingApp
+                ? t.appDownloading(progress?.op === 'appUpdate' ? (progress.done ?? 0) : 0)
+                : t.appUpdateAvailable(appUpdate.version)}
+          </span>
+          {appUpdate.installable ? (
+            <Button variant="primary" isDisabled={!!state?.busy || appUpdate.restarting} onPress={onAppUpdate}>
+              {(updatingApp || appUpdate.restarting) && <Spinner size="sm" color="current" />}
+              {t.appUpdateInstall}
+            </Button>
+          ) : (
+            <a href={appUpdate.url} target="_blank" rel="noreferrer" className="text-sm font-medium text-accent no-underline hover:underline">
+              {t.appUpdateDownload}
+            </a>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-col gap-1.5">
         <span className="px-2 text-[11px] font-medium tracking-wider text-zinc-400 uppercase">{t.connected}</span>

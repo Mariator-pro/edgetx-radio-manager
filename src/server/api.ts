@@ -52,12 +52,21 @@ export interface RadioView {
   backups: number;
 }
 
+// A newer release of the desktop app.
+export interface AppUpdateView {
+  version: string; // without "v"
+  url: string; // its release page
+  installable: boolean; // the app installs it itself (Windows, Linux); macOS only links to the download
+  restarting?: boolean; // downloaded, the app is about to restart into it
+}
+
 export interface StateView {
   radios: RadioView[];
   sources: SourceView[];
   busy?: string;
   lastCheck?: string;
   backupsToKeep: number;
+  appUpdate?: AppUpdateView;
 }
 
 export interface ProgressEvent {

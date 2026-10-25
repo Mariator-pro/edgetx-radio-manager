@@ -22,6 +22,11 @@ export const ru: Texts = {
   lastChecked: (d) => `Последняя проверка ${d}`,
   notChecked: 'Ещё не проверялось',
   checkUpdates: 'Проверить обновления',
+  appUpdateAvailable: (v) => `Доступен Radio Manager ${v}`,
+  appUpdateInstall: 'Обновить и перезапустить',
+  appUpdateDownload: 'Скачать',
+  appDownloading: (pct) => `Загрузка обновления … ${pct} %`,
+  appRestarting: 'Перезапуск …',
   theme: 'Оформление',
   light: 'Светлое',
   dark: 'Тёмное',
@@ -368,6 +373,8 @@ export const ru: Texts = {
     dfuFailed: ({ detail }) => `Ошибка dfu-util: ${detail}`,
     cancelled: () => 'Отменено.',
     radioTimeout: () => 'Аппаратура не появилась вовремя.',
+
+    appUpdateFailed: () => 'Не удалось загрузить обновление программы. Проверьте подключение к интернету и попробуйте ещё раз.',
 
     modelNotFound: ({ name }) => `Модель ${name} не найдена.`,
     notModelFile: ({ file }) => `${file} не является файлом модели (.yml или .etx).`,

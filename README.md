@@ -31,6 +31,13 @@ The app is not signed with an Apple or Microsoft certificate, so the system warn
 - **Windows**: if a SmartScreen window appears, click "More info" and then "Run anyway".
 - **Linux**: no warning. If the file manager does not start the AppImage, mark it as executable (`chmod +x`).
 
+### Updating the app
+
+On start the app looks for a newer release and shows it at the top left:
+
+- **Windows and Linux**: "Update and restart" downloads the new version, installs it in place and starts it again. Your data and settings stay.
+- **macOS**: "Download" opens the release page. Install the new version like the first one; the app replaces the old one in Applications. macOS accepts an in-place update only for apps signed with an Apple certificate, which this one is not.
+
 ### Only for radios that flash over DFU
 
 Radios with a UF2 bootloader (for example RadioMaster TX15 and TX16S Mk III) get their firmware through a USB drive in the bootloader and need nothing extra. Others such as the TX16S flash over USB DFU and need [`dfu-util`](https://dfu-util.sourceforge.net/), which is not bundled. The app tells you when your radio needs it and blocks flashing until it is installed:
@@ -201,7 +208,7 @@ npm run dist      # builds the installers for your own system into release/
 
 The app starts the server itself (port 5175) and shows the interface in its own window; links to GitHub open in the browser. The licenses of the bundled open source packages are in `THIRD_PARTY_LICENSES.txt` in the app's resources folder, next to Electron's own license files.
 
-A new release is made with a tag: bump the version in `package.json`, then `git tag v0.2.0 && git push origin v0.2.0`. The GitHub workflow `.github/workflows/release.yml` builds the app for macOS and Windows and attaches the files to the release.
+A new release is made with a tag: bump the version in `package.json`, then `git tag v0.2.0 && git push origin v0.2.0`. The GitHub workflow `.github/workflows/release.yml` builds the app for macOS, Windows and Linux and attaches the files to the release: one zip per installer for download, and for the app's own update on Windows and Linux the bare installer, the AppImage and their `latest*.yml` files.
 
 ## Development
 

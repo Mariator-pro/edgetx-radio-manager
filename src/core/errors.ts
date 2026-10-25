@@ -49,6 +49,8 @@ export const ERRORS = {
   dfuFailed: (p: { detail: string }) => `dfu-util failed: ${p.detail}`,
   cancelled: () => 'Cancelled',
   radioTimeout: () => 'The radio did not show up in time',
+
+  appUpdateFailed: () => 'The app update could not be downloaded. Check the internet connection and try again.',
 };
 
 export type ErrorCode = keyof typeof ERRORS;

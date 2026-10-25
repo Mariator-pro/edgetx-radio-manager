@@ -63,6 +63,7 @@ import { listVolumes } from '../platform/volumes.ts';
 import {
   TOKEN_HEADER,
   withToken,
+  type AppUpdateView,
   type FirmwareCatalogView,
   type FirmwareFileView,
   type FirmwareView,
@@ -93,6 +94,14 @@ export interface ServerOptions {
   staticDir?: string; // built interface; without it only /api is served (Vite serves the page)
   repoParent?: string; // where the own projects' checkouts are looked for; without it none are looked for
   pollMs?: number;
+  appUpdates?: AppUpdates; // desktop app only
+}
+
+// The desktop app's own updates: the newer release found, and installing it where the app can do that itself.
+export interface AppUpdates {
+  view: () => AppUpdateView | undefined;
+  onChange: (fn: () => void) => void;
+  install: (onProgress: (pct: number) => void) => Promise<void>;
 }
 
 class HttpError<C extends ErrorCode> extends AppError<C> {
@@ -213,7 +222,11 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; toke
       source: e.source,
       file: e.type === 'file' ? e.file : undefined,
     });
-  const pushState = async () => send('state', await stateView(p, s, cards, boards, busy));
+  const state = async () => {
+    const appUpdate = o.appUpdates?.view();
+    return { ...(await stateView(p, s, cards, boards, busy)), ...(appUpdate ? { appUpdate } : {}) };
+  };
+  const pushState = async () => send('state', await state());
   const boardOf = (c: RadioCard) => c.board ?? boards.get(c.volume);
   const ctxOf = (board: string) => ({ board, voices: soundsOf(s.radios[board]) });
 
@@ -346,7 +359,7 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; toke
     });
 
   const routes: Record<string, (req: IncomingMessage, q: URLSearchParams) => Promise<unknown>> = {
-    'GET /api/state': () => stateView(p, s, cards, boards, busy),
+    'GET /api/state': state,
     'GET /api/boards': async () => (await radioTypes(p, s)).map((r) => ({ board: r.board, name: r.name })),
     'POST /api/radio/board': async (req) => {
       const { volume, board } = await body<{ volume: string; board: string }>(req);
@@ -627,6 +640,16 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; toke
       await saveSettings(p, s);
       await pushState();
     },
+    'POST /api/app-update': async () => {
+      const u = o.appUpdates;
+      if (!u?.view()?.installable) throw new HttpError(400, 'invalidRequest', { what: 'app update' });
+      return op('appUpdate', () =>
+        u.install((pct) => progress({ op: 'appUpdate', step: 'download', text: `App update ${pct} %`, done: pct, total: 100 })).catch((e: unknown) => {
+          console.error(e);
+          throw new AppError('appUpdateFailed');
+        }),
+      );
+    },
     'POST /api/sources/remove': async (req) => {
       const { name } = await body<{ name: string }>(req);
       if (!removeSource(s, name)) throw new HttpError(400, 'onlyProjectsRemovable');
@@ -660,7 +683,7 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; toke
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
         clients.add(res);
         req.on('close', () => clients.delete(res));
-        res.write(`event: state\ndata: ${JSON.stringify(await stateView(p, s, cards, boards, busy))}\n\n`);
+        res.write(`event: state\ndata: ${JSON.stringify(await state())}\n\n`);
         return;
       }
       const route = routes[`${req.method} ${url.pathname}`];
@@ -683,6 +706,7 @@ export async function startServer(o: ServerOptions): Promise<{ url: string; toke
     }
   });
 
+  o.appUpdates?.onChange(() => void pushState());
   await poll(true);
   const timer = setInterval(() => void poll().catch(() => {}), o.pollMs ?? 2000);
   await new Promise<void>((resolve, reject) => {

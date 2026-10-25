@@ -84,6 +84,7 @@ export function App() {
           if (v) setVolume(v);
         }}
         onDownload={() => run(async () => setNotice(downloadNotice(await post<DownloadResultView[]>('/api/download'), t)))}
+        onAppUpdate={() => run(() => post('/api/app-update'))}
       />
       <main className="box-border flex min-w-0 flex-[999_1_640px] flex-col gap-6 p-7">
         {!connected && (

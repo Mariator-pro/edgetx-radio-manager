@@ -15,6 +15,11 @@ export const zh: Texts = {
   lastChecked: (d) => `上次检查 ${d}`,
   notChecked: '尚未检查',
   checkUpdates: '检查更新',
+  appUpdateAvailable: (v) => `Radio Manager ${v} 已发布`,
+  appUpdateInstall: '更新并重启',
+  appUpdateDownload: '下载',
+  appDownloading: (pct) => `正在下载更新 … ${pct} %`,
+  appRestarting: '正在重启 …',
   theme: '外观',
   light: '浅色',
   dark: '深色',
@@ -358,6 +363,8 @@ export const zh: Texts = {
     dfuFailed: ({ detail }) => `dfu-util 失败：${detail}`,
     cancelled: () => '已取消。',
     radioTimeout: () => '遥控器未能及时出现。',
+
+    appUpdateFailed: () => '无法下载应用更新。请检查网络连接后重试。',
 
     modelNotFound: ({ name }) => `未找到模型 ${name}。`,
     notModelFile: ({ file }) => `${file} 不是模型文件（.yml 或 .etx）。`,
