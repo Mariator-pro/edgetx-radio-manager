@@ -290,7 +290,9 @@ export function FlashFlow({ board, name, progress, onBack }: { board: string; na
                       ? t.starting
                       : progress.step === 'download'
                         ? t.downloadingVersion(label(progress.file ?? ''))
-                        : method === 'uf2'
+                        : progress.step === 'flash'
+                          ? t.writingFile(progress.file ?? '')
+                          : method === 'uf2'
                           ? t.waitingUf2
                           : t.waitingDfu}
                   </span>

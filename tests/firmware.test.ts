@@ -120,6 +120,15 @@ describe('firmware', () => {
     expect(steps).toEqual(['waiting', 'writing']);
   });
 
+  it('does not say it waits when the bootloader drive is already there', async () => {
+    const p = await withFirmware();
+    const drive = await tempDir();
+    await writeTree(drive, { 'INFO_UF2.TXT': UF2_INFO });
+    const steps: string[] = [];
+    await flashFirmware(p, 'tx16smk3', 'v2.12.5', { volumes: async () => [drive], onProgress: (pr) => steps.push(pr.step) });
+    expect(steps).toEqual(['writing']);
+  });
+
   it('flashes the TX16S with dfu-util to the start of the internal flash', async () => {
     const p = await withFirmware();
     const bin = await tempDir();
@@ -130,18 +139,29 @@ describe('firmware', () => {
       `#!/bin/sh
 case "$1" in
   --version) echo "dfu-util 0.11" ;;
-  -l) echo 'Found DFU: [0483:df11] ver=2200, devnum=5, cfg=1, intf=0, path="1-1", alt=0, name="@Internal Flash  /0x08000000/04*016Kg", serial="1"' ;;
-  *) echo "$@" > "${log}"; cp "$8" "${bin}/written.bin"; printf 'Download\\t[====      ]  40%%\\rDownload\\t[==========] 100%%\\nFile downloaded successfully\\n' ;;
+  -l) echo l >> "${bin}/lists.txt"; echo 'Found DFU: [0483:df11] ver=2200, devnum=5, cfg=1, intf=0, path="1-1", alt=0, name="@Internal Flash  /0x08000000/04*016Kg", serial="1"' ;;
+  *) echo "$@" > "${log}"; cp "$8" "${bin}/written.bin"; printf 'Erase   \\t[=====     ]  50%%\\rErase   \\t[==========] 100%%\\nErase    done.\\nDownload\\t[====      ]  40%%\\rDownload\\t[==========] 100%%\\nDownload done.\\nFile downloaded successfully\\n' ;;
 esac
 `,
     );
     await chmod(fake, 0o755);
     const pct: number[] = [];
-    const r = await flashFirmware(p, 'tx16s', 'v2.12.5', { volumes: async () => [], dfuUtil: fake, onProgress: (pr) => pr.pct !== undefined && pct.push(pr.pct) });
+    const steps: string[] = [];
+    const r = await flashFirmware(p, 'tx16s', 'v2.12.5', {
+      volumes: async () => [],
+      dfuUtil: fake,
+      onProgress: (pr) => {
+        steps.push(pr.step);
+        if (pr.pct !== undefined) pct.push(pr.pct);
+      },
+    });
     expect(r.method).toBe('dfu');
     expect((await readFile(log, 'utf8')).trim()).toMatch(/^-d 0483:df11 -a 0 -s 0x08000000:leave -D .*firmware\.bin$/);
     expect(await readFile(join(bin, 'written.bin'), 'utf8')).toBe('BIN');
-    expect(pct).toContain(100);
+    // the radio was already in DFU mode: listed once, no waiting, the erase bar left out
+    expect(await readFile(join(bin, 'lists.txt'), 'utf8')).toBe('l\n');
+    expect(steps[0]).toBe('writing');
+    expect([...new Set(pct)]).toEqual([0, 40, 100]);
   });
 
   it('stops waiting when cancelled', async () => {

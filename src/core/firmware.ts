@@ -192,17 +192,29 @@ export async function listDfu(dfuUtil = 'dfu-util'): Promise<DfuDevice[]> {
   return parseDfuList((await run(dfuUtil, ['-l']).catch(() => ({ out: '' }))).out);
 }
 
-// Writes the .bin to the start of the internal flash and leaves DFU mode.
-export async function flashDfu(data: Buffer, onPercent: (pct: number) => void = () => {}, dfuUtil = 'dfu-util'): Promise<void> {
-  const devices = (await listDfu(dfuUtil)).filter((d) => d.name.includes('Internal Flash'));
+// Radios in DFU mode whose internal flash can be written.
+export async function dfuRadios(dfuUtil = 'dfu-util'): Promise<DfuDevice[]> {
+  return (await listDfu(dfuUtil)).filter((d) => d.name.includes('Internal Flash'));
+}
+
+// Writes the .bin to the start of the internal flash and leaves DFU mode; devices when already listed.
+export async function flashDfu(data: Buffer, onPercent: (pct: number) => void = () => {}, dfuUtil = 'dfu-util', devices?: DfuDevice[]): Promise<void> {
+  devices ??= await dfuRadios(dfuUtil);
   if (devices.length === 0) throw new AppError('noDfuRadio');
   if (devices.length > 1) throw new AppError('severalDfu');
   const dir = await mkdtemp(join(tmpdir(), 'radio-manager-dfu-'));
   const file = join(dir, 'firmware.bin');
   try {
     await writeFile(file, data);
+    // progress lines end in \r or \n and may span chunks; only "Download", the erase before it has its own bar
+    let line = '';
     const r = await run(dfuUtil, ['-d', '0483:df11', '-a', '0', '-s', '0x08000000:leave', '-D', file], (chunk) => {
-      for (const m of chunk.matchAll(/(\d{1,3})%/g)) onPercent(Number(m[1]));
+      const parts = (line + chunk).split(/[\r\n]/);
+      line = parts.at(-1)!;
+      for (const part of parts) {
+        const m = part.match(/^Download\b.*?(\d{1,3})%/);
+        if (m) onPercent(Number(m[1]));
+      }
     });
     // dfu-util may report an error after ":leave" when the radio has already restarted
     if (r.code !== 0 && !/File downloaded successfully|Download done/i.test(r.out)) {
@@ -248,19 +260,27 @@ export async function flashFirmware(p: Paths, board: string, tag: string, o: Fla
 // The same for any firmware file; checkFirmwareFile comes first for one the user chose.
 export async function flashFile(board: string, fw: { name: string; data: Buffer }, o: FlashOptions): Promise<{ method: FlashMethod; file: string }> {
   const say = o.onProgress ?? (() => {});
+  // looks once before saying it waits, so a radio that is already connected goes straight to writing
+  const find = async <T>(check: () => Promise<T | undefined>, text: string): Promise<T> => {
+    const found = await check();
+    if (found !== undefined) return found;
+    say({ step: 'waiting', text, file: fw.name });
+    return waitFor(check, o.signal, o.timeoutMs);
+  };
   const method = methodOf(fw.name.toLowerCase());
   if (method === 'uf2') {
-    say({ step: 'waiting', text: 'Waiting for the bootloader drive …', file: fw.name });
-    const drive = await waitFor(async () => findUf2Drive(await o.volumes()), o.signal, o.timeoutMs);
+    const drive = await find(async () => findUf2Drive(await o.volumes()), 'Waiting for the bootloader drive …');
     say({ step: 'writing', text: `Writing ${fw.name} to ${drive.volume} …`, file: fw.name });
     await flashUf2(drive, board, fw.data);
   } else {
     const dfuUtil = o.dfuUtil ?? 'dfu-util';
     if (!(await dfuUtilAvailable(dfuUtil))) throw new AppError('dfuUtilMissing');
-    say({ step: 'waiting', text: 'Waiting for the radio in DFU mode …', file: fw.name });
-    await waitFor(async () => (await listDfu(dfuUtil)).find((d) => d.name.includes('Internal Flash')), o.signal, o.timeoutMs);
+    const devices = await find(async () => {
+      const found = await dfuRadios(dfuUtil);
+      return found.length > 0 ? found : undefined;
+    }, 'Waiting for the radio in DFU mode …');
     say({ step: 'writing', text: `Writing ${fw.name} …`, file: fw.name, pct: 0 });
-    await flashDfu(fw.data, (pct) => say({ step: 'writing', text: `Writing ${fw.name} …`, file: fw.name, pct }), dfuUtil);
+    await flashDfu(fw.data, (pct) => say({ step: 'writing', text: `Writing ${fw.name} …`, file: fw.name, pct }), dfuUtil, devices);
   }
   return { method, file: fw.name };
 }
