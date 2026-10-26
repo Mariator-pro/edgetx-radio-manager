@@ -105,6 +105,10 @@ export const sv: Texts = {
   changeSources: 'Ändra källor',
   reading: 'Läser paket och SD-kort …',
   updateFailed: 'Uppdateringen misslyckades',
+  updateCancelled: 'Uppdateringen avbröts',
+  flowRunning: { update: 'SD-uppdateringen pågår fortfarande', restore: 'Återställningen pågår fortfarande', modelsFlow: 'Modellerna skrivs fortfarande', flash: 'Flashningen pågår fortfarande' },
+  flowEnded: { update: 'SD-uppdateringen är klar', restore: 'Återställningen är klar', modelsFlow: 'Skrivningen av modellerna är klar', flash: 'Flashningen är klar' },
+  showFlow: 'Visa',
   reviewTitle: 'Granska planen',
   reviewText: 'Detta ändras på SD-kortet. Modeller, inställningar och filer du själv har kopierat lämnas orörda.',
   notAvailable: 'Inte tillgänglig',
@@ -364,6 +368,7 @@ export const sv: Texts = {
     severalDfu: () => 'Mer än en enhet i DFU-läge hittades. Anslut bara radion.',
     dfuFailed: ({ detail }) => `dfu-util misslyckades: ${detail}`,
     cancelled: () => 'Avbrutet.',
+    updateCancelled: ({ backup }) => (backup ? `Uppdateringen avbröts. Filerna som redan skrivits ligger kvar på SD-kortet; säkerhetskopian ${backup} innehåller läget från innan.` : 'Uppdateringen avbröts under säkerhetskopieringen. Inget på SD-kortet ändrades.'),
     radioTimeout: () => 'Radion dök inte upp i tid.',
 
     appUpdateFailed: () => 'Det gick inte att ladda ner uppdateringen av appen. Kontrollera internetanslutningen och försök igen.',

@@ -43,6 +43,15 @@ describe('backupCard', () => {
     const b = await backupCard(card, 'tx15', p, when);
     expect([a.name, b.name]).toEqual(['2026-10-21_1430', '2026-10-21_1430_2']);
   });
+
+  it('keeps nothing of a cancelled backup', async () => {
+    const card = await tempDir();
+    const p = paths(await tempDir());
+    await writeTree(card, { 'RADIO/a': '1', 'MODELS/b': '2' });
+    const abort = new AbortController();
+    await expect(backupCard(card, 'tx15', p, when, () => abort.abort(), abort.signal)).rejects.toMatchObject({ code: 'cancelled' });
+    expect(await listBackups(p, 'tx15')).toEqual([]);
+  });
 });
 
 describe('pruneBackups', () => {

@@ -105,6 +105,10 @@ export const da: Texts = {
   changeSources: 'Skift kilder',
   reading: 'Læser pakker og SD-kort …',
   updateFailed: 'Opdateringen mislykkedes',
+  updateCancelled: 'Opdateringen blev annulleret',
+  flowRunning: { update: 'SD-opdateringen kører stadig', restore: 'Gendannelsen kører stadig', modelsFlow: 'Modellerne skrives stadig', flash: 'Flashingen kører stadig' },
+  flowEnded: { update: 'SD-opdateringen er færdig', restore: 'Gendannelsen er færdig', modelsFlow: 'Skrivningen af modellerne er færdig', flash: 'Flashingen er færdig' },
+  showFlow: 'Vis',
   reviewTitle: 'Gennemse planen',
   reviewText: 'Dette ændres på SD-kortet. Modeller, indstillinger og filer, du selv har kopieret, forbliver urørte.',
   notAvailable: 'Ikke tilgængelig',
@@ -364,6 +368,7 @@ export const da: Texts = {
     severalDfu: () => 'Mere end én enhed i DFU-tilstand fundet. Tilslut kun radioen.',
     dfuFailed: ({ detail }) => `dfu-util mislykkedes: ${detail}`,
     cancelled: () => 'Annulleret.',
+    updateCancelled: ({ backup }) => (backup ? `Opdatering annulleret. De filer, der allerede er skrevet, bliver på SD-kortet; backuppen ${backup} indeholder tilstanden fra før.` : 'Opdatering annulleret under backuppen. Intet på SD-kortet er ændret.'),
     radioTimeout: () => 'Radioen meldte sig ikke i tide.',
 
     appUpdateFailed: () => 'Opdateringen af appen kunne ikke downloades. Tjek internetforbindelsen, og prøv igen.',

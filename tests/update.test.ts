@@ -238,6 +238,16 @@ describe('plan and apply', () => {
     expect(Object.keys(card.installed!.files).sort()).toEqual(['WIDGETS/A/main.lua', 'WIDGETS/A/same.lua']);
   });
 
+  it('stops after the current file when cancelled and leaves the list as it was', async () => {
+    const root = await newCard();
+    const contents = [pkg('a', 'release', 1, { 'WIDGETS/A/one.lua': '1', 'WIDGETS/A/two.lua': '2' })];
+    const plan = await makePlan(root, mergePackages(contents));
+    const abort = new AbortController();
+    await expect(applyPlan(root, { plan, contents }, new Map(), () => abort.abort(), abort.signal)).rejects.toMatchObject({ code: 'cancelled' });
+    expect(await readdir(join(root, 'WIDGETS/A'))).toEqual(['one.lua']);
+    expect((await readCard(root))!.installed).toBeUndefined();
+  });
+
   it('replaces, deletes what no package delivers any more, drops stale .luac and empty folders', async () => {
     const root = await newCard();
     const v1 = [pkg('a', 'release', 1, { 'SCRIPTS/A/core.lua': 'v1', 'SCRIPTS/A/old/gone.lua': 'g', 'SCRIPTS/TOOLS/T.lua': 't' })];

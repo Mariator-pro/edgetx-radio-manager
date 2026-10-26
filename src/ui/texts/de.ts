@@ -105,6 +105,10 @@ export const de: Texts = {
   changeSources: 'Quellen ändern',
   reading: 'Lese Pakete und SD-Karte …',
   updateFailed: 'Das Update hat nicht geklappt',
+  updateCancelled: 'Das Update wurde abgebrochen',
+  flowRunning: { update: 'Das SD-Update läuft noch', restore: 'Das Zurückspielen läuft noch', modelsFlow: 'Die Modelle werden noch geschrieben', flash: 'Das Flashen läuft noch' },
+  flowEnded: { update: 'Das SD-Update ist beendet', restore: 'Das Zurückspielen ist beendet', modelsFlow: 'Das Schreiben der Modelle ist beendet', flash: 'Das Flashen ist beendet' },
+  showFlow: 'Anzeigen',
   reviewTitle: 'Plan prüfen',
   reviewText: 'Das ändert sich auf der SD-Karte. Modelle, Einstellungen und selbst kopierte Dateien bleiben unberührt.',
   notAvailable: 'Nicht verfügbar',
@@ -364,6 +368,7 @@ export const de: Texts = {
     severalDfu: () => 'Mehr als ein Gerät im DFU-Modus gefunden. Bitte nur den Sender anstecken.',
     dfuFailed: ({ detail }) => `dfu-util ist fehlgeschlagen: ${detail}`,
     cancelled: () => 'Abgebrochen.',
+    updateCancelled: ({ backup }) => (backup ? `Update abgebrochen. Die bis dahin geschriebenen Dateien bleiben auf der SD-Karte; das Backup ${backup} enthält den Stand davor.` : 'Update während des Backups abgebrochen. Auf der SD-Karte wurde nichts geändert.'),
     radioTimeout: () => 'Der Sender hat sich nicht rechtzeitig gemeldet.',
 
     appUpdateFailed: () => 'Das App-Update konnte nicht geladen werden. Bitte die Internetverbindung prüfen und noch einmal versuchen.',

@@ -2,6 +2,7 @@ import { mkdir, readdir, rename, rm, rmdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { LIST_FILE, type InstalledList, type ListedFile } from './card.ts';
 import type { PackageContent } from './content.ts';
+import { AppError } from './errors.ts';
 import type { PlanItem } from './plan.ts';
 
 // For a conflict: keep the card's file, or go ahead (write the package version, or delete).
@@ -49,10 +50,12 @@ export async function applyPlan(
   { plan, contents, held }: ApplyInput,
   resolutions: Map<string, Resolution> = new Map(),
   onProgress: (pr: ApplyProgress) => void = () => {},
+  signal?: AbortSignal,
 ): Promise<ApplyResult> {
   const result: ApplyResult = { written: 0, deleted: 0, kept: 0 };
   const todo = plan.filter((i) => i.action !== 'unchanged');
   for (const [n, item] of todo.entries()) {
+    if (signal?.aborted) throw new AppError('cancelled');
     const go = item.action !== 'conflict' || resolutions.get(item.path) === 'apply';
     if (!go) result.kept++;
     else if (item.wanted) {

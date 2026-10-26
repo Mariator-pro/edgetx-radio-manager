@@ -70,6 +70,7 @@ export async function backupCard(
   p: Paths,
   now = new Date(),
   onProgress: (pr: BackupProgress) => void = () => {},
+  signal?: AbortSignal,
 ): Promise<BackupResult> {
   const base = join(p.backups, board);
   await mkdir(base, { recursive: true });
@@ -80,6 +81,11 @@ export async function backupCard(
   let bytesDone = 0;
   await mkdir(dir);
   for (const [i, f] of files.entries()) {
+    // a cancelled backup is incomplete, so it is not kept
+    if (signal?.aborted) {
+      await rm(dir, { recursive: true, force: true });
+      throw new AppError('cancelled');
+    }
     const rel = relative(volume, f.path);
     const target = join(dir, rel);
     await mkdir(dirname(target), { recursive: true });

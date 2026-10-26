@@ -105,6 +105,10 @@ export const fr: Texts = {
   changeSources: 'Modifier les sources',
   reading: 'Lecture des paquets et de la carte SD …',
   updateFailed: 'La mise à jour a échoué',
+  updateCancelled: 'La mise à jour a été annulée',
+  flowRunning: { update: 'La mise à jour de la carte SD est toujours en cours', restore: 'La restauration est toujours en cours', modelsFlow: 'Les modèles sont toujours en cours d’écriture', flash: 'Le flashage est toujours en cours' },
+  flowEnded: { update: 'La mise à jour de la carte SD est terminée', restore: 'La restauration est terminée', modelsFlow: 'L’écriture des modèles est terminée', flash: 'Le flashage est terminé' },
+  showFlow: 'Afficher',
   reviewTitle: 'Vérifiez le plan',
   reviewText: 'Voici ce qui change sur la carte SD. Les modèles, les réglages et les fichiers que vous avez copiés vous-même ne sont pas touchés.',
   notAvailable: 'Non disponible',
@@ -365,6 +369,7 @@ export const fr: Texts = {
     severalDfu: () => 'Plusieurs appareils en mode DFU trouvés. Ne branchez que la radiocommande.',
     dfuFailed: ({ detail }) => `dfu-util a échoué : ${detail}`,
     cancelled: () => 'Annulé.',
+    updateCancelled: ({ backup }) => (backup ? `Mise à jour annulée. Les fichiers déjà écrits restent sur la carte SD ; la sauvegarde ${backup} contient l’état d’avant.` : 'Mise à jour annulée pendant la sauvegarde. Rien n’a été modifié sur la carte SD.'),
     radioTimeout: () => 'La radiocommande n’est pas apparue à temps.',
 
     appUpdateFailed: () => 'La mise à jour de l’application n’a pas pu être téléchargée. Vérifiez la connexion Internet et réessayez.',

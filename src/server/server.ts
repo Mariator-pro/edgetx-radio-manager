@@ -209,7 +209,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
   const boards = new Map<string, string>(); // volume -> type chosen for a card without radio.yml
   const clients = new Set<ServerResponse>();
   let busy: string | undefined;
-  let flashAbort: AbortController | undefined;
+  let abort: AbortController | undefined; // stops the running operation, where it can be stopped
   // the firmware file chosen last on the flash page, until it is flashed or another one is chosen
   let customFirmware: { board: string; name: string; data: Buffer; check: FirmwareFileCheck } | undefined;
   // the firmware releases on GitHub, asked for at most every 10 minutes: GitHub allows 60 requests an hour
@@ -258,14 +258,16 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
   });
 
   // One long operation at a time; the state shows which one runs.
-  const op = async <T>(name: string, fn: () => Promise<T>): Promise<T> => {
+  const op = async <T>(name: string, fn: (signal: AbortSignal) => Promise<T>): Promise<T> => {
     if (busy) throw new HttpError(409, 'busy', { op: busy });
     busy = name;
+    abort = new AbortController();
     await pushState();
     try {
-      return await fn();
+      return await fn(abort.signal);
     } finally {
       busy = undefined;
+      abort = undefined;
       await poll(true);
     }
   };
@@ -295,12 +297,19 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
   };
 
   // info: why the backup is made; alsoKeep: the backup being restored, which the clean-up must not delete
-  const runBackup = async (c: RadioCard, board: string, info: BackupInfo, alsoKeep?: string) => {
+  const runBackup = async (c: RadioCard, board: string, info: BackupInfo, alsoKeep?: string, signal?: AbortSignal) => {
     let shown = -1;
-    const r = await backupCard(c.volume, board, p, new Date(), (pr) => {
-      const pct = pr.bytesTotal > 0 ? Math.floor((pr.bytesDone / pr.bytesTotal) * 100) : 100;
-      if (pct !== shown) progress({ op: busy ?? 'backup', step: 'backup', text: pr.file, done: (shown = pct), total: 100 });
-    });
+    const r = await backupCard(
+      c.volume,
+      board,
+      p,
+      new Date(),
+      (pr) => {
+        const pct = pr.bytesTotal > 0 ? Math.floor((pr.bytesDone / pr.bytesTotal) * 100) : 100;
+        if (pct !== shown) progress({ op: busy ?? 'backup', step: 'backup', text: pr.file, done: (shown = pct), total: 100 });
+      },
+      signal,
+    );
     (s.backupInfo[board] ??= {})[r.name] = info;
     dropBackups(board, await pruneBackups(p, board, s.backupsToKeep, [...(s.keptBackups[board] ?? []), ...(alsoKeep ? [alsoKeep] : [])]));
     await saveSettings(p, s);
@@ -352,19 +361,14 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
   };
 
   const flashWith = async (fn: (o: FlashOptions) => Promise<FlashResultView>): Promise<FlashResultView> =>
-    op('flash', async () => {
-      flashAbort = new AbortController();
-      try {
-        return await fn({
-          volumes: listVolumes,
-          signal: flashAbort.signal,
-          onProgress: (pr) =>
-            progress({ op: 'flash', step: pr.step === 'waiting' ? 'waiting' : 'flash', text: pr.text, file: pr.file, done: pr.pct, total: 100 }),
-        });
-      } finally {
-        flashAbort = undefined;
-      }
-    });
+    op('flash', (signal) =>
+      fn({
+        volumes: listVolumes,
+        signal,
+        onProgress: (pr) =>
+          progress({ op: 'flash', step: pr.step === 'waiting' ? 'waiting' : 'flash', text: pr.text, file: pr.file, done: pr.pct, total: 100 }),
+      }),
+    );
 
   const routes: Record<string, (req: IncomingMessage, q: URLSearchParams) => Promise<unknown>> = {
     'GET /api/state': state,
@@ -442,12 +446,20 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       const { volume, resolutions } = await body<{ volume: string; resolutions: Record<string, Resolution> }>(req);
       const [c, board] = await cardAt(volume);
       if (c.firmware && isBelowMin(c.firmware)) throw new HttpError(400, 'firmwareTooOld', { version: c.firmware, min: MIN_EDGETX });
-      return op('update', async (): Promise<UpdateResultView> => {
+      return op('update', async (signal): Promise<UpdateResultView> => {
         const setup = await prepareUpdate(p, s, c, board);
-        const b = await runBackup(c, board, { reason: 'update', changes: setup.changes });
-        const r = await applyPlan(c.volume, setup, new Map(Object.entries(resolutions ?? {})), (pr) =>
-          progress({ op: 'update', step: 'write', text: pr.path, done: pr.done, total: pr.total }),
-        );
+        // cancelled: during the backup the card is untouched; while writing, the backup holds the state before
+        const cancelled = (backup?: string) => (e: unknown) => {
+          throw e instanceof AppError && e.code === 'cancelled' ? new AppError('updateCancelled', { backup }) : e;
+        };
+        const b = await runBackup(c, board, { reason: 'update', changes: setup.changes }, undefined, signal).catch(cancelled());
+        const r = await applyPlan(
+          c.volume,
+          setup,
+          new Map(Object.entries(resolutions ?? {})),
+          (pr) => progress({ op: 'update', step: 'write', text: pr.path, done: pr.done, total: pr.total }),
+          signal,
+        ).catch(cancelled(b.name));
         return { ...r, backup: b.name };
       });
     },
@@ -596,8 +608,8 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
         return { ...r, version: fw.check.version };
       });
     },
-    'POST /api/firmware/cancel': async () => {
-      flashAbort?.abort();
+    'POST /api/cancel': async () => {
+      abort?.abort();
     },
     'GET /api/packages': () => packageViews(p, s),
     'POST /api/packages/delete': async (req) => {

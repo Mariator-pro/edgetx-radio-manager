@@ -1,7 +1,7 @@
 import { Alert, Button, Chip, Label, ProgressBar, Radio, RadioGroup, Spinner } from '@heroui/react';
 import { useEffect, useState } from 'react';
 import type { Action, PlanFileView, PlanView, ProgressEvent, RadioView, UpdateResultView } from '../../server/api.ts';
-import { errorText, post } from '../api.ts';
+import { ApiError, errorText, post } from '../api.ts';
 import { WarningIcon } from '../components/icons.tsx';
 import { Stepper } from '../components/Stepper.tsx';
 import { backupLabel } from '../format.ts';
@@ -73,6 +73,7 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
   const [result, setResult] = useState<UpdateResultView>();
   const [error, setError] = useState<unknown>();
   const [resolutions, setResolutions] = useState<Record<string, Resolution>>({});
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     post<PlanView>('/api/update/plan', { volume: radio.volume }).then(
@@ -101,6 +102,7 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
   const step = phase === 'running' ? (progress?.step === 'write' ? 3 : 2) : phase === 'done' ? 4 : 1;
   const c = plan?.counts;
   const nothing = c && c.add + c.replace + c.delete + c.conflict === 0;
+  const cancelled = error instanceof ApiError && error.info.code === 'updateCancelled';
 
   return (
     <div className="flex flex-col gap-7">
@@ -125,10 +127,10 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
       )}
 
       {phase === 'error' && (
-        <Alert status="danger">
+        <Alert status={cancelled ? 'warning' : 'danger'}>
           <Alert.Indicator />
           <Alert.Content>
-            <Alert.Title>{t.updateFailed}</Alert.Title>
+            <Alert.Title>{cancelled ? t.updateCancelled : t.updateFailed}</Alert.Title>
             <Alert.Description>{errorText(t, error)}</Alert.Description>
           </Alert.Content>
         </Alert>
@@ -266,6 +268,18 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
             </ProgressBar.Track>
           </ProgressBar>
           <code className="truncate font-mono text-xs text-muted">{progress?.text}</code>
+          <div>
+            <Button
+              variant="outline"
+              isDisabled={cancelling}
+              onPress={() => {
+                setCancelling(true);
+                void post('/api/cancel');
+              }}
+            >
+              {t.cancel}
+            </Button>
+          </div>
         </div>
       )}
 
@@ -278,7 +292,7 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
           </Alert.Content>
         </Alert>
       )}
-      {phase === 'done' && (
+      {(phase === 'done' || cancelled) && (
         <div>
           <Button onPress={onBack}>{t.backToRadio}</Button>
         </div>

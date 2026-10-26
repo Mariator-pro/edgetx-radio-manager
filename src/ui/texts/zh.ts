@@ -105,6 +105,10 @@ export const zh: Texts = {
   changeSources: '更改来源',
   reading: '正在读取软件包和 SD 卡 …',
   updateFailed: '更新失败',
+  updateCancelled: '更新已取消',
+  flowRunning: { update: 'SD 更新仍在进行', restore: '恢复仍在进行', modelsFlow: '模型仍在写入', flash: '刷写仍在进行' },
+  flowEnded: { update: 'SD 更新已结束', restore: '恢复已结束', modelsFlow: '模型写入已结束', flash: '刷写已结束' },
+  showFlow: '显示',
   reviewTitle: '检查计划',
   reviewText: '以下是 SD 卡上将发生的变化。模型、设置和你自己复制的文件不会被改动。',
   notAvailable: '不可用',
@@ -362,6 +366,7 @@ export const zh: Texts = {
     severalDfu: () => '找到多个处于 DFU 模式的设备。请只连接遥控器。',
     dfuFailed: ({ detail }) => `dfu-util 失败：${detail}`,
     cancelled: () => '已取消。',
+    updateCancelled: ({ backup }) => (backup ? `更新已取消。已写入的文件保留在 SD 卡上；备份 ${backup} 保存着之前的状态。` : '更新在备份期间被取消。SD 卡上没有任何更改。'),
     radioTimeout: () => '遥控器未能及时出现。',
 
     appUpdateFailed: () => '无法下载应用更新。请检查网络连接后重试。',

@@ -48,6 +48,10 @@ export const ERRORS = {
   severalDfu: () => 'More than one DFU device found',
   dfuFailed: (p: { detail: string }) => `dfu-util failed: ${p.detail}`,
   cancelled: () => 'Cancelled',
+  updateCancelled: (p: { backup?: string }) =>
+    p.backup
+      ? `Update cancelled. The files written so far stay on the SD card; backup ${p.backup} holds the state before.`
+      : 'Update cancelled during the backup. Nothing on the SD card was changed.',
   radioTimeout: () => 'The radio did not show up in time',
 
   appUpdateFailed: () => 'The app update could not be downloaded. Check the internet connection and try again.',

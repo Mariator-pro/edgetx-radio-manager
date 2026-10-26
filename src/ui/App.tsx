@@ -1,4 +1,4 @@
-import { Alert, CloseButton, Spinner } from '@heroui/react';
+import { Alert, Button, CloseButton, Spinner } from '@heroui/react';
 import { useEffect, useRef, useState } from 'react';
 import type { DownloadResultView, RadioView } from '../server/api.ts';
 import { errorText, post, useServer } from './api.ts';
@@ -16,6 +16,16 @@ import type { Texts } from './texts.ts';
 import { usePrefs } from './usePrefs.ts';
 
 type Notice = { status: 'success' | 'danger' | 'default'; title: string; text?: string };
+
+// The guided flows, the server operation each one runs and the page it starts from.
+type Flow = 'update' | 'restore' | 'modelsFlow' | 'flash';
+const FLOWS: Record<Flow, { op: string; home: Page }> = {
+  update: { op: 'update', home: 'radio' },
+  restore: { op: 'restore', home: 'backups' },
+  modelsFlow: { op: 'models', home: 'models' },
+  flash: { op: 'flash', home: 'radio' },
+};
+const isFlow = (p: Page): p is Flow => p in FLOWS;
 
 // One line per kind of error; a missing connection or the rate limit hit every source, so no names there.
 function downloadNotice(results: DownloadResultView[], t: Texts): Notice {
@@ -41,6 +51,12 @@ export function App() {
   const { t } = usePrefs();
   const [page, setPage] = useState<Page>('sources');
   const [volume, setVolume] = useState<string>();
+  // A flow left while its operation runs stays open in the background, so its progress and
+  // result can be shown again; starts counts the flows started, so a new one starts afresh.
+  const [kept, setKept] = useState<Flow>();
+  const [starts, setStarts] = useState(0);
+  // The update page keeps its radio, so it stays open when another radio is shown.
+  const [updating, setUpdating] = useState<RadioView>();
   // The radio leaves USB storage mode for flashing, so the flash page keeps its own radio.
   const [flashing, setFlashing] = useState<{ board: string; name: string }>();
   // The restore page keeps its radio too, so it can show the error when the card is pulled;
@@ -50,6 +66,18 @@ export function App() {
   const [notice, setNotice] = useState<Notice>();
   const known = useRef<Set<string>>(new Set());
 
+  const go = (next: Page) => {
+    if (next === page) return;
+    if (isFlow(page) && state?.busy === FLOWS[page].op) setKept(page);
+    else if (next === kept) setKept(undefined);
+    setPage(next);
+  };
+  const start = (flow: Flow) => {
+    setKept(undefined);
+    setStarts((n) => n + 1);
+    setPage(flow);
+  };
+
   // A newly connected radio opens its page; a removed one falls back to the overview.
   useEffect(() => {
     if (!state) return;
@@ -58,11 +86,14 @@ export function App() {
     known.current = new Set(volumes);
     if (added) {
       setVolume(added);
-      setPage('radio');
+      go('radio');
     } else if (volume && !volumes.includes(volume)) {
       setVolume(volumes[0]);
-      if (page === 'radio' || page === 'update') setPage(volumes.length > 0 ? 'radio' : 'sources');
+      // a running update stays and shows its error
+      if (page === 'radio' || (page === 'update' && state.busy !== 'update')) go(volumes.length > 0 ? 'radio' : 'sources');
     }
+    // go is new on every render; kept, the one value it reads besides these, changes only with page
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, volume, page]);
 
   const run = (fn: () => Promise<unknown>) => {
@@ -70,7 +101,48 @@ export function App() {
   };
 
   const radio = state?.radios.find((r) => r.volume === volume);
-  const showRadio = (page === 'radio' || page === 'update') && radio;
+  const shownFlow = isFlow(page) ? page : kept;
+
+  const flow = (f: Flow) => {
+    if (!state) return undefined;
+    if (f === 'flash' && flashing)
+      return <FlashFlow board={flashing.board} name={flashing.name} progress={progress} onBack={() => go(radio ? 'radio' : 'sources')} />;
+    if (f === 'restore' && restoring)
+      return (
+        <RestoreFlow
+          radio={state.radios.find((r) => r.volume === restoring.radio.volume) ?? restoring.radio}
+          name={restoring.name}
+          progress={progress}
+          onBack={() => go('backups')}
+        />
+      );
+    if (f === 'modelsFlow' && modelsRequest)
+      return (
+        <ModelsFlow
+          request={modelsRequest}
+          radio={state.radios.find((r) => r.volume === modelsRequest.radio.volume) ?? modelsRequest.radio}
+          progress={progress}
+          onBack={() => go('models')}
+        />
+      );
+    if (f === 'update' && updating) {
+      const live = state.radios.find((r) => r.volume === updating.volume);
+      // the card was pulled: back to the radio list, unless the update still runs
+      if (!live && state.busy !== 'update') return undefined;
+      return (
+        <UpdateFlow
+          radio={live ?? updating}
+          progress={progress}
+          onBack={() => {
+            setVolume(updating.volume);
+            go('radio');
+          }}
+        />
+      );
+    }
+    return undefined;
+  };
+  const flowView = shownFlow && flow(shownFlow);
 
   return (
     <div className="flex min-h-screen flex-wrap">
@@ -80,7 +152,9 @@ export function App() {
         page={page}
         volume={volume}
         onNavigate={(p, v) => {
-          setPage(p);
+          // the page a flow in the background started from leads back to it
+          const back = kept && FLOWS[kept].home === p && (kept !== 'update' || v === updating?.volume);
+          go(back ? kept : p);
           if (v) setVolume(v);
         }}
         onDownload={() => run(async () => setNotice(downloadNotice(await post<DownloadResultView[]>('/api/download'), t)))}
@@ -106,53 +180,47 @@ export function App() {
             <CloseButton aria-label={t.close} onPress={() => setNotice(undefined)} />
           </Alert>
         )}
+        {kept && page !== kept && flowView && (
+          <Alert status="default">
+            <Alert.Indicator />
+            <Alert.Content>
+              <Alert.Title>{state?.busy === FLOWS[kept].op ? t.flowRunning[kept] : t.flowEnded[kept]}</Alert.Title>
+            </Alert.Content>
+            <Button size="sm" variant="outline" onPress={() => go(kept)}>
+              {t.showFlow}
+            </Button>
+          </Alert>
+        )}
+        {flowView && (
+          <div key={`${shownFlow}|${starts}`} className={page === shownFlow ? 'contents' : 'hidden'}>
+            {flowView}
+          </div>
+        )}
         {!state ? (
           <Spinner />
-        ) : page === 'flash' && flashing ? (
-          <FlashFlow
-            board={flashing.board}
-            name={flashing.name}
-            progress={progress}
-            onBack={() => setPage(radio ? 'radio' : 'sources')}
-          />
-        ) : page === 'restore' && restoring ? (
-          <RestoreFlow
-            key={`${restoring.radio.volume}|${restoring.name}`}
-            radio={state.radios.find((r) => r.volume === restoring.radio.volume) ?? restoring.radio}
-            name={restoring.name}
-            progress={progress}
-            onBack={() => setPage('backups')}
-          />
-        ) : page === 'modelsFlow' && modelsRequest ? (
-          <ModelsFlow
-            key={JSON.stringify(modelsRequest)}
-            request={modelsRequest}
-            radio={state.radios.find((r) => r.volume === modelsRequest.radio.volume) ?? modelsRequest.radio}
-            progress={progress}
-            onBack={() => setPage('models')}
-          />
-        ) : page === 'models' ? (
+        ) : isFlow(page) && flowView ? null : page === 'models' ? (
           <ModelsPage
             state={state}
             run={run}
             onStart={(r) => {
               setModelsRequest(r);
-              setPage('modelsFlow');
+              start('modelsFlow');
             }}
           />
-        ) : showRadio && page === 'update' ? (
-          <UpdateFlow key={radio.volume} radio={radio} progress={progress} onBack={() => setPage('radio')} />
-        ) : showRadio ? (
+        ) : (page === 'radio' || page === 'update') && radio ? (
           <RadioPage
             radio={radio}
             busy={state.busy}
             keep={state.backupsToKeep}
             run={run}
-            onPlan={() => setPage('update')}
-            onSources={() => setPage('sources')}
+            onPlan={() => {
+              setUpdating(radio);
+              start('update');
+            }}
+            onSources={() => go('sources')}
             onFlash={() => {
               setFlashing({ board: radio.board!, name: radio.name });
-              setPage('flash');
+              start('flash');
             }}
           />
         ) : page === 'packages' ? (
@@ -166,7 +234,7 @@ export function App() {
             busy={state.busy}
             onRestore={(r, name) => {
               setRestoring({ radio: r, name });
-              setPage('restore');
+              start('restore');
             }}
           />
         ) : (

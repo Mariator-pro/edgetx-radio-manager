@@ -67,6 +67,7 @@
     "directories": {
       "output": "release"
     },
+    "afterPack": "scripts/after-pack.ts",
     "mac": {
       "target": [
         {

@@ -105,6 +105,10 @@ export const es: Texts = {
   changeSources: 'Cambiar fuentes',
   reading: 'Leyendo paquetes y tarjeta SD …',
   updateFailed: 'La actualización ha fallado',
+  updateCancelled: 'Se ha cancelado la actualización',
+  flowRunning: { update: 'La actualización de la SD sigue en curso', restore: 'La restauración sigue en curso', modelsFlow: 'Los modelos se siguen escribiendo', flash: 'El flasheo sigue en curso' },
+  flowEnded: { update: 'La actualización de la SD ha terminado', restore: 'La restauración ha terminado', modelsFlow: 'La escritura de los modelos ha terminado', flash: 'El flasheo ha terminado' },
+  showFlow: 'Mostrar',
   reviewTitle: 'Revisa el plan',
   reviewText: 'Esto es lo que cambia en la tarjeta SD. Los modelos, los ajustes y los archivos que copiaste tú no se tocan.',
   notAvailable: 'No disponible',
@@ -365,6 +369,7 @@ export const es: Texts = {
     severalDfu: () => 'Se encontró más de un dispositivo en modo DFU. Conecta solo la emisora.',
     dfuFailed: ({ detail }) => `dfu-util falló: ${detail}`,
     cancelled: () => 'Cancelado.',
+    updateCancelled: ({ backup }) => (backup ? `Actualización cancelada. Los archivos ya escritos se quedan en la tarjeta SD; la copia ${backup} guarda el estado anterior.` : 'Actualización cancelada durante la copia de seguridad. No se ha cambiado nada en la tarjeta SD.'),
     radioTimeout: () => 'La emisora no apareció a tiempo.',
 
     appUpdateFailed: () => 'No se pudo descargar la actualización de la aplicación. Comprueba la conexión a internet e inténtalo de nuevo.',

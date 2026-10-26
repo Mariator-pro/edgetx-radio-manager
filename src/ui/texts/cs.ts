@@ -108,6 +108,10 @@ export const cs: Texts = {
   changeSources: 'Změnit zdroje',
   reading: 'Načítám balíčky a SD kartu …',
   updateFailed: 'Aktualizace se nezdařila',
+  updateCancelled: 'Aktualizace byla zrušena',
+  flowRunning: { update: 'Aktualizace SD karty stále běží', restore: 'Obnovení stále běží', modelsFlow: 'Modely se stále zapisují', flash: 'Nahrávání firmwaru stále běží' },
+  flowEnded: { update: 'Aktualizace SD karty je dokončena', restore: 'Obnovení je dokončeno', modelsFlow: 'Zápis modelů je dokončen', flash: 'Nahrávání firmwaru je dokončeno' },
+  showFlow: 'Zobrazit',
   reviewTitle: 'Zkontrolujte plán',
   reviewText: 'Toto se na SD kartě změní. Modely, nastavení a soubory, které jste sami zkopírovali, zůstanou nedotčené.',
   notAvailable: 'Není k dispozici',
@@ -368,6 +372,7 @@ export const cs: Texts = {
     severalDfu: () => 'Nalezeno více zařízení v režimu DFU. Připojte prosím jen vysílačku.',
     dfuFailed: ({ detail }) => `dfu-util selhal: ${detail}`,
     cancelled: () => 'Zrušeno.',
+    updateCancelled: ({ backup }) => (backup ? `Aktualizace zrušena. Dosud zapsané soubory zůstávají na SD kartě; záloha ${backup} obsahuje předchozí stav.` : 'Aktualizace zrušena během zálohování. Na SD kartě se nic nezměnilo.'),
     radioTimeout: () => 'Vysílačka se včas neozvala.',
 
     appUpdateFailed: () => 'Aktualizaci aplikace se nepodařilo stáhnout. Zkontrolujte připojení k internetu a zkuste to znovu.',

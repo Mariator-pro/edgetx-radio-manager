@@ -105,6 +105,10 @@ export const it: Texts = {
   changeSources: 'Cambia sorgenti',
   reading: 'Lettura di pacchetti e scheda SD …',
   updateFailed: 'L’aggiornamento non è riuscito',
+  updateCancelled: 'L’aggiornamento è stato annullato',
+  flowRunning: { update: 'L’aggiornamento della SD è ancora in corso', restore: 'Il ripristino è ancora in corso', modelsFlow: 'I modelli sono ancora in scrittura', flash: 'Il flash è ancora in corso' },
+  flowEnded: { update: 'L’aggiornamento della SD è terminato', restore: 'Il ripristino è terminato', modelsFlow: 'La scrittura dei modelli è terminata', flash: 'Il flash è terminato' },
+  showFlow: 'Mostra',
   reviewTitle: 'Controlla il piano',
   reviewText: 'Ecco cosa cambia sulla scheda SD. Modelli, impostazioni e file che hai copiato tu restano intatti.',
   notAvailable: 'Non disponibile',
@@ -365,6 +369,7 @@ export const it: Texts = {
     severalDfu: () => 'Trovato più di un dispositivo in modalità DFU. Collega solo il radiocomando.',
     dfuFailed: ({ detail }) => `dfu-util non è riuscito: ${detail}`,
     cancelled: () => 'Annullato.',
+    updateCancelled: ({ backup }) => (backup ? `Aggiornamento annullato. I file già scritti restano sulla scheda SD; il backup ${backup} contiene lo stato precedente.` : 'Aggiornamento annullato durante il backup. Sulla scheda SD non è cambiato nulla.'),
     radioTimeout: () => 'Il radiocomando non si è presentato in tempo.',
 
     appUpdateFailed: () => 'Impossibile scaricare l’aggiornamento dell’app. Controlla la connessione a internet e riprova.',

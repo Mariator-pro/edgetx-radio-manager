@@ -303,7 +303,7 @@ export function FlashFlow({ board, name, progress, onBack }: { board: string; na
 
           <div className="flex gap-2">
             {phase === 'running' ? (
-              <Button variant="outline" isDisabled={writing} onPress={() => void post('/api/firmware/cancel')}>
+              <Button variant="outline" isDisabled={writing} onPress={() => void post('/api/cancel')}>
                 {t.cancel}
               </Button>
             ) : (
