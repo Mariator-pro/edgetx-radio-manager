@@ -2,7 +2,7 @@
 
 Keep your EdgeTX radio up to date without copying files by hand. Plug in the radio, and the app shows what is new: firmware, SD card content, voice packs and your Lua scripts and widgets from GitHub. It backs up the SD card before every change and never silently overwrites files you changed yourself.
 
-Desktop app for macOS, Windows and Linux, in twelve languages (English by default, the others in a menu at the bottom of the sidebar). A browser interface and a command line tool are included as well.
+Desktop app for macOS, Windows and Linux, in twelve languages (English by default, the others in a menu at the bottom of the sidebar). For advanced use, a [browser interface](docs/browser-interface.md) and a [command line tool](docs/command-line.md) are available when running from source.
 
 ![The radio page: firmware, SD card and backup status of a connected RadioMaster TX15](docs/screenshots/radio.png)
 
@@ -126,7 +126,7 @@ For every radio the app stores which sources go on the card and where they come 
 
 - **Release**: the newest downloaded GitHub release
 - **Main**: the newest commit of the main branch (own projects only), downloaded when needed
-- **Local**: a local git checkout. Checkouts of the projects next to this repo (e.g. `../edgetx-lipo-nanny`) are found automatically when the tool runs from source.
+- **Local**: a local git checkout, only when the app runs from source (see [Development](docs/development.md#running-from-source))
 
 What was installed on the card is recorded in `.radio-manager/installed.json` on the SD card. On the next update the app uses it to tell which files it wrote itself and which were changed since.
 
@@ -147,103 +147,14 @@ EdgeTX Radio Manager/
 
 On macOS the desktop app keeps its window data (language, theme) in the same folder, on Windows next to it in `%APPDATA%\EdgeTX Radio Manager\`, on Linux in `~/.config/EdgeTX Radio Manager/`.
 
-## Running from source
+## More documentation
 
-Needs Node.js 22.18 or newer (TypeScript runs directly, without a build step for the command line). Drive detection works on macOS, Windows and Linux (there: FAT and exFAT drives listed in `/proc/mounts`).
+You do not need any of this to use the app. It is for those who want to go further:
 
-```sh
-git clone https://github.com/Mariator-pro/edgetx-radio-manager.git
-cd edgetx-radio-manager
-npm install
-npm run build   # builds the browser interface into dist/ui, the desktop main process into dist/desktop and THIRD_PARTY_LICENSES.txt
-```
-
-### Browser interface
-
-```sh
-npm start
-```
-
-Starts the server on a free port and opens the browser, with the same pages as the desktop app. If it already runs, `npm start` opens the running one again. Language and theme are kept in the data folder, so they stay the same in the browser and in the desktop app.
-
-### Command line
-
-```sh
-npm run cli -- <command> [options]
-```
-
-| Command | What it does |
-| --- | --- |
-| `status` | Connected radio, installed and downloaded versions |
-| `download` | Check all sources for new releases and download them |
-| `backup` | Back up the whole SD card of the connected radio |
-| `update` | Show the plan, then back up and update the card |
-| `restore [backup]` | Without a name, list the backups of the connected radio with EdgeTX version, reason and note; with one (e.g. `restore 2026-10-23_2015`), show the plan, then back up the card and restore the backup |
-| `flash [version]` | Flash firmware, without a version the newest downloaded one; any other release is downloaded first (e.g. `flash v2.12.2` or `flash v2.12.0-rc4`); `flash --file <path>` flashes a `.uf2` or `.bin` of your own |
-| `sources` | List sources; `sources add <owner/repo>`, `sources remove <name>` |
-| `models` | List the models in the backups of the connected radio (or `--board`) with their versions, compared with the card |
-| `models copy <model> ...` | Show the plan, then back up the card and copy the newest version of these models onto it; `--from tx16smk3` takes them from another radio's backups, `--from tx16smk3/2026-10-23_1849` from one backup |
-| `models delete <model> ...` | Move models on the card to `MODELS/DELETED/`, after a backup |
-| `models export <model> ...` | Save models from the backups as `<model name>.yml` (`--out <folder>`, `--from`) |
-| `models import <file> [<model> ...]` | Copy models from a `.yml` or `.etx` file onto the card |
-| `models diff <model> [<backup> [<backup>]]` | Differences between two versions, without a second backup against the card |
-| `ui` | Open the browser interface (like `npm start`) |
-
-Options:
-
-- `--volume <path>`: use this drive instead of automatic detection
-- `--board <id>`: radio type when the card has no `RADIO/radio.yml` yet (e.g. `tx16s`)
-- `--no-backup`: restore, copy or delete models without backing up the card first
-- `--force`: with `flash --file`, flash a file that has no EdgeTX identification; with `models copy` or `models import`, copy models that do not fully fit the radio
-- `--add`: with `models copy` or `models import`, add the models as new ones instead of replacing those of the same name
-- `--from <radio>[/<backup>]`: with `models copy`, `export` or `diff`, take the models from these backups
-- `--out <folder>`: with `models export`, where the files go (default: the current folder)
-
-Typical flow: `download`, connect the radio in "USB Storage" mode, `update`.
-
-### Desktop app
-
-```sh
-npm run desktop   # builds everything and starts the app
-npm run dist      # builds the installers for your own system into release/
-```
-
-The app starts the server itself (on a free port) and shows the interface in its own window; links to GitHub open in the browser. The licenses of the bundled open source packages are in `THIRD_PARTY_LICENSES.txt` in the app's resources folder. Electron's own license files (`LICENSE.electron.txt`, `LICENSES.chromium.html`) are in the same folder on macOS and in the app folder on Windows and Linux.
-
-A new release is made with a tag: bump the version in `package.json`, then `git tag v0.2.0 && git push origin v0.2.0`. The GitHub workflow `.github/workflows/release.yml` builds the app for macOS, Windows and Linux and attaches the files to the release: one zip per installer for download, the portable Windows app as a zip, and for the app's own update on Windows and Linux the bare installer, the AppImage and their `latest*.yml` files.
-
-## Development
-
-```sh
-npm run dev        # Vite with API server, interface with hot reload
-npm test           # Vitest
-npm run typecheck  # TypeScript for core and interface
-npm run lint       # oxlint
-```
-
-To test without a real radio, `RADIO_MANAGER_VOLUMES` can point to one or more folders (separated like in the `PATH`), for example the SD folder of a simulator.
-
-How it works under the hood:
-
-- **Detection**: the radio type, language and firmware are read from the SD card (`RADIO/radio.yml`, `edgetx.sdcard.version`).
-- **Download**: new releases of all sources from GitHub, and for own projects also the newest commit of the main branch.
-- **Backup**: copies the whole SD card, including file times, into a folder; old backups are pruned.
-- **Restore**: compares the backup with the card by size and file time (small files also by content) and writes only what differs; files the backup does not have are deleted.
-- **Update**: compares the packages with the card; files changed on the card come up as conflicts instead of being overwritten.
-- **Models**: reads `MODELS/model<n>.yml` from the backups and the card and groups them by model name. Copying writes the model file unchanged with the current time, so the radio reads it again; `labels.yml` and `radio.yml` are never written, the radio adds missing labels itself. What fits the radio is checked against the switches, pots and internal module listed in its `RADIO/radio.yml`.
-- **Firmware**: radios with a UF2 bootloader get the firmware via the drive, all others via USB DFU (`dfu-util`). The method follows from the firmware file for the radio type.
-
-Structure:
-
-- `src/core/`: logic (detection, download, backup, restore, update plan, firmware, models)
-- `src/server/`: HTTP API and server-sent events for progress and state
-- `src/ui/`: React interface (HeroUI, Tailwind)
-- `src/cli/`: command line
-- `src/desktop/`: Electron main process, starts the server and shows the interface in its own window
-- `src/platform/`: drive detection, the only OS-specific part
-- `scripts/licenses.ts`: collects the license texts of all bundled packages and runtime dependencies during the build (also holds the Vite plugin that lists the bundled modules)
-- `docs/screenshots/`: the screenshots in this README
+- [Browser interface](docs/browser-interface.md): the same pages as the desktop app, in your web browser
+- [Command line](docs/command-line.md): most functions of the app as commands, e.g. for scripts
+- [Development](docs/development.md): running from source, building the app, making a release and how it works inside
 
 ## License
 
-Released under the [MIT License](LICENSE). The app bundles open source packages under their own licenses, listed in `THIRD_PARTY_LICENSES.txt` (see [Desktop app](#desktop-app)).
+Released under the [MIT License](LICENSE). The app bundles open source packages under their own licenses, listed in `THIRD_PARTY_LICENSES.txt` in the app's resources folder. Electron's own license files (`LICENSE.electron.txt`, `LICENSES.chromium.html`) are in the same folder on macOS and in the app folder on Windows and Linux.
