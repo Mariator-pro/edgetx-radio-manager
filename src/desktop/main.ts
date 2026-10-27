@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { app, BrowserWindow, screen, shell } from 'electron';
 import { paths } from '../core/paths.ts';
 import { startServer } from '../server/server.ts';
+import { isOwnPage, isWebLink } from './links.ts';
 import { appUpdates } from './update.ts';
 
 // Space kept free around the window when it opens, in points.
@@ -38,15 +39,15 @@ async function start(): Promise<void> {
   // Electron's default menu has nothing the app needs on Windows, and Windows draws a stray white line under it in dark mode;
   // macOS keeps it for Cmd+Q and copy and paste
   if (process.platform !== 'darwin') win.removeMenu();
-  // links to GitHub and other sites open in the browser, not in the app
+  // links to GitHub and other sites open in the browser, not in the app; other schemes not at all
   win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    if (isWebLink(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e, url) => {
-    if (url.startsWith(server.url)) return;
+    if (isOwnPage(url, server.url)) return;
     e.preventDefault();
-    void shell.openExternal(url);
+    if (isWebLink(url)) void shell.openExternal(url);
   });
   await win.loadURL(server.url);
   // without internet or GitHub the app runs on as it is
