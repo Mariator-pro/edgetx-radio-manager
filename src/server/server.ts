@@ -123,6 +123,18 @@ const TYPES: Record<string, string> = {
   '.json': 'application/json',
 };
 
+// The names this computer's browser reaches the server by, on any port (Vite forwards from its own).
+const LOCAL_NAMES = ['localhost', '127.0.0.1'];
+
+// The name in a Host header, without the port; empty when there is none or it cannot be read.
+function hostName(host: string | undefined): string {
+  try {
+    return host ? new URL(`http://${host}`).hostname : '';
+  } catch {
+    return '';
+  }
+}
+
 async function body<T>(req: IncomingMessage): Promise<T> {
   const chunks: Buffer[] = [];
   for await (const c of req) chunks.push(c as Buffer);
@@ -706,6 +718,9 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     try {
+      // only under its own name: another site whose name was pointed at this computer (DNS rebinding)
+      // would count as the same site to the browser and could read the key from the page
+      if (!LOCAL_NAMES.includes(hostName(req.headers.host))) throw new HttpError(403, 'invalidRequest', { what: 'host' });
       if (url.pathname.startsWith('/api/') && (req.headers[TOKEN_HEADER] ?? url.searchParams.get('token')) !== token) {
         throw new HttpError(403, 'invalidRequest', { what: 'token' });
       }

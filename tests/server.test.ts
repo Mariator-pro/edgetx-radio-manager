@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { request } from 'node:http';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { versionDir } from '../src/core/packages.ts';
@@ -150,6 +151,38 @@ describe('server', () => {
       expect(page.headers.get('cache-control')).toBe('no-store');
       expect(await page.text()).toContain(`<meta name="${TOKEN_META}" content="${other.token}" />`);
       expect(other.token).not.toBe(token);
+    } finally {
+      other.close();
+    }
+  });
+
+  it('answers only under its own name, so another site pointed at this computer cannot read the key', async () => {
+    const staticDir = await tempDir();
+    await writeFile(join(staticDir, 'index.html'), '<html><head><title>x</title></head></html>');
+    const other = await startServer({ paths: p, port: 0, staticDir, pollMs: 60_000 });
+    try {
+      const port = new URL(other.url).port;
+      // fetch keeps the Host header to itself, node:http sends the one given
+      const get = (path: string, host: string) =>
+        new Promise<{ status: number; body: string }>((resolve, reject) => {
+          const req = request({ host: '127.0.0.1', port, path, headers: { host, [TOKEN_HEADER]: other.token } }, (res) => {
+            let body = '';
+            res.on('data', (c: Buffer) => (body += c));
+            res.on('end', () => resolve({ status: res.statusCode ?? 0, body }));
+          });
+          req.on('error', reject);
+          req.end();
+        });
+      for (const host of [`localhost:${port}`, `127.0.0.1:${port}`, 'localhost:5173']) {
+        expect((await get('/', host)).status).toBe(200);
+        expect((await get('/api/packages', host)).status).toBe(200);
+      }
+      for (const host of [`evil.example:${port}`, `127.0.0.1.evil.example:${port}`, 'evil.example']) {
+        const page = await get('/', host);
+        expect(page.status).toBe(403);
+        expect(page.body).not.toContain(other.token);
+        expect((await get('/api/packages', host)).status).toBe(403);
+      }
     } finally {
       other.close();
     }
