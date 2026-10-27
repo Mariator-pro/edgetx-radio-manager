@@ -7,7 +7,7 @@ import { pipeline } from 'node:stream/promises';
 import { AppError, errorInfo, type ErrorInfo } from './errors.ts';
 import { latestCommit, latestRelease, releaseByTag, type FetchFn, type Release } from './github.ts';
 import { mainDir, mainInfo, mainVersion, versionDir, type MainInfo, type ReleaseInfo } from './packages.ts';
-import type { Paths } from './paths.ts';
+import { isSafeName, type Paths } from './paths.ts';
 import { soundsOf, type Settings, type Source } from './settings.ts';
 
 export interface WantedFile {
@@ -107,7 +107,9 @@ async function downloadRelease(
   fetchFn: FetchFn,
   onEvent: (e: DownloadEvent) => void = () => {},
 ): Promise<DownloadResult> {
-  const wanted = wantedFiles(source, release, s);
+  // tag and file names of a release become folder and file names here; a project's repo is anyone's
+  if (!isSafeName(release.tag)) throw new AppError('invalidRequest', { what: `tag ${release.tag}` });
+  const wanted = wantedFiles(source, release, s).filter((f) => isSafeName(f.name));
   if (wanted.length === 0) {
     const message = source.kind === 'sounds' ? 'no radio seen yet, language unknown' : 'no matching file in the release';
     return { source: source.name, status: 'skipped', tag: release.tag, files: [], message };

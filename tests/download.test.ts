@@ -1,6 +1,7 @@
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { parseRadioYml } from '../src/core/card.ts';
 import { mainContent } from '../src/core/content.ts';
 import { downloadAll, wantedFiles, wantedVoices } from '../src/core/download.ts';
 import type { FetchFn, Release } from '../src/core/github.ts';
@@ -79,6 +80,17 @@ describe('rememberRadio', () => {
     s.radios.tx15!.sounds = ['de', 'en_gb-ryan'];
     expect(rememberRadio(s, { volume: '/v', board: 'tx15', language: 'en', soundLanguages: ['de', 'en', 'fr'] })).toBe(false);
     expect(s.radios.tx15!.sounds).toEqual(['de', 'en_gb-ryan']);
+  });
+
+  it('changes no other object for a card whose board is a name every object has', () => {
+    const s = settingsWith({});
+    for (const board of ['__proto__', 'constructor', 'toString']) {
+      const card = parseRadioYml(`board: ${board}\nttsLanguage: xx\nsemver: 2.11.0\n`);
+      expect(card.board).toBeUndefined();
+      expect(rememberRadio(s, { volume: '/v', ...card })).toBe(false);
+    }
+    expect(({} as Record<string, unknown>).language).toBeUndefined();
+    expect(s.radios).toEqual({});
   });
 
   it('turns the earlier single voice into the sound list', async () => {
@@ -188,6 +200,19 @@ describe('downloadAll', () => {
     const results = await downloadAll(p, s, fakeGitHub({ 'Mariator-pro/edgetx-lipo-nanny': 'fail' }, calls));
     expect(results.map((r) => [r.source, r.status, r.error?.code])).toEqual([['lipo-nanny', 'error', 'rateLimit']]);
     expect(calls.some((c) => c.includes('gps-homer'))).toBe(false);
+  });
+
+  it('writes no file of a release outside its own folder', async () => {
+    const p = paths(await tempDir());
+    const s = settingsWith({});
+    s.sources = [source('lipo-nanny')];
+    const calls: string[] = [];
+    const evil = release('v1.0.0', ['../../evil.zip', 'good.zip']);
+    expect((await downloadAll(p, s, fakeGitHub({ 'Mariator-pro/edgetx-lipo-nanny': evil }, calls)))[0]!.files).toEqual(['good.zip']);
+    expect(calls.filter((c) => c.startsWith('https://dl/'))).toEqual(['https://dl/good.zip']);
+    const results = await downloadAll(p, s, fakeGitHub({ 'Mariator-pro/edgetx-lipo-nanny': release('..', ['x.zip']) }, calls));
+    expect(results[0]).toMatchObject({ status: 'error', error: { code: 'invalidRequest' } });
+    expect(await readdir(p.packages)).toEqual(['lipo-nanny']);
   });
 
   it('downloads only the newest firmware release; older ones come when flashed', async () => {

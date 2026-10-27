@@ -135,6 +135,28 @@ describe('server', () => {
     expect(await flash.json()).toMatchObject({ code: 'invalidRequest', params: { what: 'tag' } });
   });
 
+  it('turns away requests too large, not JSON or with a board every object has as a name', async () => {
+    const post = (path: string, body: string) => call(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    // node:http, as fetch keeps sending a body the server no longer reads
+    const large = await new Promise<number>((resolve, reject) => {
+      const port = new URL(url).port;
+      const req = request({ host: '127.0.0.1', port, path: '/api/backups/keep', method: 'POST', headers: { host: `localhost:${port}`, [TOKEN_HEADER]: token } }, (res) => {
+        res.resume();
+        resolve(res.statusCode ?? 0);
+      });
+      req.on('error', reject);
+      req.end(Buffer.alloc(2 * 1024 * 1024, 120));
+    });
+    expect(large).toBe(413);
+    expect((await post('/api/backups/keep', '{not json')).status).toBe(400);
+    for (const board of ['__proto__', 'constructor']) {
+      expect((await post('/api/radio/sounds', JSON.stringify({ board, sounds: ['en'] }))).status).toBe(400);
+      expect((await post('/api/backups/keep', JSON.stringify({ board, name: '2026-10-01_1200', keep: true }))).status).toBe(400);
+      expect((await post('/api/backups/delete', JSON.stringify({ board, name: '2026-10-01_1200' }))).status).toBe(400);
+    }
+    expect(({} as Record<string, unknown>).sounds).toBeUndefined();
+  });
+
   it('answers only with its key, which comes behind # in the address and not in the page', async () => {
     expect((await fetch(`${url}/api/packages`)).status).toBe(403);
     expect((await fetch(`${url}/api/events`)).status).toBe(403);

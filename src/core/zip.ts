@@ -29,12 +29,15 @@ function readEntries(zip: yauzl.ZipFile, resolve: (files: Map<string, Buffer>) =
   zip.readEntry();
 }
 
-// All file entries of a zip, read into memory (packages are a few MB up to ~50 MB).
-export function readZip(path: string): Promise<Map<string, Buffer>> {
+// What a package may unpack to: they are a few MB up to ~50 MB, a project's release is anyone's.
+const MAX_PACKAGE = 1024 * 1024 * 1024;
+
+// All file entries of a zip, read into memory.
+export function readZip(path: string, maxBytes = MAX_PACKAGE): Promise<Map<string, Buffer>> {
   return new Promise((resolve, reject) => {
     yauzl.open(path, { lazyEntries: true }, (err, zip) => {
       if (err || !zip) return reject(err ?? new Error(`cannot open ${path}`));
-      readEntries(zip, resolve, reject);
+      readEntries(zip, resolve, reject, maxBytes);
     });
   });
 }

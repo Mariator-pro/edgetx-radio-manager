@@ -1,7 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'yaml';
-import { isCardPath, isSafeName, printable } from './paths.ts';
+import { isCardPath, isSafeKey, printable } from './paths.ts';
 
 export const LIST_FILE = join('.radio-manager', 'installed.json');
 
@@ -53,10 +53,11 @@ export function parseRadioYml(text: string): RadioYml {
   if (typeof y !== 'object' || y === null) return {};
   const o = y as Record<string, unknown>;
   const str = (v: unknown) => (v === undefined || v === null || printable(String(v)) === '' ? undefined : printable(String(v)));
-  // board and language become folder names (backups, SOUNDS/<language>): a card's file must not lead elsewhere
+  // board and language become folder names (backups, SOUNDS/<language>) and keys in the settings:
+  // a card's file must not lead elsewhere
   const name = (v: unknown) => {
     const s = str(v);
-    return s !== undefined && isSafeName(s) ? s : undefined;
+    return s !== undefined && isSafeKey(s) ? s : undefined;
   };
   return { board: name(o.board), firmware: str(o.semver), language: name(o.ttsLanguage) };
 }

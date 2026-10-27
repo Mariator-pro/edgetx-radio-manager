@@ -33,6 +33,12 @@ export function isSafeName(name: string): boolean {
   return name !== '' && name !== '.' && name !== '..' && !/[/\\]/.test(name);
 }
 
+// A name the settings use as a key (a radio's board, a language): a safe folder name that is not also a
+// property every object has (__proto__, constructor ...), through which it would change all objects at once.
+export function isSafeKey(name: string): boolean {
+  return isSafeName(name) && !(name in Object.prototype);
+}
+
 // A path inside the SD card with "/", as the list on the card keeps them: no absolute path, drive,
 // backslash or "..", so nothing written or deleted by it lands outside the card.
 export function isCardPath(path: string): boolean {

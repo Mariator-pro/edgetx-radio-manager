@@ -40,7 +40,7 @@ import {
   type FlashOptions,
 } from '../core/firmware.ts';
 import { deleteVersion, localVersions, mainInfo, versionDir } from '../core/packages.ts';
-import { isSafeName, type Paths } from '../core/paths.ts';
+import { isSafeKey, isSafeName, type Paths } from '../core/paths.ts';
 import { isBelowMin, MIN_EDGETX, radioName, radioTypes } from '../core/radios.ts';
 import { applyRestore, planRestore } from '../core/restore.ts';
 import { ensureSelection } from '../core/selection.ts';
@@ -156,10 +156,16 @@ function hostName(host: string | undefined): string {
   }
 }
 
+// A JSON request; the page sends a few KB at most.
+const MAX_BODY = 1024 * 1024;
+
 async function body<T>(req: IncomingMessage): Promise<T> {
-  const chunks: Buffer[] = [];
-  for await (const c of req) chunks.push(c as Buffer);
-  return (chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}) as T;
+  const data = await rawBody(req, MAX_BODY);
+  try {
+    return (data.length ? JSON.parse(data.toString('utf8')) : {}) as T;
+  } catch {
+    throw new HttpError(400, 'invalidRequest', { what: 'JSON' });
+  }
 }
 
 const CATALOG_MS = 10 * 60_000;
@@ -442,6 +448,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     },
     'POST /api/radio/sounds': async (req) => {
       const { board, sounds } = await body<{ board: string; sounds: string[] }>(req);
+      if (typeof board !== 'string' || !isSafeKey(board)) throw new HttpError(400, 'invalidRequest', { what: 'board' });
       if (!Array.isArray(sounds) || sounds.some((id) => !/^[a-z]{2,3}([_-][a-z0-9-]+)?$/i.test(id))) throw new HttpError(400, 'invalidRequest', { what: 'sounds' });
       const langs = sounds.map(voiceLanguage);
       if (new Set(langs).size !== langs.length) throw new HttpError(400, 'oneVoicePerLanguage');
@@ -653,12 +660,14 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     'GET /api/backups': () => backupViews(p, s),
     'POST /api/backups/keep': async (req) => {
       const { board, name, keep } = await body<{ board: string; name: string; keep: boolean }>(req);
+      if (typeof board !== 'string' || !isSafeKey(board) || !isBackupName(name)) throw new HttpError(400, 'invalidRequest', { what: 'backup' });
       const list = (s.keptBackups[board] ?? []).filter((n) => n !== name);
       s.keptBackups[board] = keep ? [...list, name] : list;
       await saveSettings(p, s);
     },
     'POST /api/backups/delete': async (req) => {
       const { board, name } = await body<{ board: string; name: string }>(req);
+      if (typeof board !== 'string' || !isSafeKey(board)) throw new HttpError(400, 'invalidRequest', { what: 'backup' });
       await deleteBackup(p, board, name);
       s.keptBackups[board] = (s.keptBackups[board] ?? []).filter((n) => n !== name);
       dropBackups(board, [name]);
@@ -667,7 +676,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     },
     'POST /api/backups/note': async (req) => {
       const { board, name, note } = await body<{ board: string; name: string; note: string }>(req);
-      if (!isSafeName(board) || !isBackupName(name) || typeof note !== 'string' || note.trim().length > MAX_NOTE) {
+      if (!isSafeKey(board) || !isBackupName(name) || typeof note !== 'string' || note.trim().length > MAX_NOTE) {
         throw new HttpError(400, 'invalidRequest', { what: 'note' });
       }
       if (!(await listBackups(p, board)).includes(name)) throw new HttpError(404, 'backupNotFound', { name });
