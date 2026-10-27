@@ -323,6 +323,7 @@ describe('deleting models', () => {
 describe('export and import', () => {
   it('names the export after the model', () => {
     expect(exportName(parseModel('model2.yml', Buffer.from(model('A/B: x?'))))).toBe('A_B_ x_.yml');
+    expect(parseModel('model3.yml', Buffer.from(model('Quad\\e]0;owned\\a\\u202e'))).name).toBe('Quad]0;owned');
     expect(exportName(parseModel('model2.yml', Buffer.from(model(''))))).toBe('model2.yml');
   });
 

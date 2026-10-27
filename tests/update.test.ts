@@ -238,6 +238,15 @@ describe('plan and apply', () => {
     expect(Object.keys(card.installed!.files).sort()).toEqual(['WIDGETS/A/main.lua', 'WIDGETS/A/same.lua']);
   });
 
+  it('changes nothing when a path leads off the card', async () => {
+    const root = await newCard({ 'WIDGETS/A/main.lua': 'old' });
+    const contents = [pkg('a', 'release', 1, { 'WIDGETS/A/main.lua': 'new' })];
+    const plan = await makePlan(root, mergePackages(contents));
+    plan.push({ path: '../outside.lua', action: 'delete', pkg: 'a' });
+    await expect(applyPlan(root, { plan, contents })).rejects.toMatchObject({ code: 'invalidRequest' });
+    expect(await readFile(join(root, 'WIDGETS/A/main.lua'), 'utf8')).toBe('old');
+  });
+
   it('stops after the current file when cancelled and leaves the list as it was', async () => {
     const root = await newCard();
     const contents = [pkg('a', 'release', 1, { 'WIDGETS/A/one.lua': '1', 'WIDGETS/A/two.lua': '2' })];

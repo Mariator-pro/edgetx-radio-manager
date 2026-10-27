@@ -5,7 +5,7 @@ import { parse } from 'yaml';
 import { makeParent } from './apply.ts';
 import { listBackups } from './backup.ts';
 import { AppError } from './errors.ts';
-import { isSafeName, type Paths } from './paths.ts';
+import { isSafeName, printable, type Paths } from './paths.ts';
 import type { RadioType } from './radios.ts';
 import { readZipBuffer } from './zip.ts';
 
@@ -50,14 +50,14 @@ export function parseModel(file: string, data: Buffer): ModelFile {
   }
   const d = isObject(doc) ? doc : {};
   const h = isObject(d.header) ? d.header : {};
-  const name = str(h.name).trim() || file.replace(/\.yml$/i, '');
+  const name = printable(str(h.name)).trim() || file.replace(/\.yml$/i, '');
   const bitmap = str(h.bitmap).trim();
   return {
     file,
     name,
     ...(bitmap ? { bitmap } : {}),
-    labels: labelList(str(h.labels)),
-    ...(d.semver !== undefined ? { semver: str(d.semver) } : {}),
+    labels: labelList(printable(str(h.labels))),
+    ...(d.semver !== undefined ? { semver: printable(str(d.semver)) } : {}),
     sha: sha256(data),
     data,
     doc: d,

@@ -15,6 +15,16 @@ describe('radio.yml', () => {
   it('leaves missing keys undefined', () => {
     expect(parseRadioYml('board: tx15\n')).toEqual({ board: 'tx15', firmware: undefined, language: undefined });
   });
+
+  it('takes no board or language that would lead out of the folders named after them', () => {
+    for (const bad of ['../../..', '../x', 'a/b', 'a\\b', '..', '.']) {
+      expect(parseRadioYml(`board: '${bad}'\nttsLanguage: '${bad}'\nsemver: 2.11.0\n`)).toEqual({ board: undefined, firmware: '2.11.0', language: undefined });
+    }
+  });
+
+  it('drops control characters', () => {
+    expect(parseRadioYml('board: "tx16s\\e[2J"\nsemver: "2.11.0\\e]0;x\\a"\n')).toEqual({ board: 'tx16s[2J', firmware: '2.11.0]0;x', language: undefined });
+  });
 });
 
 describe('Linux drives', () => {
@@ -54,7 +64,21 @@ describe('readCard', () => {
     const root = await tempDir();
     await writeTree(root, { 'RADIO/radio.yml': 'semver: 2.12.3\nboard: tx16smk3\n', 'MODELS/model00.yml': '' });
     const file = { sha256: 'abc', from: ['a'], written: 'a' };
-    for (const list of [{}, [], { packages: {}, files: { 'A/b.lua': { sha256: 'abc' } } }, { packages: { a: {} }, files: {} }, 'not json']) {
+    const outside = (path: string) => ({ packages: { a: { version: 'v1' } }, files: { [path]: file } });
+    for (const list of [
+      {},
+      [],
+      { packages: {}, files: { 'A/b.lua': { sha256: 'abc' } } },
+      { packages: { a: {} }, files: {} },
+      'not json',
+      // paths that would lead off the card, e.g. on a card from someone else
+      outside('../../home/user/.bashrc'),
+      outside('SCRIPTS/../../x.lua'),
+      outside('/etc/passwd'),
+      outside('C:/Windows/x.dll'),
+      outside('SCRIPTS\\..\\..\\x.lua'),
+      outside(''),
+    ]) {
       await writeTree(root, { '.radio-manager/installed.json': typeof list === 'string' ? list : JSON.stringify(list) });
       expect((await readCard(root))?.installed).toBeUndefined();
     }

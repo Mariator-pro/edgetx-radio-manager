@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { LIST_FILE, type InstalledList, type ListedFile } from './card.ts';
 import type { PackageContent } from './content.ts';
 import { AppError } from './errors.ts';
+import { isCardPath } from './paths.ts';
 import type { PlanItem } from './plan.ts';
 
 // For a conflict: keep the card's file, or go ahead (write the package version, or delete).
@@ -53,6 +54,9 @@ export async function applyPlan(
   signal?: AbortSignal,
 ): Promise<ApplyResult> {
   const result: ApplyResult = { written: 0, deleted: 0, kept: 0 };
+  // checked before the first change: a path leading off the card stops the whole update
+  const outside = plan.find((i) => !isCardPath(i.path));
+  if (outside) throw new AppError('invalidRequest', { what: `path ${outside.path}` });
   const todo = plan.filter((i) => i.action !== 'unchanged');
   for (const [n, item] of todo.entries()) {
     if (signal?.aborted) throw new AppError('cancelled');

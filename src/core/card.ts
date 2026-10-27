@@ -1,6 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'yaml';
+import { isCardPath, isSafeName, printable } from './paths.ts';
 
 export const LIST_FILE = join('.radio-manager', 'installed.json');
 
@@ -26,6 +27,7 @@ function isList(v: unknown): v is InstalledList {
     isObject(v.packages) &&
     isObject(v.files) &&
     Object.values(v.packages).every((p) => isObject(p) && typeof p.version === 'string') &&
+    Object.keys(v.files).every(isCardPath) &&
     Object.values(v.files).every((f) => isObject(f) && typeof f.sha256 === 'string' && Array.isArray(f.from) && typeof f.written === 'string')
   );
 }
@@ -50,8 +52,13 @@ export function parseRadioYml(text: string): RadioYml {
   const y: unknown = parse(text);
   if (typeof y !== 'object' || y === null) return {};
   const o = y as Record<string, unknown>;
-  const str = (v: unknown) => (v === undefined || v === null || v === '' ? undefined : String(v));
-  return { board: str(o.board), firmware: str(o.semver), language: str(o.ttsLanguage) };
+  const str = (v: unknown) => (v === undefined || v === null || printable(String(v)) === '' ? undefined : printable(String(v)));
+  // board and language become folder names (backups, SOUNDS/<language>): a card's file must not lead elsewhere
+  const name = (v: unknown) => {
+    const s = str(v);
+    return s !== undefined && isSafeName(s) ? s : undefined;
+  };
+  return { board: name(o.board), firmware: str(o.semver), language: name(o.ttsLanguage) };
 }
 
 async function isDir(p: string): Promise<boolean> {

@@ -28,7 +28,17 @@ export function paths(root = dataRoot()): Paths {
   };
 }
 
-// A single folder name coming from outside (UI, command line), never a path.
+// A single folder name coming from outside (UI, command line, SD card), never a path.
 export function isSafeName(name: string): boolean {
   return name !== '' && name !== '.' && name !== '..' && !/[/\\]/.test(name);
 }
+
+// A path inside the SD card with "/", as the list on the card keeps them: no absolute path, drive,
+// backslash or "..", so nothing written or deleted by it lands outside the card.
+export function isCardPath(path: string): boolean {
+  return path !== '' && !path.includes(':') && path.split('/').every(isSafeName);
+}
+
+// Text from a radio's files as it is shown and printed: without control characters, which in a terminal
+// could move the cursor, change colours or the window title, nor those that turn the direction of text.
+export const printable = (s: string) => s.replace(/[\p{Cc}\u202a-\u202e\u2066-\u2069]/gu, '');
