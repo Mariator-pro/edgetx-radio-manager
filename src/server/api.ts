@@ -330,8 +330,11 @@ export const FLASH_STEPS: Record<'uf2' | 'dfu', string[]> = {
 };
 
 // A key made for each start of the server: the page gets it, other web pages in the browser don't,
-// so they can't use the API. Sent as a header, by the live connection (no headers there) in the address.
+// so they can't use the API. Sent as a header, by the live connection and pictures (no headers there) in the address.
+// The page gets it behind # in the address it is opened at, which the browser never sends to the server;
+// under Vite in development it is put into the page.
 export const TOKEN_HEADER = 'x-radio-manager-token';
+export const TOKEN_HASH = 'token';
 export const TOKEN_META = 'radio-manager-token';
 
 // Language and theme, kept by the server: the port changes with every start, and the browser keeps
@@ -344,9 +347,9 @@ export const PREFS_META = 'radio-manager-prefs';
 
 const attr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
-// The page gets the key and the stored choices, so it starts with them.
-export const withPageData = (html: string, token: string, prefs: PrefsView) =>
+// The page gets the stored choices, so it starts with them, and under Vite the key.
+export const withPageData = (html: string, prefs: PrefsView, token?: string) =>
   html.replace(
     '</head>',
-    `<meta name="${TOKEN_META}" content="${token}" />\n<meta name="${PREFS_META}" content="${attr(JSON.stringify(prefs))}" />\n</head>`,
+    `${token ? `<meta name="${TOKEN_META}" content="${token}" />\n` : ''}<meta name="${PREFS_META}" content="${attr(JSON.stringify(prefs))}" />\n</head>`,
   );

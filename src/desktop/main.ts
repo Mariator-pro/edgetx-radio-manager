@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { app, BrowserWindow, screen, shell } from 'electron';
+import { app, BrowserWindow, screen, session, shell } from 'electron';
 import { paths } from '../core/paths.ts';
 import { startServer } from '../server/server.ts';
 import { isOwnPage, isWebLink } from './links.ts';
@@ -11,7 +11,19 @@ const WINDOW_MARGIN = 24;
 // Apps started from Finder don't get the shell's PATH, so dfu-util from Homebrew would not be found.
 if (process.platform === 'darwin') process.env.PATH = ['/opt/homebrew/bin', '/usr/local/bin', process.env.PATH].join(':');
 
+// No page in the window gets a permission (camera, microphone, location, notifications, USB ...) apart from
+// writing to the clipboard; the radio is flashed by dfu-util and the SD card written by the app itself.
+const ALLOWED = ['clipboard-sanitized-write'];
+
+function limitPermissions(): void {
+  const ses = session.defaultSession;
+  ses.setPermissionCheckHandler((_wc, permission) => ALLOWED.includes(permission));
+  ses.setPermissionRequestHandler((_wc, permission, callback) => callback(ALLOWED.includes(permission)));
+  ses.setDevicePermissionHandler(() => false);
+}
+
 async function start(): Promise<void> {
+  limitPermissions();
   // only the installed app updates itself, not a start from the source folder
   const updates = app.isPackaged ? appUpdates() : undefined;
   // any free port: language and theme are kept by the server, not by the page's address
@@ -49,7 +61,7 @@ async function start(): Promise<void> {
     e.preventDefault();
     if (isWebLink(url)) void shell.openExternal(url);
   });
-  await win.loadURL(server.url);
+  await win.loadURL(server.open);
   // without internet or GitHub the app runs on as it is
   updates?.check().catch((e: unknown) => console.error('Update check failed:', e));
 }

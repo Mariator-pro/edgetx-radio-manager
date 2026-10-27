@@ -683,10 +683,10 @@ async function ui(p: Paths): Promise<void> {
   }
   // a free port; a second start finds this one through the note
   const server = await startServer({ paths: p, port: 0, staticDir, repoParent: dirname(REPO_ROOT) });
-  const forget = await noteServer(p.server, server.url);
+  const forget = await noteServer(p.server, server.open);
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => void forget().finally(() => process.exit(0)));
-  console.log(`Radio Manager runs at ${server.url} (Ctrl+C to stop)`);
-  openBrowser(server.url);
+  console.log(`Radio Manager runs at ${server.open} (Ctrl+C to stop)`);
+  openBrowser(server.open);
   await new Promise(() => {});
 }
 

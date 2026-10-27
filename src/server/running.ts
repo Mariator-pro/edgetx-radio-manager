@@ -1,8 +1,9 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 // The browser interface's server takes a free port and notes it here, so a second start opens the
-// running one instead of starting another server on the same SD card.
+// running one instead of starting another server on the same SD card. The note holds the address the
+// interface opens at, with the key, so only this user may read it.
 
 interface Note {
   url: string;
@@ -40,7 +41,9 @@ export async function runningServer(file: string): Promise<string | undefined> {
 // Notes this process's server; the returned function removes the note again, unless another server wrote it since.
 export async function noteServer(file: string, url: string): Promise<() => Promise<void>> {
   await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify({ url, pid: process.pid } satisfies Note)}\n`);
+  await writeFile(file, `${JSON.stringify({ url, pid: process.pid } satisfies Note)}\n`, { mode: 0o600 });
+  // a note left from before keeps its own mode
+  await chmod(file, 0o600);
   return async () => {
     if ((await readNote(file))?.pid === process.pid) await rm(file, { force: true });
   };

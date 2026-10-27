@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -135,7 +135,7 @@ describe('server', () => {
     expect(await flash.json()).toMatchObject({ code: 'invalidRequest', params: { what: 'tag' } });
   });
 
-  it('answers only with its key, which it puts into the page', async () => {
+  it('answers only with its key, which comes behind # in the address and not in the page', async () => {
     expect((await fetch(`${url}/api/packages`)).status).toBe(403);
     expect((await fetch(`${url}/api/events`)).status).toBe(403);
     expect((await fetch(`${url}/api/backups/delete`, { method: 'POST', headers: { [TOKEN_HEADER]: 'wrong' }, body: '{}' })).status).toBe(403);
@@ -149,8 +149,21 @@ describe('server', () => {
     try {
       const page = await fetch(`${other.url}/radio`);
       expect(page.headers.get('cache-control')).toBe('no-store');
-      expect(await page.text()).toContain(`<meta name="${TOKEN_META}" content="${other.token}" />`);
+      const html = await page.text();
+      expect(html).not.toContain(other.token);
+      expect(html).not.toContain(TOKEN_META);
+      expect(other.open).toBe(`${other.url}/#token=${other.token}`);
+      // under Vite in development the key is put into the page
+      expect(other.page('<head></head>')).toContain(`<meta name="${TOKEN_META}" content="${other.token}" />`);
       expect(other.token).not.toBe(token);
+      // no other site may show the page in a frame, and it loads only its own files
+      for (const res of [page, await fetch(`${other.url}/api/packages`, { headers: { [TOKEN_HEADER]: other.token } })]) {
+        expect(res.headers.get('x-frame-options')).toBe('DENY');
+        expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+        expect(res.headers.get('referrer-policy')).toBe('no-referrer');
+        expect(res.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
+        expect(res.headers.get('content-security-policy')).toContain("script-src 'self';");
+      }
     } finally {
       other.close();
     }
@@ -218,8 +231,10 @@ describe('server', () => {
     const file = join(await tempDir(), 'server.json');
     expect(await runningServer(file)).toBeUndefined();
     const s = await startServer({ paths: paths(await tempDir()), port: 0, staticDir, pollMs: 60_000 });
-    const forget = await noteServer(file, s.url);
-    expect(await runningServer(file)).toBe(s.url);
+    const forget = await noteServer(file, s.open);
+    expect(await runningServer(file)).toBe(s.open);
+    // the address carries the key: only this user may read the note
+    if (process.platform !== 'win32') expect((await stat(file)).mode & 0o777).toBe(0o600);
     s.close();
     expect(await runningServer(file)).toBeUndefined();
     await forget();
