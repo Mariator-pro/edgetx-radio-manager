@@ -184,14 +184,14 @@ export const cs: Texts = {
 
   kinds: { firmware: 'Firmware', sdcard: 'Obsah SD', sounds: 'Hlášení', project: 'Projekt' },
   addSource: 'Přidat zdroj',
-  addSourceText: 'Repozitář GitHub s releasy. Stáhne se jeho nejnovější release, aby se našly soubory pro SD kartu.',
+  addSourceText: 'Projekt na GitHubu, např. Lua skript. Aplikace zapíše jeho soubory na SD kartu a upozorní, když vyjde nová verze. Vložte jeho adresu na GitHubu, nebo zadejte vlastník/název.',
   githubRepo: 'Repozitář GitHub',
   repoPlaceholder: 'vlastník/název',
   checkingRepo: 'Kontroluji …',
   check: 'Zkontrolovat',
-  checkResult: (n, t, f) => `${n} ${t}: ${f} ${pl(f, 'soubor', 'soubory', 'souborů')} pro SD kartu, nalezeno v`,
-  zipRoot: 'nejvyšší úrovni zipu',
+  checkResult: (n, t, f) => `Přidat ${n} ${t} jako zdroj (${f} ${pl(f, 'soubor', 'soubory', 'souborů')} pro SD kartu)?`,
   add: 'Přidat zdroj',
+  sourceAdded: (n) => `${n} je nyní zdrojem.`,
   colSource: 'Zdroj',
   colKind: 'Druh',
   colNewest: 'Nejnovější stažení',
@@ -338,8 +338,8 @@ export const cs: Texts = {
       reset
         ? `Dosažen limit dotazů GitHubu, zkuste to znovu po ${new Date(reset).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' })}.`
         : 'Dosažen limit dotazů GitHubu, zkuste to později.',
-    githubStatus: ({ status }) => `GitHub odpověděl chybou ${status}.`,
-    downloadFailed: ({ status, url }) => `Stažení selhalo (${status}): ${url}`,
+    githubStatus: ({ status }) => `GitHub nemohl na požadavek odpovědět (chyba ${status}). Zkuste to později.`,
+    downloadFailed: ({ status }) => `Stažení z GitHubu se nezdařilo (chyba ${status}). Zkuste to později.`,
 
     radioNotConnected: () => 'Vysílačka už není připojena.',
     chooseRadioType: () => 'Nejprve zvolte typ vysílačky.',
@@ -352,11 +352,12 @@ export const cs: Texts = {
     wrongRadioForBackup: ({ connected, board }) => `Připojená vysílačka je ${connected}, záloha je ale z ${board}.`,
     restoreInterrupted: () => 'SD karta byla během obnovení odpojena. Připojte ji znovu a obnovte ještě jednou.',
 
-    repoFormat: () => 'Zadejte repozitář jako vlastník/název.',
+    repoFormat: () => 'Zadejte repozitář jako vlastník/název, tak jako v jeho adrese na GitHubu (github.com/vlastník/název).',
     alreadySource: ({ name }) => `${name} už je zdrojem.`,
     noRelease: ({ repo }) => `${repo} zatím nemá žádný release.`,
+    repoNotFound: ({ repo }) => `Repozitář ${repo} na GitHubu neexistuje, nebo je soukromý.`,
     noCommit: ({ repo }) => `${repo} zatím nemá žádný commit.`,
-    noSdFolder: ({ repo, tag }) => `V ${repo} ${tag} není složka SCRIPTS/ ani WIDGETS/.`,
+    noSdFolder: ({ repo, tag }) => `Release ${tag} z ${repo} neobsahuje nic pro SD kartu vysílačky EdgeTX.`,
     onlyProjectsRemovable: () => 'Odebrat lze jen zdroje projektů.',
     installedOn: ({ name, tag, radios }) => `${name} ${tag} je nainstalován na ${radios}, a proto ho nelze smazat.`,
 

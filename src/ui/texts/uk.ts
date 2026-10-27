@@ -188,14 +188,14 @@ export const uk: Texts = {
 
   kinds: { firmware: 'Прошивка', sdcard: 'Вміст SD', sounds: 'Озвучення', project: 'Проєкт' },
   addSource: 'Додати джерело',
-  addSourceText: 'Репозиторій GitHub із релізами. Завантажується його найновіший реліз, щоб знайти файли для SD-картки.',
+  addSourceText: 'Проєкт на GitHub, наприклад Lua-скрипт. Застосунок записує його файли на SD-картку й повідомляє, коли виходить нова версія. Вставте його адресу на GitHub або вкажіть власник/назва.',
   githubRepo: 'Репозиторій GitHub',
   repoPlaceholder: 'власник/назва',
   checkingRepo: 'Перевірка …',
   check: 'Перевірити',
-  checkResult: (n, t, f) => `${n} ${t}: ${f} ${pl(f, 'файл', 'файли', 'файлів')} для SD-картки, знайдено в`,
-  zipRoot: 'верхньому рівні zip-архіву',
+  checkResult: (n, t, f) => `Додати ${n} ${t} як джерело (${f} ${pl(f, 'файл', 'файли', 'файлів')} для SD-картки)?`,
   add: 'Додати джерело',
+  sourceAdded: (n) => `${n} тепер є джерелом.`,
   colSource: 'Джерело',
   colKind: 'Вид',
   colNewest: 'Останнє завантаження',
@@ -342,8 +342,8 @@ export const uk: Texts = {
       reset
         ? `Досягнуто ліміту запитів GitHub, повторіть після ${new Date(reset).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}.`
         : 'Досягнуто ліміту запитів GitHub, повторіть пізніше.',
-    githubStatus: ({ status }) => `GitHub відповів помилкою ${status}.`,
-    downloadFailed: ({ status, url }) => `Завантаження не вдалося (${status}): ${url}`,
+    githubStatus: ({ status }) => `GitHub не зміг відповісти на запит (помилка ${status}). Спробуйте пізніше.`,
+    downloadFailed: ({ status }) => `Не вдалося завантажити з GitHub (помилка ${status}). Спробуйте пізніше.`,
 
     radioNotConnected: () => 'Апаратуру більше не підключено.',
     chooseRadioType: () => 'Спочатку виберіть тип апаратури.',
@@ -356,11 +356,12 @@ export const uk: Texts = {
     wrongRadioForBackup: ({ connected, board }) => `Підключено апаратуру ${connected}, а копію зроблено з ${board}.`,
     restoreInterrupted: () => 'SD-картку від’єднали під час відновлення. Підключіть її знову й відновіть ще раз.',
 
-    repoFormat: () => 'Вкажіть репозиторій у вигляді власник/назва.',
+    repoFormat: () => 'Вкажіть репозиторій у вигляді власник/назва, як у його адресі на GitHub (github.com/власник/назва).',
     alreadySource: ({ name }) => `${name} уже є джерелом.`,
     noRelease: ({ repo }) => `У ${repo} поки немає релізу.`,
+    repoNotFound: ({ repo }) => `Репозиторію ${repo} немає на GitHub, або він приватний.`,
     noCommit: ({ repo }) => `У ${repo} поки немає комітів.`,
-    noSdFolder: ({ repo, tag }) => `У ${repo} ${tag} немає теки SCRIPTS/ або WIDGETS/.`,
+    noSdFolder: ({ repo, tag }) => `У релізі ${tag} з ${repo} немає нічого для SD-картки апаратури EdgeTX.`,
     onlyProjectsRemovable: () => 'Видаляти можна лише джерела проєктів.',
     installedOn: ({ name, tag, radios }) => `${name} ${tag} встановлено на ${radios}, тому його не можна видалити.`,
 

@@ -7,8 +7,8 @@ export const ERRORS = {
   noConnection: () => 'No connection to GitHub. Check the internet connection.',
   rateLimit: (p: { reset?: string } = {}) =>
     p.reset ? `GitHub rate limit reached, try again after ${new Date(p.reset).toTimeString().slice(0, 5)}` : 'GitHub rate limit reached, try again later',
-  githubStatus: (p: { status: number }) => `GitHub answered ${p.status}`,
-  downloadFailed: (p: { status: number; url: string }) => `Download failed (${p.status}): ${p.url}`,
+  githubStatus: (p: { status: number }) => `GitHub could not answer the request (error ${p.status}). Try again later.`,
+  downloadFailed: (p: { status: number; url: string }) => `The download from GitHub failed (error ${p.status}). Try again later.`,
 
   radioNotConnected: () => 'Radio not connected',
   chooseRadioType: () => 'Choose the radio type first',
@@ -28,11 +28,12 @@ export const ERRORS = {
   modelsInterrupted: (p: { done: string }) =>
     `The SD card was removed while writing the models${p.done ? ` (done: ${p.done})` : ''}. Connect it again and start once more.`,
 
-  repoFormat: () => 'Enter the repo as owner/name',
+  repoFormat: () => 'Enter the repo as owner/name, as in its GitHub address (github.com/owner/name)',
   alreadySource: (p: { name: string }) => `${p.name} is already a source`,
   noRelease: (p: { repo: string }) => `${p.repo} has no release`,
+  repoNotFound: (p: { repo: string }) => `${p.repo} does not exist on GitHub, or it is private`,
   noCommit: (p: { repo: string }) => `${p.repo} has no commit yet`,
-  noSdFolder: (p: { repo: string; tag: string }) => `No SCRIPTS/ or WIDGETS/ folder found in ${p.repo} ${p.tag}`,
+  noSdFolder: (p: { repo: string; tag: string }) => `Release ${p.tag} of ${p.repo} holds nothing for the SD card of an EdgeTX radio`,
   onlyProjectsRemovable: () => 'Only project sources can be removed',
   installedOn: (p: { name: string; tag: string; radios: string }) => `${p.name} ${p.tag} is installed on ${p.radios}`,
 

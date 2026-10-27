@@ -180,14 +180,14 @@ export const de: Texts = {
 
   kinds: { firmware: 'Firmware', sdcard: 'SD-Grundinhalt', sounds: 'Ansagen', project: 'Projekt' },
   addSource: 'Quelle hinzufügen',
-  addSourceText: 'Ein GitHub-Repo mit Releases. Sein neuestes Release wird geladen, um die Dateien für die SD-Karte zu finden.',
+  addSourceText: 'Ein Projekt von GitHub, z. B. ein Lua-Script. Die App schreibt seine Dateien auf die SD-Karte und zeigt an, wenn es eine neue Version gibt. Dazu seine GitHub-Adresse einfügen oder besitzer/name eintragen.',
   githubRepo: 'GitHub-Repo',
   repoPlaceholder: 'besitzer/name',
   checkingRepo: 'Prüfe …',
   check: 'Prüfen',
-  checkResult: (n, t, f) => `${n} ${t}: ${f} Dateien für die SD-Karte, gefunden in`,
-  zipRoot: 'der obersten Ebene des Zip-Archivs',
+  checkResult: (n, t, f) => `${n} ${t} mit ${f} ${f === 1 ? 'Datei' : 'Dateien'} für die SD-Karte als Quelle hinzufügen?`,
   add: 'Quelle hinzufügen',
+  sourceAdded: (n) => `${n} ist jetzt eine Quelle.`,
   colSource: 'Quelle',
   colKind: 'Art',
   colNewest: 'Neuester Download',
@@ -334,8 +334,8 @@ export const de: Texts = {
       reset
         ? `GitHub-Abfragelimit erreicht, wieder möglich ab ${new Date(reset).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr.`
         : 'GitHub-Abfragelimit erreicht, bitte später noch einmal versuchen.',
-    githubStatus: ({ status }) => `GitHub antwortet mit Fehler ${status}.`,
-    downloadFailed: ({ status, url }) => `Download fehlgeschlagen (${status}): ${url}`,
+    githubStatus: ({ status }) => `GitHub konnte die Anfrage nicht beantworten (Fehler ${status}). Bitte später noch einmal versuchen.`,
+    downloadFailed: ({ status }) => `Der Download von GitHub ist fehlgeschlagen (Fehler ${status}). Bitte später noch einmal versuchen.`,
 
     radioNotConnected: () => 'Der Sender ist nicht mehr angesteckt.',
     chooseRadioType: () => 'Bitte zuerst den Sendertyp wählen.',
@@ -348,11 +348,12 @@ export const de: Texts = {
     wrongRadioForBackup: ({ connected, board }) => `Der angesteckte Sender ist ${connected}, das Backup stammt aber von ${board}.`,
     restoreInterrupted: () => 'Die SD-Karte wurde während des Zurückspielens abgezogen. Wieder anstecken und erneut zurückspielen.',
 
-    repoFormat: () => 'Das Repo bitte als besitzer/name angeben.',
+    repoFormat: () => 'Bitte das Repo als besitzer/name angeben, so wie in der GitHub-Adresse (github.com/besitzer/name).',
     alreadySource: ({ name }) => `${name} ist schon eine Quelle.`,
     noRelease: ({ repo }) => `${repo} hat noch kein Release.`,
+    repoNotFound: ({ repo }) => `${repo} gibt es auf GitHub nicht, oder es ist privat.`,
     noCommit: ({ repo }) => `${repo} hat noch keinen Commit.`,
-    noSdFolder: ({ repo, tag }) => `In ${repo} ${tag} gibt es keinen Ordner SCRIPTS/ oder WIDGETS/.`,
+    noSdFolder: ({ repo, tag }) => `Das Release ${tag} von ${repo} enthält nichts für die SD-Karte eines EdgeTX-Senders.`,
     onlyProjectsRemovable: () => 'Nur Projekt-Quellen lassen sich entfernen.',
     installedOn: ({ name, tag, radios }) => `${name} ${tag} ist auf ${radios} installiert und lässt sich deshalb nicht löschen.`,
 

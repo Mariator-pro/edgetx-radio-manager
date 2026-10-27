@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { CARD_DIRS } from './content.ts';
 import { downloadSource } from './download.ts';
 import { AppError } from './errors.ts';
-import type { FetchFn } from './github.ts';
+import { repoExists, type FetchFn } from './github.ts';
 import { versionDir } from './packages.ts';
 import { isSafeName, type Paths } from './paths.ts';
 import type { Settings, Source } from './settings.ts';
@@ -37,14 +37,21 @@ export function findSdDir(names: string[]): string | undefined | null {
   return segs.length > 0 ? segs.join('/') : undefined;
 }
 
+// owner/name from what people paste: owner/name, or the GitHub address of the repo or of a page in it.
+export function repoName(input: string): string {
+  const m = input.trim().match(/^(?:(?:https?:\/\/)?(?:www\.)?github\.com\/|git@github\.com:)?([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:[/?#].*)?$/i);
+  return m ? `${m[1]}/${m[2]}` : input.trim();
+}
+
 // Downloads the newest release of a new repo and finds its SD folder; nothing is added yet.
-export async function checkSource(p: Paths, s: Settings, repo: string, fetchFn: FetchFn = fetch): Promise<SourceCheck> {
+export async function checkSource(p: Paths, s: Settings, input: string, fetchFn: FetchFn = fetch): Promise<SourceCheck> {
+  const repo = repoName(input);
   if (!REPO.test(repo)) throw new AppError('repoFormat');
   const name = repo.split('/')[1]!;
   if (s.sources.some((x) => x.name === name || x.repo.toLowerCase() === repo.toLowerCase())) throw new AppError('alreadySource', { name: repo });
   const source: Source = { name, repo, kind: 'project' };
   const r = await downloadSource(p, s, source, fetchFn);
-  if (r.status === 'no-release' || !r.tag) throw new AppError('noRelease', { repo });
+  if (r.status === 'no-release' || !r.tag) throw new AppError((await repoExists(repo, fetchFn)) ? 'noRelease' : 'repoNotFound', { repo });
   const dir = versionDir(p, name, r.tag);
   const names: string[] = [];
   for (const zip of (await readdir(dir)).filter((n) => n.endsWith('.zip'))) names.push(...(await readZip(join(dir, zip))).keys());

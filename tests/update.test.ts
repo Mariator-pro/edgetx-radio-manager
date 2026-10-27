@@ -432,6 +432,34 @@ describe('new sources', () => {
     addSource(s, { name: 'repo', repo: 'owner/repo', kind: 'project', sdDir: 'a/src' });
     expect(s.sources.at(-1)).toMatchObject({ name: 'repo', sdDir: 'a/src' });
   });
+
+  it('takes a pasted GitHub address as the repo', async () => {
+    const { repoName } = await import('../src/core/sources.ts');
+    for (const input of [
+      'owner/my.repo',
+      ' https://github.com/owner/my.repo ',
+      'https://www.github.com/owner/my.repo/',
+      'github.com/owner/my.repo/releases/tag/v1.0',
+      'https://github.com/owner/my.repo.git',
+      'https://github.com/owner/my.repo?tab=readme',
+      'git@github.com:owner/my.repo.git',
+    ]) {
+      expect(repoName(input)).toBe('owner/my.repo');
+    }
+    expect(repoName('https://gitlab.com/owner/repo')).toBe('https://gitlab.com/owner/repo');
+  });
+
+  it('tells a repo without a release from one GitHub does not show', async () => {
+    const { checkSource } = await import('../src/core/sources.ts');
+    const p = paths(await tempDir());
+    const github = (repos: string[]) =>
+      (async (input: string | URL | Request) => {
+        const repo = String(input).match(/\/repos\/([^/]+\/[^/]+)$/)?.[1];
+        return repo && repos.includes(repo) ? Response.json({ full_name: repo }) : new Response('', { status: 404 });
+      }) as typeof fetch;
+    await expect(checkSource(p, defaultSettings(), 'owner/empty', github(['owner/empty']))).rejects.toThrow('owner/empty has no release');
+    await expect(checkSource(p, defaultSettings(), 'owner/typo', github([]))).rejects.toThrow('owner/typo does not exist on GitHub, or it is private');
+  });
 });
 
 describe('first update of a card with older SD content', () => {

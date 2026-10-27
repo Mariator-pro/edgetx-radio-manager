@@ -181,14 +181,14 @@ export const es: Texts = {
 
   kinds: { firmware: 'Firmware', sdcard: 'Contenido SD', sounds: 'Sonidos', project: 'Proyecto' },
   addSource: 'Añadir una fuente',
-  addSourceText: 'Un repo de GitHub con releases. Se descarga su release más reciente para encontrar los archivos para la tarjeta SD.',
+  addSourceText: 'Un proyecto de GitHub, por ejemplo un script Lua. La app escribe sus archivos en la tarjeta SD y avisa cuando hay una nueva versión. Pega su dirección de GitHub o indica propietario/nombre.',
   githubRepo: 'Repo de GitHub',
   repoPlaceholder: 'propietario/nombre',
   checkingRepo: 'Comprobando …',
   check: 'Comprobar',
-  checkResult: (n, t, f) => `${n} ${t}: ${f} ${f === 1 ? 'archivo' : 'archivos'} para la tarjeta SD, encontrados en`,
-  zipRoot: 'el nivel superior del zip',
+  checkResult: (n, t, f) => `¿Añadir ${n} ${t} como fuente, con ${f} ${f === 1 ? 'archivo' : 'archivos'} para la tarjeta SD?`,
   add: 'Añadir fuente',
+  sourceAdded: (n) => `${n} ahora es una fuente.`,
   colSource: 'Fuente',
   colKind: 'Tipo',
   colNewest: 'Descarga más reciente',
@@ -335,8 +335,8 @@ export const es: Texts = {
       reset
         ? `Se alcanzó el límite de consultas de GitHub, vuelve a intentarlo después de las ${new Date(reset).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}.`
         : 'Se alcanzó el límite de consultas de GitHub, vuelve a intentarlo más tarde.',
-    githubStatus: ({ status }) => `GitHub respondió con el error ${status}.`,
-    downloadFailed: ({ status, url }) => `La descarga falló (${status}): ${url}`,
+    githubStatus: ({ status }) => `GitHub no pudo responder a la solicitud (error ${status}). Inténtalo más tarde.`,
+    downloadFailed: ({ status }) => `La descarga desde GitHub ha fallado (error ${status}). Inténtalo más tarde.`,
 
     radioNotConnected: () => 'La emisora ya no está conectada.',
     chooseRadioType: () => 'Elige primero el tipo de emisora.',
@@ -349,11 +349,12 @@ export const es: Texts = {
     wrongRadioForBackup: ({ connected, board }) => `La emisora conectada es una ${connected}, pero la copia es de una ${board}.`,
     restoreInterrupted: () => 'La tarjeta SD se retiró durante la restauración. Vuelve a conectarla y restaura otra vez.',
 
-    repoFormat: () => 'Indica el repo como propietario/nombre.',
+    repoFormat: () => 'Indica el repo como propietario/nombre, como en su dirección de GitHub (github.com/propietario/nombre).',
     alreadySource: ({ name }) => `${name} ya es una fuente.`,
     noRelease: ({ repo }) => `${repo} aún no tiene ninguna release.`,
+    repoNotFound: ({ repo }) => `${repo} no existe en GitHub, o es privado.`,
     noCommit: ({ repo }) => `${repo} aún no tiene ningún commit.`,
-    noSdFolder: ({ repo, tag }) => `No hay carpeta SCRIPTS/ ni WIDGETS/ en ${repo} ${tag}.`,
+    noSdFolder: ({ repo, tag }) => `La release ${tag} de ${repo} no contiene nada para la tarjeta SD de una emisora EdgeTX.`,
     onlyProjectsRemovable: () => 'Solo se pueden quitar fuentes de proyectos.',
     installedOn: ({ name, tag, radios }) => `${name} ${tag} está instalado en ${radios} y por eso no se puede borrar.`,
 

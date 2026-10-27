@@ -180,14 +180,14 @@ export const sv: Texts = {
 
   kinds: { firmware: 'Firmware', sdcard: 'SD-innehåll', sounds: 'Ljud', project: 'Projekt' },
   addSource: 'Lägg till en källa',
-  addSourceText: 'Ett GitHub-repo med releaser. Dess senaste release laddas ner för att hitta filerna till SD-kortet.',
+  addSourceText: 'Ett projekt på GitHub, t.ex. ett Lua-skript. Appen skriver dess filer till SD-kortet och visar när det finns en ny version. Klistra in dess GitHub-adress eller ange ägare/namn.',
   githubRepo: 'GitHub-repo',
   repoPlaceholder: 'ägare/namn',
   checkingRepo: 'Kontrollerar …',
   check: 'Kontrollera',
-  checkResult: (n, t, f) => `${n} ${t}: ${f} ${f === 1 ? 'fil' : 'filer'} för SD-kortet, hittade i`,
-  zipRoot: 'zip-filens översta nivå',
+  checkResult: (n, t, f) => `Lägga till ${n} ${t} med ${f} ${f === 1 ? 'fil' : 'filer'} för SD-kortet som källa?`,
   add: 'Lägg till källa',
+  sourceAdded: (n) => `${n} är nu en källa.`,
   colSource: 'Källa',
   colKind: 'Typ',
   colNewest: 'Senaste nedladdning',
@@ -334,8 +334,8 @@ export const sv: Texts = {
       reset
         ? `GitHubs gräns för förfrågningar är nådd, försök igen efter ${new Date(reset).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}.`
         : 'GitHubs gräns för förfrågningar är nådd, försök igen senare.',
-    githubStatus: ({ status }) => `GitHub svarade med fel ${status}.`,
-    downloadFailed: ({ status, url }) => `Nedladdningen misslyckades (${status}): ${url}`,
+    githubStatus: ({ status }) => `GitHub kunde inte besvara förfrågan (fel ${status}). Försök igen senare.`,
+    downloadFailed: ({ status }) => `Nedladdningen från GitHub misslyckades (fel ${status}). Försök igen senare.`,
 
     radioNotConnected: () => 'Radion är inte längre ansluten.',
     chooseRadioType: () => 'Välj först radiotyp.',
@@ -348,11 +348,12 @@ export const sv: Texts = {
     wrongRadioForBackup: ({ connected, board }) => `Den anslutna radion är en ${connected}, men säkerhetskopian kommer från en ${board}.`,
     restoreInterrupted: () => 'SD-kortet togs bort under återställningen. Anslut det igen och återställ en gång till.',
 
-    repoFormat: () => 'Ange repot som ägare/namn.',
+    repoFormat: () => 'Ange repot som ägare/namn, som i GitHub-adressen (github.com/ägare/namn).',
     alreadySource: ({ name }) => `${name} är redan en källa.`,
     noRelease: ({ repo }) => `${repo} har ingen release än.`,
+    repoNotFound: ({ repo }) => `${repo} finns inte på GitHub, eller så är det privat.`,
     noCommit: ({ repo }) => `${repo} har ingen commit än.`,
-    noSdFolder: ({ repo, tag }) => `Ingen mapp SCRIPTS/ eller WIDGETS/ hittades i ${repo} ${tag}.`,
+    noSdFolder: ({ repo, tag }) => `Release ${tag} av ${repo} innehåller inget för SD-kortet i en EdgeTX-radio.`,
     onlyProjectsRemovable: () => 'Bara projektkällor kan tas bort.',
     installedOn: ({ name, tag, radios }) => `${name} ${tag} är installerad på ${radios} och kan därför inte tas bort.`,
 

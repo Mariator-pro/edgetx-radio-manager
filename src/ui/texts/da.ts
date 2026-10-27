@@ -180,14 +180,14 @@ export const da: Texts = {
 
   kinds: { firmware: 'Firmware', sdcard: 'SD-indhold', sounds: 'Lyde', project: 'Projekt' },
   addSource: 'Tilføj en kilde',
-  addSourceText: 'Et GitHub-repo med releases. Dets nyeste release downloades for at finde filerne til SD-kortet.',
+  addSourceText: 'Et projekt på GitHub, f.eks. et Lua-script. Appen skriver dets filer på SD-kortet og viser, når der er en ny version. Indsæt dets GitHub-adresse, eller angiv ejer/navn.',
   githubRepo: 'GitHub-repo',
   repoPlaceholder: 'ejer/navn',
   checkingRepo: 'Kontrollerer …',
   check: 'Kontroller',
-  checkResult: (n, t, f) => `${n} ${t}: ${f} ${f === 1 ? 'fil' : 'filer'} til SD-kortet, fundet i`,
-  zipRoot: 'zip-filens øverste niveau',
+  checkResult: (n, t, f) => `Tilføj ${n} ${t} med ${f} ${f === 1 ? 'fil' : 'filer'} til SD-kortet som kilde?`,
   add: 'Tilføj kilde',
+  sourceAdded: (n) => `${n} er nu en kilde.`,
   colSource: 'Kilde',
   colKind: 'Type',
   colNewest: 'Nyeste download',
@@ -334,8 +334,8 @@ export const da: Texts = {
       reset
         ? `GitHubs grænse for forespørgsler er nået, prøv igen efter ${new Date(reset).toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' })}.`
         : 'GitHubs grænse for forespørgsler er nået, prøv igen senere.',
-    githubStatus: ({ status }) => `GitHub svarede med fejl ${status}.`,
-    downloadFailed: ({ status, url }) => `Download mislykkedes (${status}): ${url}`,
+    githubStatus: ({ status }) => `GitHub kunne ikke besvare forespørgslen (fejl ${status}). Prøv igen senere.`,
+    downloadFailed: ({ status }) => `Download fra GitHub mislykkedes (fejl ${status}). Prøv igen senere.`,
 
     radioNotConnected: () => 'Radioen er ikke længere tilsluttet.',
     chooseRadioType: () => 'Vælg først radiotypen.',
@@ -348,11 +348,12 @@ export const da: Texts = {
     wrongRadioForBackup: ({ connected, board }) => `Den tilsluttede radio er en ${connected}, men backuppen er fra en ${board}.`,
     restoreInterrupted: () => 'SD-kortet blev fjernet under gendannelsen. Tilslut det igen, og gendan endnu en gang.',
 
-    repoFormat: () => 'Angiv repoet som ejer/navn.',
+    repoFormat: () => 'Angiv repoet som ejer/navn, som i GitHub-adressen (github.com/ejer/navn).',
     alreadySource: ({ name }) => `${name} er allerede en kilde.`,
     noRelease: ({ repo }) => `${repo} har endnu ingen release.`,
+    repoNotFound: ({ repo }) => `${repo} findes ikke på GitHub, eller det er privat.`,
     noCommit: ({ repo }) => `${repo} har endnu ingen commit.`,
-    noSdFolder: ({ repo, tag }) => `Ingen mappe SCRIPTS/ eller WIDGETS/ fundet i ${repo} ${tag}.`,
+    noSdFolder: ({ repo, tag }) => `Release ${tag} af ${repo} indeholder intet til SD-kortet i en EdgeTX-radio.`,
     onlyProjectsRemovable: () => 'Kun projektkilder kan fjernes.',
     installedOn: ({ name, tag, radios }) => `${name} ${tag} er installeret på ${radios} og kan derfor ikke slettes.`,
 

@@ -181,14 +181,14 @@ export const it: Texts = {
 
   kinds: { firmware: 'Firmware', sdcard: 'Contenuto SD', sounds: 'Suoni', project: 'Progetto' },
   addSource: 'Aggiungi una sorgente',
-  addSourceText: 'Un repo GitHub con release. Viene scaricata la release più recente per trovare i file per la scheda SD.',
+  addSourceText: 'Un progetto su GitHub, ad esempio uno script Lua. L’app scrive i suoi file sulla scheda SD e segnala quando c’è una nuova versione. Incolla il suo indirizzo GitHub o indica proprietario/nome.',
   githubRepo: 'Repo GitHub',
   repoPlaceholder: 'proprietario/nome',
   checkingRepo: 'Controllo …',
   check: 'Controlla',
-  checkResult: (n, t, f) => `${n} ${t}: ${f} file per la scheda SD, trovati in`,
-  zipRoot: 'il livello superiore dello zip',
+  checkResult: (n, t, f) => `Aggiungere ${n} ${t} come sorgente, con ${f} file per la scheda SD?`,
   add: 'Aggiungi sorgente',
+  sourceAdded: (n) => `${n} è ora una sorgente.`,
   colSource: 'Sorgente',
   colKind: 'Tipo',
   colNewest: 'Ultimo download',
@@ -335,8 +335,8 @@ export const it: Texts = {
       reset
         ? `Raggiunto il limite di richieste di GitHub, riprova dopo le ${new Date(reset).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}.`
         : 'Raggiunto il limite di richieste di GitHub, riprova più tardi.',
-    githubStatus: ({ status }) => `GitHub ha risposto con l’errore ${status}.`,
-    downloadFailed: ({ status, url }) => `Download non riuscito (${status}): ${url}`,
+    githubStatus: ({ status }) => `GitHub non è riuscito a rispondere alla richiesta (errore ${status}). Riprova più tardi.`,
+    downloadFailed: ({ status }) => `Il download da GitHub non è riuscito (errore ${status}). Riprova più tardi.`,
 
     radioNotConnected: () => 'Il radiocomando non è più collegato.',
     chooseRadioType: () => 'Scegli prima il tipo di radiocomando.',
@@ -349,11 +349,12 @@ export const it: Texts = {
     wrongRadioForBackup: ({ connected, board }) => `Il radiocomando collegato è un ${connected}, ma il backup è di un ${board}.`,
     restoreInterrupted: () => 'La scheda SD è stata rimossa durante il ripristino. Ricollegala e ripristina di nuovo.',
 
-    repoFormat: () => 'Indica il repo come proprietario/nome.',
+    repoFormat: () => 'Indica il repo come proprietario/nome, come nel suo indirizzo GitHub (github.com/proprietario/nome).',
     alreadySource: ({ name }) => `${name} è già una sorgente.`,
     noRelease: ({ repo }) => `${repo} non ha ancora una release.`,
+    repoNotFound: ({ repo }) => `${repo} non esiste su GitHub, oppure è privato.`,
     noCommit: ({ repo }) => `${repo} non ha ancora un commit.`,
-    noSdFolder: ({ repo, tag }) => `Nessuna cartella SCRIPTS/ o WIDGETS/ trovata in ${repo} ${tag}.`,
+    noSdFolder: ({ repo, tag }) => `La release ${tag} di ${repo} non contiene nulla per la scheda SD di un radiocomando EdgeTX.`,
     onlyProjectsRemovable: () => 'Si possono rimuovere solo le sorgenti dei progetti.',
     installedOn: ({ name, tag, radios }) => `${name} ${tag} è installato su ${radios} e quindi non si può eliminare.`,
 

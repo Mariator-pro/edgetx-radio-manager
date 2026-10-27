@@ -179,14 +179,14 @@ export const zh: Texts = {
 
   kinds: { firmware: '固件', sdcard: 'SD 内容', sounds: '语音', project: '项目' },
   addSource: '添加来源',
-  addSourceText: '一个带有 Release 的 GitHub 仓库。会下载其最新 Release，以找到用于 SD 卡的文件。',
+  addSourceText: 'GitHub 上的一个项目，例如 Lua 脚本。应用会把它的文件写入 SD 卡，并在有新版本时提示。粘贴它的 GitHub 地址，或填写 所有者/名称。',
   githubRepo: 'GitHub 仓库',
   repoPlaceholder: '所有者/名称',
   checkingRepo: '正在检查 …',
   check: '检查',
-  checkResult: (n, t, f) => `${n} ${t}：${f} 个用于 SD 卡的文件，位于`,
-  zipRoot: 'zip 的顶层',
+  checkResult: (n, t, f) => `将 ${n} ${t} 添加为来源？其中有 ${f} 个用于 SD 卡的文件。`,
   add: '添加来源',
+  sourceAdded: (n) => `${n} 现在是一个来源。`,
   colSource: '来源',
   colKind: '类型',
   colNewest: '最新下载',
@@ -332,8 +332,8 @@ export const zh: Texts = {
       reset
         ? `已达到 GitHub 请求上限，请在 ${new Date(reset).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 之后重试。`
         : '已达到 GitHub 请求上限，请稍后重试。',
-    githubStatus: ({ status }) => `GitHub 返回错误 ${status}。`,
-    downloadFailed: ({ status, url }) => `下载失败（${status}）：${url}`,
+    githubStatus: ({ status }) => `GitHub 无法响应请求（错误 ${status}）。请稍后再试。`,
+    downloadFailed: ({ status }) => `从 GitHub 下载失败（错误 ${status}）。请稍后再试。`,
 
     radioNotConnected: () => '遥控器已断开连接。',
     chooseRadioType: () => '请先选择遥控器类型。',
@@ -346,11 +346,12 @@ export const zh: Texts = {
     wrongRadioForBackup: ({ connected, board }) => `已连接的遥控器是 ${connected}，但备份来自 ${board}。`,
     restoreInterrupted: () => '恢复过程中 SD 卡被拔出。请重新连接并再次恢复。',
 
-    repoFormat: () => '请以 所有者/名称 的形式输入仓库。',
+    repoFormat: () => '请以 所有者/名称 的形式输入仓库，与 GitHub 地址一致（github.com/所有者/名称）。',
     alreadySource: ({ name }) => `${name} 已经是一个来源。`,
     noRelease: ({ repo }) => `${repo} 还没有 Release。`,
+    repoNotFound: ({ repo }) => `GitHub 上没有仓库 ${repo}，或者它是私有的。`,
     noCommit: ({ repo }) => `${repo} 还没有提交。`,
-    noSdFolder: ({ repo, tag }) => `在 ${repo} ${tag} 中未找到 SCRIPTS/ 或 WIDGETS/ 文件夹。`,
+    noSdFolder: ({ repo, tag }) => `${repo} 的 Release ${tag} 中没有适用于 EdgeTX 遥控器 SD 卡的内容。`,
     onlyProjectsRemovable: () => '只能移除项目来源。',
     installedOn: ({ name, tag, radios }) => `${name} ${tag} 已安装在 ${radios} 上，因此无法删除。`,
 
