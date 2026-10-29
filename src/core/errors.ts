@@ -1,60 +1,62 @@
 // Errors the interface translates: a code with its values. The English text here is what the
 // CLI prints and what the interface shows in English.
 export const ERRORS = {
-  busy: (p: { op: string }) => `Please wait, another operation is still running (${p.op})`,
-  notFound: () => 'Not found',
-  invalidRequest: (p: { what: string }) => `Invalid request: ${p.what}`,
-  noConnection: () => 'No connection to GitHub. Check the internet connection.',
+  busy: (p: { op: string }) => `Another task is still running (${p.op}). Try again when it’s done.`,
+  notFound: () => 'Not found.',
+  invalidRequest: (p: { what: string }) => `The request isn’t valid: ${p.what}`,
+  noConnection: () => 'Can’t reach GitHub. Check your internet connection.',
   rateLimit: (p: { reset?: string } = {}) =>
-    p.reset ? `GitHub rate limit reached, try again after ${new Date(p.reset).toTimeString().slice(0, 5)}` : 'GitHub rate limit reached, try again later',
-  githubStatus: (p: { status: number }) => `GitHub answered ${p.status}`,
-  downloadFailed: (p: { status: number; url: string }) => `Download failed (${p.status}): ${p.url}`,
+    p.reset
+      ? `GitHub takes no more requests for now. Try again after ${new Date(p.reset).toTimeString().slice(0, 5)}.`
+      : 'GitHub takes no more requests for now. Try again later.',
+  githubStatus: (p: { status: number }) => `GitHub responded with error ${p.status}. Try again later.`,
+  downloadFailed: (p: { status: number; url: string }) => `Couldn’t download ${p.url} (error ${p.status}).`,
 
-  radioNotConnected: () => 'Radio not connected',
-  chooseRadioType: () => 'Choose the radio type first',
+  radioNotConnected: () => 'The radio is no longer connected.',
+  chooseRadioType: () => 'Choose the radio type first.',
   unknownRadioType: (p: { board: string }) => `Unknown radio type: ${p.board}`,
-  unknownRadioOrSource: () => 'Unknown radio or source',
-  oneVoicePerLanguage: () => 'Only one voice per language',
-  firmwareTooOld: (p: { version: string; min: string }) => `EdgeTX ${p.version} is below ${p.min}. Flash the firmware first.`,
+  unknownRadioOrSource: () => 'Unknown radio or source.',
+  oneVoicePerLanguage: () => 'Choose only one voice per language.',
+  firmwareTooOld: (p: { version: string; min: string }) => `EdgeTX ${p.version} is older than ${p.min}. Flash the firmware first.`,
 
-  backupNotFound: (p: { name: string }) => `Backup ${p.name} not found`,
-  wrongRadioForBackup: (p: { connected: string; board: string }) => `The connected radio is a ${p.connected}, the backup is from a ${p.board}`,
-  restoreInterrupted: () => 'The SD card was removed during the restore. Connect it again and restore once more.',
+  backupNotFound: (p: { name: string }) => `Can’t find the backup ${p.name}.`,
+  wrongRadioForBackup: (p: { connected: string; board: string }) => `The connected radio is a ${p.connected}, but the backup is from a ${p.board}.`,
+  restoreInterrupted: () => 'The SD card was disconnected during the restore. Connect it again and restore the backup once more.',
 
-  modelNotFound: (p: { name: string }) => `Model ${p.name} not found`,
-  notModelFile: (p: { file: string }) => `${p.file} is not a model file (.yml or .etx)`,
-  importGone: () => 'The imported file is no longer loaded. Choose it again.',
-  modelsDontFit: (p: { names: string }) => `Not everything fits this radio (${p.names}); confirm to copy anyway`,
+  modelNotFound: (p: { name: string }) => `Can’t find the model ${p.name}.`,
+  notModelFile: (p: { file: string }) => `${p.file} isn’t a model file (.yml or .etx).`,
+  importGone: () => 'The imported file isn’t loaded any more. Choose it again.',
+  modelsDontFit: (p: { names: string }) => `Some models don’t fully fit this radio (${p.names}). To copy them anyway, choose “Copy anyway”.`,
   modelsInterrupted: (p: { done: string }) =>
-    `The SD card was removed while writing the models${p.done ? ` (done: ${p.done})` : ''}. Connect it again and start once more.`,
+    `The SD card was disconnected while the models were being written${p.done ? ` (done: ${p.done})` : ''}. Connect it again and start once more.`,
 
-  repoFormat: () => 'Enter the repo as owner/name',
-  alreadySource: (p: { name: string }) => `${p.name} is already a source`,
-  noRelease: (p: { repo: string }) => `${p.repo} has no release`,
-  noCommit: (p: { repo: string }) => `${p.repo} has no commit yet`,
-  noSdFolder: (p: { repo: string; tag: string }) => `No SCRIPTS/ or WIDGETS/ folder found in ${p.repo} ${p.tag}`,
-  onlyProjectsRemovable: () => 'Only project sources can be removed',
-  installedOn: (p: { name: string; tag: string; radios: string }) => `${p.name} ${p.tag} is installed on ${p.radios}`,
+  repoFormat: () => 'Enter the repo as owner/name.',
+  alreadySource: (p: { name: string }) => `${p.name} is already a source.`,
+  noRelease: (p: { repo: string }) => `${p.repo} has no release yet.`,
+  noCommit: (p: { repo: string }) => `${p.repo} has no commit yet.`,
+  noSdFolder: (p: { repo: string; tag: string }) => `${p.repo} ${p.tag} has no SCRIPTS/ or WIDGETS/ folder.`,
+  onlyProjectsRemovable: () => 'You can only remove project sources.',
+  installedOn: (p: { name: string; tag: string; radios: string }) => `${p.name} ${p.tag} is installed on ${p.radios}, so you can’t delete it.`,
 
-  firmwareNotDownloaded: (p: { tag: string }) => `Firmware ${p.tag} is not downloaded`,
-  noFirmwareFor: (p: { board: string; tag: string }) => `No firmware for ${p.board} in ${p.tag}`,
-  notFirmwareFile: (p: { file: string }) => `${p.file} is not a firmware file (.uf2 or .bin)`,
-  wrongFirmwareType: (p: { file: string; ext: string }) => `${p.file} does not fit this radio, it takes ${p.ext} files`,
-  wrongFirmwareBoard: (p: { file: string; fileBoard: string; board: string }) => `${p.file} is built for ${p.fileBoard}, not for ${p.board}`,
-  unknownFirmwareFile: (p: { file: string }) => `${p.file} has no EdgeTX identification; confirm to flash it anyway`,
-  wrongRadio: (p: { connected: string; board: string }) => `The connected radio is a ${p.connected}, the firmware is for ${p.board}`,
-  dfuUtilMissing: () => 'dfu-util is not installed (macOS: brew install dfu-util)',
-  noDfuRadio: () => 'No radio in DFU mode found',
-  severalDfu: () => 'More than one DFU device found',
+  firmwareNotDownloaded: (p: { tag: string }) => `Firmware ${p.tag} isn’t downloaded yet.`,
+  noFirmwareFor: (p: { board: string; tag: string }) => `EdgeTX ${p.tag} has no firmware for ${p.board}.`,
+  notFirmwareFile: (p: { file: string }) => `${p.file} isn’t a firmware file (.uf2 or .bin).`,
+  wrongFirmwareType: (p: { file: string; ext: string }) => `${p.file} doesn’t fit this radio. It needs ${p.ext} files.`,
+  wrongFirmwareBoard: (p: { file: string; fileBoard: string; board: string }) => `${p.file} is built for ${p.fileBoard}, not for ${p.board}.`,
+  unknownFirmwareFile: (p: { file: string }) => `${p.file} has no EdgeTX identification. To flash it anyway, choose “Flash anyway”.`,
+  wrongRadio: (p: { connected: string; board: string }) => `The connected radio is a ${p.connected}, but the firmware is for ${p.board}.`,
+  dfuUtilMissing: () => 'dfu-util isn’t installed. On macOS, install it with “brew install dfu-util”.',
+  noDfuRadio: () => 'Can’t find a radio in DFU mode.',
+  severalDfu: () => 'More than one device is in DFU mode. Connect only the radio.',
   dfuFailed: (p: { detail: string }) => `dfu-util failed: ${p.detail}`,
-  cancelled: () => 'Cancelled',
+  cancelled: () => 'Cancelled.',
   updateCancelled: (p: { backup?: string }) =>
     p.backup
-      ? `Update cancelled. The files written so far stay on the SD card; backup ${p.backup} holds the state before.`
-      : 'Update cancelled during the backup. Nothing on the SD card was changed.',
-  radioTimeout: () => 'The radio did not show up in time',
+      ? `SD update cancelled. The files written so far stay on the SD card. Backup ${p.backup} holds the state from before.`
+      : 'SD update cancelled during the backup. Nothing on the SD card changed.',
+  radioTimeout: () => 'The radio didn’t show up in time. Check the steps and try again.',
 
-  appUpdateFailed: () => 'The app update could not be downloaded. Check the internet connection and try again.',
+  appUpdateFailed: () => 'Couldn’t download the app update. Check your internet connection and try again.',
 };
 
 export type ErrorCode = keyof typeof ERRORS;

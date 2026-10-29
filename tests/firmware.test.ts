@@ -58,7 +58,7 @@ describe('firmware', () => {
     expect(await flashMethod(p, 'v2.12.5', 'tx16s')).toBe('dfu');
     expect(await flashMethod(p, 'v2.12.5', 'tx16smk3')).toBe('uf2');
     expect(await flashMethod(p, 'v2.12.5', 'tx15')).toBe('uf2');
-    await expect(flashMethod(p, 'v2.12.5', 'x9e')).rejects.toThrow(/No firmware for x9e/);
+    await expect(flashMethod(p, 'v2.12.5', 'x9e')).rejects.toThrow(/has no firmware for x9e/);
   });
 
   it('knows the flash method from the newest stable version, else from older ones, then release candidates', async () => {
@@ -80,8 +80,8 @@ describe('firmware', () => {
     const p = await withFirmware();
     expect(await firmwareFile(p, 'v2.12.5', 'tx16smk3')).toEqual({ name: 'tx16smk3-0ebe2e9.uf2', data: Buffer.from('UF2-MK3') });
     expect((await firmwareFile(p, 'v2.12.5', 'tx16s')).name).toBe('tx16s-0ebe2e9.bin');
-    await expect(firmwareFile(p, 'v2.12.5', 'x9e')).rejects.toThrow(/No firmware for x9e/);
-    await expect(firmwareFile(p, 'v9.9.9', 'tx15')).rejects.toThrow(/not downloaded/);
+    await expect(firmwareFile(p, 'v2.12.5', 'x9e')).rejects.toThrow(/has no firmware for x9e/);
+    await expect(firmwareFile(p, 'v9.9.9', 'tx15')).rejects.toThrow(/isn’t downloaded/);
   });
 
   it('reads the bootloader drive and refuses firmware for another radio', async () => {
@@ -183,9 +183,9 @@ esac
   it('checks an own file: extension, how the radio flashes, and the radio type inside', () => {
     const tx15 = uf2(withId('edgetx-tx15-v2.12.5 (0ebe2e98)'));
     expect(checkFirmwareFile('my.uf2', tx15, 'tx15', 'uf2')).toEqual({ method: 'uf2', board: 'tx15', version: 'v2.12.5' });
-    expect(() => checkFirmwareFile('notes.txt', tx15, 'tx15', 'uf2')).toThrow(/not a firmware file/);
-    expect(() => checkFirmwareFile('my.bin', withId('edgetx-tx15-v2.12.5'), 'tx15', 'uf2')).toThrow(/takes \.uf2 files/);
-    expect(() => checkFirmwareFile('fake.uf2', Buffer.from('no uf2 blocks'), 'tx15')).toThrow(/not a firmware file/);
+    expect(() => checkFirmwareFile('notes.txt', tx15, 'tx15', 'uf2')).toThrow(/isn’t a firmware file/);
+    expect(() => checkFirmwareFile('my.bin', withId('edgetx-tx15-v2.12.5'), 'tx15', 'uf2')).toThrow(/needs \.uf2 files/);
+    expect(() => checkFirmwareFile('fake.uf2', Buffer.from('no uf2 blocks'), 'tx15')).toThrow(/isn’t a firmware file/);
     expect(() => checkFirmwareFile('mk3.uf2', uf2(withId('edgetx-tx16smk3-v2.12.5')), 'tx15', 'uf2')).toThrow(/built for tx16smk3, not for tx15/);
     // no identification: allowed, but without a radio type the caller has to confirm
     expect(checkFirmwareFile('odd.bin', Buffer.alloc(2048, 0xff), 'tx16s', 'dfu')).toEqual({ method: 'dfu' });

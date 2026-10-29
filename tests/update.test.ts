@@ -427,7 +427,7 @@ describe('new sources', () => {
       { name: 'repo', repo: 'no-slash/../repo' },
       { name: 'repo', repo: 'owner/repo', sdDir: '../src' },
     ]) {
-      expect(() => addSource(s, { ...bad, kind: 'project' })).toThrow('Invalid request: source');
+      expect(() => addSource(s, { ...bad, kind: 'project' })).toThrow('The request isn’t valid: source');
     }
     addSource(s, { name: 'repo', repo: 'owner/repo', kind: 'project', sdDir: 'a/src' });
     expect(s.sources.at(-1)).toMatchObject({ name: 'repo', sdDir: 'a/src' });

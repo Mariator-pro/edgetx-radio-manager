@@ -20,11 +20,10 @@ describe('interface texts', () => {
   });
 
   it('picks the plural that fits the number', () => {
-    expect(TEXTS.ru.backupCount(1)).toBe('1 копия');
-    expect(TEXTS.ru.backupCount(3)).toBe('3 копии');
-    expect(TEXTS.ru.backupCount(11)).toBe('11 копий');
-    expect(TEXTS.ru.backupCount(22)).toBe('22 копии');
-    expect(TEXTS.cs.backupCount(5)).toBe('5 záloh');
+    expect(TEXTS.en.backupCount(1)).toBe('1 backup');
+    expect(TEXTS.en.backupCount(3)).toBe('3 backups');
+    expect(TEXTS.de.versionCount(1)).toBe('1 Stand');
+    expect(TEXTS.de.versionCount(3)).toBe('3 Stände');
   });
 
   it('sorts a release candidate after its release and before the version below', () => {

@@ -318,14 +318,14 @@ export interface DownloadResultView {
 // How a radio gets ready for flashing; the trim combo is BOOTLOADER_KEYS in EdgeTX.
 export const FLASH_STEPS: Record<'uf2' | 'dfu', string[]> = {
   uf2: [
-    'Switch the radio off and unplug the USB cable.',
-    'Hold both horizontal trims towards the middle and switch the radio on: the bootloader starts.',
-    'Connect the USB cable. The radio shows up as a drive and gets the firmware.',
+    'Turn off the radio and unplug the USB cable.',
+    'Hold both horizontal trims toward the center and turn on the radio. The bootloader starts.',
+    'Connect the USB cable. The radio shows up as a drive, and the app writes the firmware to it.',
   ],
   dfu: [
-    'Switch the radio off.',
-    'Connect the USB cable while the radio stays off: it starts in DFU mode, the screen stays dark.',
-    'The firmware is written over USB; the radio restarts when done.',
+    'Turn off the radio.',
+    'Connect the USB cable while the radio stays off. It starts in DFU mode, and the screen stays dark.',
+    'The app writes the firmware over USB, then the radio restarts.',
   ],
 };
 

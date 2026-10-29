@@ -176,7 +176,7 @@ describe('downloadAll', () => {
       ['gps-homer', 'no-release'],
       ['lipo-nanny', 'error'],
     ]);
-    expect(first[3]!.message).toMatch(/rate limit/);
+    expect(first[3]!.message).toMatch(/no more requests/);
 
     const dir = join(p.packages, 'edgetx-firmware', 'v2.12.5');
     expect((await readdir(dir)).sort()).toEqual(['edgetx-firmware-v2.12.5.zip', 'release.json']);

@@ -63,23 +63,23 @@ Commands:
   status     connected radio, installed and downloaded versions
   download   check all sources for new releases and download them
   backup     copy the whole SD card of the connected radio
-  update     show the plan, then back up the card and update it
-  restore    list the backups of the connected radio; "restore <backup>" brings the card back to one
+  update     show the plan, then back up the SD card and update it
+  restore    list the backups of the connected radio; "restore <backup>" restores one
   models     list the models in the backups of the connected radio (or --board); then:
-             "models copy <model> ..."   newest version onto the connected card (--from <radio>[/<backup>])
-             "models delete <model> ..." move models on the card to MODELS/DELETED
+             "models copy <model> ..."   newest version onto the connected SD card (--from <radio>[/<backup>])
+             "models delete <model> ..." move models on the SD card to MODELS/DELETED
              "models export <model> ..." save as <model>.yml (--from, --out <folder>)
-             "models import <file> [<model> ...]" from a .yml or .etx file onto the card
-             "models diff <model> [<backup> [<backup>|card]]" differences, newest version against the card
-  flash      flash firmware: "flash" for the newest download, "flash v2.12.2" or "flash v2.13.0-rc1" for another (downloaded first), "flash --file <path>" for an own .uf2 or .bin
+             "models import <file> [<model> ...]" from a .yml or .etx file onto the SD card
+             "models diff <model> [<backup> [<backup>|card]]" differences, newest version against the SD card
+  flash      flash firmware: "flash" for the newest download, "flash v2.12.2" or "flash v2.13.0-rc1" for another (downloaded first), "flash --file <path>" for your own .uf2 or .bin
   sources    list sources; "sources add <owner/repo>", "sources remove <name>"
   ui         open the browser interface
 
 Options:
   --volume <path>   use this drive instead of detecting the radio
-  --board <id>      radio type when the card has no RADIO/radio.yml, e.g. tx16s
-  --no-backup       restore or change models without backing up the card first
-  --force           flash an own file that has no EdgeTX identification; copy models that do not fully fit
+  --board <id>      radio type when the SD card has no RADIO/radio.yml, e.g. tx16s
+  --no-backup       restore or change models without backing up the SD card first
+  --force           flash your own file without EdgeTX identification; copy models that don't fully fit
   --add             models copy/import: add as new models instead of replacing those of the same name
   --from <radio>[/<backup>]  models copy/export/diff: take the models from these backups
   --out <folder>    models export: where the files go (default: current folder)
@@ -92,7 +92,7 @@ const mb = (bytes: number) => `${(bytes / 1e6).toFixed(1)} MB`;
 async function connectedCards(volume?: string): Promise<RadioCard[]> {
   if (volume) {
     const card = await readCard(volume);
-    if (!card) throw new UserError(`${volume} is not an EdgeTX SD card (no RADIO/ and MODELS/)`);
+    if (!card) throw new UserError(`${volume} isn't an EdgeTX SD card (RADIO/ and MODELS/ are missing).`);
     return [card];
   }
   return findCards(await listVolumes());
@@ -100,9 +100,9 @@ async function connectedCards(volume?: string): Promise<RadioCard[]> {
 
 async function oneCard(volume?: string): Promise<RadioCard> {
   const cards = await connectedCards(volume);
-  if (cards.length === 0) throw new UserError('No radio connected. Connect it via USB in "USB Storage" mode.');
+  if (cards.length === 0) throw new UserError('No radio connected. Connect it with a USB cable and choose "USB Storage" on the radio.');
   if (cards.length > 1) {
-    throw new UserError(`Several radios connected, pick one with --volume:\n${cards.map((c) => `  ${c.volume}`).join('\n')}`);
+    throw new UserError(`More than one radio is connected. Choose one with --volume:\n${cards.map((c) => `  ${c.volume}`).join('\n')}`);
   }
   return cards[0]!;
 }
@@ -118,7 +118,7 @@ async function ask(question: string): Promise<string> {
 
 async function askBoard(p: Paths, s: Settings): Promise<string> {
   const types = await radioTypes(p, s);
-  if (types.length === 0) throw new UserError('The list of radios comes with the SD content. Run "download" first.');
+  if (types.length === 0) throw new UserError('The list of radios comes with the EdgeTX SD content. Run "download" first.');
   console.log('This SD card has no RADIO/radio.yml yet. Which radio is it?');
   types.forEach((r, i) => console.log(`  ${String(i + 1).padStart(2)}  ${r.name}`));
   const type = types[parseInt(await ask('Number: '), 10) - 1];
@@ -138,12 +138,12 @@ async function status(p: Paths, s: Settings, volume?: string): Promise<void> {
   for (const c of cards) {
     console.log(`${radioName(types, c.board)}${c.board ? ` (${c.board})` : ''} at ${c.volume}`);
     const fw = c.firmware ?? 'unknown';
-    const low = c.firmware && isBelowMin(c.firmware) ? `  below EdgeTX ${MIN_EDGETX}, flash first` : '';
+    const low = c.firmware && isBelowMin(c.firmware) ? `  older than EdgeTX ${MIN_EDGETX}, flash the firmware first` : '';
     console.log(`  Firmware   ${fw}${low}`);
     if (c.board) console.log(`  Sounds     ${soundsOf(s.radios[c.board]).join(', ') || 'unknown'}`);
     const installed = Object.entries(c.installed?.packages ?? {});
     if (installed.length === 0) {
-      console.log(`  Installed  nothing recorded yet${c.sdcardVersion ? ` (SD content ${c.sdcardVersion} per edgetx.sdcard.version)` : ''}`);
+      console.log(`  Installed  nothing recorded yet${c.sdcardVersion ? ` (SD content ${c.sdcardVersion}, from edgetx.sdcard.version)` : ''}`);
     }
     for (const [name, v] of installed) console.log(`  Installed  ${name.padEnd(16)} ${v.version}`);
   }
@@ -165,7 +165,7 @@ async function download(p: Paths, s: Settings): Promise<void> {
       current: `${r.tag} up to date`,
       'no-release': 'no release yet',
       skipped: `${r.tag ?? ''} skipped: ${r.message ?? ''}`,
-      error: `error: ${r.message ?? ''}`,
+      error: `failed: ${r.message ?? ''}`,
     }[r.status];
     console.log(`  ${r.source.padEnd(16)} ${what}`);
   }
@@ -185,7 +185,7 @@ async function backup(p: Paths, s: Settings, volume?: string, boardOpt?: string)
 
 // info: why the backup is made; alsoKeep: the backup being restored, which the clean-up must not delete
 async function runBackup(p: Paths, s: Settings, card: RadioCard, board: string, info: BackupInfo, alsoKeep?: string): Promise<void> {
-  console.log(`Backing up ${radioName(await radioTypes(p, s), board)} from ${card.volume} ...`);
+  console.log(`Backing up the ${radioName(await radioTypes(p, s), board)} from ${card.volume} ...`);
   let shown = -1;
   const result = await backupCard(card.volume, board, p, new Date(), (pr) => {
     const pct = pr.bytesTotal > 0 ? Math.floor((pr.bytesDone / pr.bytesTotal) * 100) : 100;
@@ -199,13 +199,13 @@ async function runBackup(p: Paths, s: Settings, card: RadioCard, board: string, 
   const removed = await pruneBackups(p, board, s.backupsToKeep, [...(s.keptBackups[board] ?? []), ...(alsoKeep ? [alsoKeep] : [])]);
   forgetBackups(s, board, removed);
   await saveSettings(p, s);
-  if (removed.length > 0) console.log(`Removed old backups: ${removed.join(', ')}`);
+  if (removed.length > 0) console.log(`Deleted old backups: ${removed.join(', ')}`);
 }
 
 const REASONS = {
-  modified: 'changed on the card since the last update',
-  unknown: 'a file no package delivered is in the way',
-  'removed-modified': 'no longer in any package, but changed on the card',
+  modified: 'changed on the SD card since the last update',
+  unknown: 'a file from somewhere else is already there',
+  'removed-modified': 'no package has it any more, but it changed on the SD card',
 };
 
 // Asks per conflict; Enter keeps the card's file.
@@ -213,7 +213,7 @@ async function resolveConflicts(conflicts: PlanItem[]): Promise<Map<string, Reso
   const res = new Map<string, Resolution>();
   for (const c of conflicts) {
     console.log(`\nConflict: ${c.path}\n  ${REASONS[c.reason!]} (${c.pkg})`);
-    const q = c.wanted ? '  Keep file on radio [k] or overwrite with update [w]? (k) ' : "  Keep it [k] or delete it [d]? (k) ";
+    const q = c.wanted ? '  Keep the file [k] or overwrite it [w]? (k) ' : '  Keep the file [k] or delete it [d]? (k) ';
     const a = await ask(q);
     res.set(c.path, a === 'w' || a === 'd' ? 'apply' : 'keep');
   }
@@ -223,7 +223,7 @@ async function resolveConflicts(conflicts: PlanItem[]): Promise<Map<string, Reso
 async function update(p: Paths, s: Settings, volume?: string, boardOpt?: string): Promise<void> {
   const [card, board] = await cardAndBoard(p, s, volume, boardOpt);
   if (card.firmware && isBelowMin(card.firmware)) {
-    throw new UserError(`EdgeTX ${card.firmware} is below ${MIN_EDGETX}. Flash the firmware first.`);
+    throw new UserError(`EdgeTX ${card.firmware} is older than ${MIN_EDGETX}. Flash the firmware first.`);
   }
   const setup = await prepareUpdate(p, s, card, board);
   if (setup.selectionChanged) await saveSettings(p, s);
@@ -237,7 +237,7 @@ async function update(p: Paths, s: Settings, volume?: string, boardOpt?: string)
     console.log(`  ${c.on ? '[x]' : '[ ]'} ${src.name.padEnd(16)} ${c.origin.padEnd(8)} ${content?.version ?? ''}${isNew}`);
   }
   if (setup.missing.length > 0) {
-    console.log(`\nNot available (run "download", or no local checkout): ${setup.missing.join(', ')}`);
+    console.log(`\nNot available (not downloaded yet, or no local checkout): ${setup.missing.join(', ')}`);
   }
 
   const n = countActions(setup.plan);
@@ -250,16 +250,16 @@ async function update(p: Paths, s: Settings, volume?: string, boardOpt?: string)
 
   if (n.add + n.replace + n.delete + n.conflict === 0) {
     await applyPlan(card.volume, setup);
-    console.log('\nNothing to change: the SD card is already up to date.');
+    console.log('\nThe SD card is already up to date.');
     return;
   }
   const resolutions = await resolveConflicts(setup.plan.filter((i) => i.action === 'conflict'));
-  if ((await ask('\nBack up the card and update it? [y/N] ')) !== 'y') {
+  if ((await ask('\nBack up the SD card and update it? [y/N] ')) !== 'y') {
     console.log('Nothing changed.');
     return;
   }
   await runBackup(p, s, card, board, { reason: 'update', changes: setup.changes });
-  console.log('Updating ...');
+  console.log('Updating the SD card ...');
   const r = await applyPlan(card.volume, setup, resolutions, (pr) => {
     if (process.stdout.isTTY) process.stdout.write(`\r  ${pr.done}/${pr.total}`);
   });
@@ -275,7 +275,7 @@ function backupDetails(firmware?: string, info?: BackupInfo): string {
     info?.reason === 'manual'
       ? 'made by hand'
       : info?.reason === 'update'
-        ? `before update${info.changes?.length ? `: ${info.changes.map(changeText).join(', ')}` : ''}`
+        ? `before SD update${info.changes?.length ? `: ${info.changes.map(changeText).join(', ')}` : ''}`
         : info?.reason === 'restore'
           ? `before restoring ${info.restoredFrom}`
           : info?.reason === 'models'
@@ -308,20 +308,20 @@ async function restore(p: Paths, s: Settings, name?: string, noBackup = false, v
   }
   const plan = await planRestore(card.volume, p, board, name);
   const count = (a: string) => plan.items.filter((i) => i.action === a).length;
-  console.log(`${radio} at ${card.volume}, back to the backup ${name}\n`);
+  console.log(`${radio} at ${card.volume}, restore backup ${name}\n`);
   console.log(`Plan: ${count('add')} back, ${count('replace')} replaced, ${count('delete')} deleted, ${plan.unchanged} unchanged`);
   for (const d of plan.items.filter((i) => i.action === 'delete')) console.log(`  delete  ${d.path}`);
   if (plan.firmware && card.firmware && plan.firmware !== card.firmware) {
-    console.log(`\nNote: the backup was made with EdgeTX ${plan.firmware}, the radio runs ${card.firmware}.`);
+    console.log(`\nNote: the backup is from EdgeTX ${plan.firmware}, but the radio runs ${card.firmware}.`);
     console.log('Models and scripts from the backup may not fully work with this firmware.');
   }
   if (plan.items.length === 0) {
-    console.log('\nNothing to change: the SD card already matches the backup.');
+    console.log('\nThe SD card already matches the backup.');
     return;
   }
   const q = noBackup
     ? '\nRestore without a backup first? Files added since then are gone for good. [y/N] '
-    : '\nBack up the card and restore? [y/N] ';
+    : '\nBack up the SD card and restore? [y/N] ';
   if ((await ask(q)) !== 'y') {
     console.log('Nothing changed.');
     return;
@@ -391,8 +391,8 @@ async function modelsList(p: Paths, s: Settings, o: ModelOpts): Promise<void> {
     return;
   }
   const onCard = card ? (await readCardState(card.volume)).models : undefined;
-  console.log(`Models in the backups of the ${radio}${onCard ? `, compared with the card at ${card!.volume}` : ''}:`);
-  const STATUS = { same: 'on the card', changed: 'on the card, changed', missing: 'not on the card' };
+  console.log(`Models in the backups of the ${radio}${onCard ? `, compared with the SD card at ${card!.volume}` : ''}:`);
+  const STATUS = { same: 'on the SD card', changed: 'on the SD card, changed', missing: 'not on the SD card' };
   for (const e of entries) {
     const st = onCard ? `  ${STATUS[cardStatus(e, onCard).status]}` : '';
     console.log(`  ${e.name}${e.file ? ` (${e.file})` : ''}${st}`);
@@ -404,7 +404,7 @@ async function modelsList(p: Paths, s: Settings, o: ModelOpts): Promise<void> {
   if (onCard && card?.board === board) {
     const only = onCard.filter((m) => !entries.some((e) => e.name === m.name));
     if (only.length > 0) console.log(`
-Only on the card: ${only.map((m) => `${m.name} (${m.file})`).join(', ')}`);
+Only on the SD card: ${only.map((m) => `${m.name} (${m.file})`).join(', ')}`);
   }
 }
 
@@ -413,7 +413,7 @@ function printCopy(items: CopyItem[], from: (i: CopyItem) => string): void {
     console.log(`\n${i.name} (${from(i)}): ${i.mode === 'replace' ? `replaces ${i.target}` : `new as ${i.target}`}`);
     if (i.image) console.log(`  ${i.image.path} (${i.image.action === 'add' ? 'new' : 'replaced'})`);
     if (i.checklist) console.log(`  ${i.checklist.path} (${i.checklist.action === 'add' ? 'new' : 'replaced'})`);
-    for (const f of i.missing) console.log(`  Not copied, missing on the card: ${f.path}${f.pkg ? ` (turn on ${f.pkg} for this radio)` : ''}`);
+    for (const f of i.missing) console.log(`  Not copied, missing on the SD card: ${f.path}${f.pkg ? ` (turn on ${f.pkg} for this radio)` : ''}`);
     if (i.controls.length) console.log(`  Not on this radio: ${i.controls.join(', ')}`);
     if (i.module) console.log(`  Internal module: the model uses ${i.module.model}, the radio has ${i.module.radio ?? 'none'}`);
     if (i.screen) console.log(`  Screen: made for ${i.screen.model}, the radio has ${i.screen.radio}`);
@@ -425,7 +425,7 @@ function printCopy(items: CopyItem[], from: (i: CopyItem) => string): void {
 function printDelete(items: DeleteItem[]): void {
   for (const d of items) {
     console.log(`\n${d.name}: ${d.moves.map((f) => `MODELS/${f}`).join(', ')} -> MODELS/DELETED/`);
-    if (d.active) console.log('  The radio has this model loaded and switches to another one.');
+    if (d.active) console.log('  Active model: the radio switches to another one.');
   }
 }
 
@@ -433,10 +433,10 @@ function printDelete(items: DeleteItem[]): void {
 async function runModels(p: Paths, s: Settings, card: RadioCard, board: string, copy: CopyItem[], del: DeleteItem[], o: ModelOpts): Promise<void> {
   const misfits = copy.filter(doesntFit);
   if (misfits.length > 0 && !o.force) {
-    throw new UserError(`\nNot everything fits this radio (${misfits.map((i) => i.name).join(', ')}). Pass --force to copy anyway.`);
+    throw new UserError(`\nSome models don't fully fit this radio (${misfits.map((i) => i.name).join(', ')}). Add --force to copy them anyway.`);
   }
   const what = copy.length > 0 ? 'copy' : 'delete';
-  const q = o.noBackup ? `\n${what === 'copy' ? 'Copy' : 'Delete'} without a backup first? [y/N] ` : `\nBack up the card and ${what}? [y/N] `;
+  const q = o.noBackup ? `\n${what === 'copy' ? 'Copy' : 'Delete'} without a backup first? [y/N] ` : `\nBack up the SD card and ${what}? [y/N] `;
   if ((await ask(q)) !== 'y') {
     console.log('Nothing changed.');
     return;
@@ -447,7 +447,7 @@ async function runModels(p: Paths, s: Settings, card: RadioCard, board: string, 
   await applyDelete(card.volume, del);
   console.log(
     copy.length > 0
-      ? `Done: ${copy.length} ${copy.length === 1 ? 'model' : 'models'} on the card. The radio picks up the change once USB is disconnected.`
+      ? `Done: ${copy.length} ${copy.length === 1 ? 'model' : 'models'} on the SD card. The radio uses the changes once you unplug the USB cable.`
       : `Done: ${del.length} ${del.length === 1 ? 'model' : 'models'} moved to MODELS/DELETED.`,
   );
 }
@@ -474,7 +474,7 @@ async function modelsCopy(p: Paths, s: Settings, names: string[], o: ModelOpts):
 async function modelsImport(p: Paths, s: Settings, file: string | undefined, names: string[], o: ModelOpts): Promise<void> {
   if (!file) throw new UserError('Name the file, e.g. models import Copter.yml');
   const data = await readFile(file).catch(() => {
-    throw new UserError(`Cannot read ${file}`);
+    throw new UserError(`Can't read ${file}.`);
   });
   const f = await readImport(basename(file), data);
   const chosen = names.map((n) => {
@@ -500,8 +500,8 @@ async function modelsDelete(p: Paths, s: Settings, names: string[], o: ModelOpts
   const state = await readCardState(card.volume);
   const files = names.map((n) => {
     const hits = state.models.filter((m) => matches(m, n));
-    if (hits.length === 0) throw new UserError(`No model "${n}" on the card.`);
-    if (hits.length > 1) throw new UserError(`More than one model "${n}" on the card (${hits.map((m) => m.file).join(', ')}); name the file instead.`);
+    if (hits.length === 0) throw new UserError(`No model "${n}" on the SD card.`);
+    if (hits.length > 1) throw new UserError(`More than one model "${n}" is on the SD card (${hits.map((m) => m.file).join(', ')}). Name the file instead.`);
     return hits[0]!.file;
   });
   const items = await planDelete(state, files);
@@ -539,11 +539,11 @@ async function modelsDiff(p: Paths, name: string | undefined, a: string | undefi
     right = (await backupModel(p, from.board, name, b)).model;
     label = b;
   } else {
-    if (!card) throw new UserError('Connect the radio to compare with its card, or name a second backup.');
+    if (!card) throw new UserError('Connect the radio to compare with its SD card, or name a second backup.');
     const m = sameNamed((await readCardState(card.volume)).models, left.model.name, left.model.file);
-    if (!m) throw new UserError(`No model "${left.model.name}" on the card.`);
+    if (!m) throw new UserError(`No model "${left.model.name}" on the SD card.`);
     right = m;
-    label = 'the card';
+    label = 'the SD card';
   }
   console.log(`${left.model.name}: ${from.board} ${left.backup} against ${label}`);
   const groups = diffModels(left.model.doc, right.doc);
@@ -584,17 +584,17 @@ async function flash(p: Paths, s: Settings, tagArg?: string, volume?: string, bo
   const board = boardOpt ?? (cards.length === 1 ? cards[0]!.board : undefined);
   if (!board) throw new UserError('Which radio? Connect it in "USB Storage" mode first, or pass --board.');
   const tag = tagArg ?? (await localVersions(p, 'edgetx-firmware'))[0]?.tag;
-  if (!tag) throw new UserError('No firmware downloaded. Run "download" first.');
+  if (!tag) throw new UserError('No firmware downloaded yet. Run "download" first.');
   // any other release is downloaded first, like on the flash page
   const src = s.sources.find((x) => x.kind === 'firmware');
   if (src && !(await localVersions(p, src.name, true)).some((v) => v.tag === tag)) {
     console.log(`Downloading EdgeTX ${tag} ...`);
-    if ((await downloadTag(p, s, src, tag)).status === 'no-release') throw new UserError(`EdgeTX has no release ${tag}.`);
+    if ((await downloadTag(p, s, src, tag)).status === 'no-release') throw new UserError(`EdgeTX has no version ${tag}.`);
   }
   const method = await flashMethod(p, tag, board).catch((e: Error) => {
     throw new UserError(e.message);
   });
-  console.log(`Flashing EdgeTX ${tag} to the ${radioName(await radioTypes(p, s), board)} (was ${s.radios[board]?.firmware ?? 'unknown'}).\n`);
+  console.log(`Flashing EdgeTX ${tag} to the ${radioName(await radioTypes(p, s), board)} (installed: ${s.radios[board]?.firmware ?? 'unknown'}).\n`);
   const file = await flashAndReport(board, await firmwareFile(p, tag, board), method);
   console.log(`Done: ${file} written. The radio restarts with EdgeTX ${tag}.`);
 }
@@ -625,14 +625,14 @@ async function flashOwnFile(p: Paths, s: Settings, path: string, force: boolean,
   const board = boardOpt ?? (cards.length === 1 ? cards[0]!.board : undefined);
   if (!board) throw new UserError('Which radio? Connect it in "USB Storage" mode first, or pass --board.');
   const data = await readFile(path).catch(() => {
-    throw new UserError(`Cannot read ${path}`);
+    throw new UserError(`Can't read ${path}.`);
   });
   const name = basename(path);
   const known = await knownMethod(p, await localVersions(p, 'edgetx-firmware', !!s.firmwarePrereleases), board);
   const check = checkFirmwareFile(name, data, board, known);
-  if (!check.board && !force) throw new UserError(`${name} has no EdgeTX identification, so it cannot be checked. Pass --force to flash it anyway.`);
+  if (!check.board && !force) throw new UserError(`${name} has no EdgeTX identification, so the app can't check it. Add --force to flash it anyway.`);
   const what = check.version ? `EdgeTX ${check.version} (${name})` : name;
-  console.log(`Flashing ${what} to the ${radioName(await radioTypes(p, s), board)} (was ${s.radios[board]?.firmware ?? 'unknown'}).\n`);
+  console.log(`Flashing ${what} to the ${radioName(await radioTypes(p, s), board)} (installed: ${s.radios[board]?.firmware ?? 'unknown'}).\n`);
   const file = await flashAndReport(board, { name, data }, check.method);
   console.log(`Done: ${file} written. The radio restarts${check.version ? ` with EdgeTX ${check.version}` : ''}.`);
 }
@@ -654,7 +654,7 @@ async function sources(p: Paths, s: Settings, args: string[]): Promise<void> {
     return;
   }
   if (sub === 'remove' && arg) {
-    if (!removeSource(s, arg)) throw new UserError(`${arg} is not a project source.`);
+    if (!removeSource(s, arg)) throw new UserError(`${arg} isn't a project source.`);
     await saveSettings(p, s);
     console.log(`Removed ${arg}. Downloaded versions stay in ${p.packages}.`);
     return;
@@ -677,7 +677,7 @@ async function ui(p: Paths): Promise<void> {
   if (!existsSync(join(staticDir, 'index.html'))) throw new UserError('Build the interface first: npm run build');
   const running = await runningServer(p.server);
   if (running) {
-    console.log(`Radio Manager already runs at ${running}`);
+    console.log(`Radio Manager is already running at ${running}`);
     openBrowser(running);
     return;
   }
@@ -685,7 +685,7 @@ async function ui(p: Paths): Promise<void> {
   const server = await startServer({ paths: p, port: 0, staticDir, repoParent: dirname(REPO_ROOT) });
   const forget = await noteServer(p.server, server.open);
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => void forget().finally(() => process.exit(0)));
-  console.log(`Radio Manager runs at ${server.open} (Ctrl+C to stop)`);
+  console.log(`Radio Manager is running at ${server.open} (Ctrl+C to stop)`);
   openBrowser(server.open);
   await new Promise(() => {});
 }
