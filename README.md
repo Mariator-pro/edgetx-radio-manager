@@ -32,6 +32,8 @@ The app is not signed with an Apple or Microsoft certificate, so the system warn
 - **Windows**: if a SmartScreen window appears, click "More info" and then "Run anyway".
 - **Linux**: no warning. If the file manager does not start the AppImage, mark it as executable (`chmod +x`).
 
+Signing the Windows version is applied for at the SignPath Foundation, see [Code signing policy](#code-signing-policy).
+
 ### Updating the app
 
 On start the app looks for a newer release and shows it at the top left:
@@ -154,6 +156,25 @@ You do not need any of this to use the app. It is for those who want to go furth
 - [Browser interface](docs/browser-interface.md): the same pages as the desktop app, in your web browser
 - [Command line](docs/command-line.md): most functions of the app as commands, e.g. for scripts
 - [Development](docs/development.md): running from source, building the app, making a release and how it works inside
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+The Windows version is not signed yet: the application to the SignPath Foundation is pending. Once accepted, every Windows release is built by GitHub Actions from the source code in this repository and signed only after a manual approval.
+
+- Committers and reviewers: [Mariator-pro](https://github.com/Mariator-pro)
+- Approvers: [Mariator-pro](https://github.com/Mariator-pro)
+
+### Privacy policy
+
+The app doesn't collect or send any personal data, settings or radio information to the developer or to anyone else. It only connects to GitHub (api.github.com, github.com, raw.githubusercontent.com):
+
+- to look for a newer version of the app itself, each time the installed desktop app starts
+- to list the EdgeTX firmware versions available for your radio, on the firmware page
+- to download firmware, SD card content, sounds and Lua scripts, when you click "Check for updates" or start flashing
+
+See the [GitHub Privacy Statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement) for what GitHub records about these requests.
 
 ## License
 
