@@ -60,6 +60,11 @@ export interface AppUpdateView {
   restarting?: boolean; // downloaded, the app is about to restart into it
 }
 
+// The open source licenses of the bundled packages, as the build wrote them.
+export interface LicensesView {
+  text: string;
+}
+
 export interface StateView {
   radios: RadioView[];
   sources: SourceView[];

@@ -246,6 +246,20 @@ export const de: Texts = {
   beforeDeleteModels: (l) => `Vor dem Löschen von Modellen: ${l}`,
 
   models: 'Modelle',
+  settings: 'Einstellungen',
+  dataFolder: 'Datenordner',
+  dataFolderText: 'Hier bewahrt die App ihre Downloads, Backups und Einstellungen auf.',
+  about: 'Über die App',
+  version: (v) => `Version ${v}`,
+  license: 'Freie Software unter der MIT-Lizenz.',
+  thirdParty: 'Sie enthält Open-Source-Pakete unter ihren eigenen Lizenzen.',
+  showLicenses: 'Lizenzen anzeigen',
+  mitLicense: 'MIT-Lizenz',
+  sourceCode: 'Quellcode',
+  licensesTitle: 'Open-Source-Lizenzen',
+  licensesLoading: 'Lizenzen werden geladen …',
+  licensesIntro: (n) =>
+    `Die App enthält diese ${n} Open-Source-Pakete. Öffne eines, um seine Lizenz zu lesen. Electron und Chromium bringen eigene Lizenzdateien mit, sie liegen im Ordner der App.`,
   modelsText: 'Hier findest du alle Modelle aus den Backups eines Senders, jeweils mit ihren früheren Ständen. Du kannst sie auf den verbundenen Sender kopieren, von seiner SD-Karte löschen, exportieren oder vergleichen.',
   modelsOf: 'Sender',
   importFile: 'Datei importieren …',
@@ -375,6 +389,7 @@ export const de: Texts = {
         : 'SD-Update während des Backups abgebrochen. Auf der SD-Karte hat sich nichts geändert.',
     radioTimeout: () => 'Der Sender hat sich nicht rechtzeitig gemeldet. Prüfe die Schritte und versuche es noch einmal.',
 
+    licensesMissing: () => 'Die Liste der Open-Source-Lizenzen fehlt. Baue die App zuerst mit „npm run build“.',
     appUpdateFailed: () => 'Das App-Update konnte nicht heruntergeladen werden. Prüfe die Internetverbindung und versuche es noch einmal.',
 
     modelNotFound: ({ name }) => `Die App findet das Modell ${name} nicht.`,

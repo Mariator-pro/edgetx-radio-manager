@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { versionDir } from '../src/core/packages.ts';
 import { paths } from '../src/core/paths.ts';
-import { PREFS_META, TOKEN_HEADER, TOKEN_META, type AppUpdateView, type BackupView, type PlanView, type RestorePlanView, type RestoreResultView, type StateView, type UpdateResultView } from '../src/server/api.ts';
+import { PREFS_META, TOKEN_HEADER, TOKEN_META, type AppUpdateView, type BackupView, type LicensesView, type PlanView, type RestorePlanView, type RestoreResultView, type StateView, type UpdateResultView } from '../src/server/api.ts';
 import { noteServer, runningServer } from '../src/server/running.ts';
 import { oneAtATime, startServer } from '../src/server/server.ts';
 import { ApiError, errorText } from '../src/ui/errors.ts';
@@ -34,7 +34,7 @@ beforeAll(async () => {
   card = await tempDir();
   await writeTree(card, { 'RADIO/radio.yml': 'semver: 2.12.3\nboard: tx16smk3\nttsLanguage: "en"\n', 'MODELS/m.yml': 'm' });
   process.env.RADIO_MANAGER_VOLUMES = card;
-  const s = await startServer({ paths: p, port: 0, repoParent: await tempDir(), pollMs: 60_000 });
+  const s = await startServer({ paths: p, port: 0, repoParent: await tempDir(), licensesFile: join(p.root, 'THIRD_PARTY_LICENSES.txt'), pollMs: 60_000 });
   url = s.url;
   token = s.token;
   close = s.close;
@@ -53,6 +53,12 @@ describe('server', () => {
     expect(r).toMatchObject({ board: 'tx16smk3', name: 'RadioMaster TX16S MK3', firmware: '2.12.3', belowMin: false, updates: ['edgetx-sdcard'] });
     expect(r.sources.find((x) => x.name === 'edgetx-sdcard')).toMatchObject({ on: true, fixed: true, available: 'v2.12.3' });
     expect(state.appUpdate).toBeUndefined();
+  });
+
+  it('sends the open source licenses from the build, or says they are missing', async () => {
+    expect(await get('/api/licenses')).toMatchObject({ code: 'licensesMissing' });
+    await writeFile(join(p.root, 'THIRD_PARTY_LICENSES.txt'), 'THIRD-PARTY SOFTWARE NOTICES\n');
+    expect(await get<LicensesView>('/api/licenses')).toEqual({ text: 'THIRD-PARTY SOFTWARE NOTICES\n' });
   });
 
   it('plans and runs an update with a backup first', async () => {

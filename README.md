@@ -120,6 +120,10 @@ Tick one or more models, then:
 
 To bring models onto a new SD card, put the card into the radio once (or create the folders `RADIO` and `MODELS` on it), so the app recognizes it.
 
+### 8. Settings
+
+The Settings page shows the [data folder](#your-data-on-the-computer) with "Open folder", and under "About" the version, a link to the app's MIT license and its source code, and "Show licenses" with the licenses of all open source packages inside the app.
+
 ## Where packages come from
 
 For every radio the app stores which sources go on the SD card and where they come from:
@@ -132,7 +136,7 @@ What was installed is recorded in `.radio-manager/installed.json` on the SD card
 
 ## Your data on the computer
 
-Settings, downloads and backups live where apps keep their data on each system:
+Settings, downloads and backups live where apps keep their data on each system ("Open folder" on the Settings page shows it):
 
 - macOS: `~/Library/Application Support/EdgeTX Radio Manager/`
 - Windows: `%LOCALAPPDATA%\EdgeTX Radio Manager\` (e.g. `C:\Users\<name>\AppData\Local\EdgeTX Radio Manager`), not Roaming, because downloads and backups are large
@@ -157,4 +161,4 @@ You do not need any of this to use the app. It is for those who want to go furth
 
 ## License
 
-Released under the [MIT License](LICENSE). The app bundles open source packages under their own licenses, listed in `THIRD_PARTY_LICENSES.txt` in the app's resources folder. Electron's own license files (`LICENSE.electron.txt`, `LICENSES.chromium.html`) are in the same folder on macOS and in the app folder on Windows and Linux.
+Released under the [MIT License](LICENSE). The app bundles open source packages under their own licenses, listed under Settings, About, "Show licenses" and in `THIRD_PARTY_LICENSES.txt` in the app's resources folder. Electron's own license files (`LICENSE.electron.txt`, `LICENSES.chromium.html`) are in the same folder on macOS and in the app folder on Windows and Linux.

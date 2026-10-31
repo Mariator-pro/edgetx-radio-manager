@@ -72,6 +72,7 @@ import {
   type ImportView,
   type ModelRef,
   type ModelsResultView,
+  type LicensesView,
   type PrefsView,
   type ProgressEvent,
   type RestoreResultView,
@@ -94,6 +95,7 @@ export interface ServerOptions {
   paths: Paths;
   port: number;
   staticDir?: string; // built interface; without it only /api is served (Vite serves the page)
+  licensesFile?: string; // THIRD_PARTY_LICENSES.txt from the build, shown under About
   repoParent?: string; // where the own projects' checkouts are looked for; without it none are looked for
   pollMs?: number;
   appUpdates?: AppUpdates; // desktop app only
@@ -683,6 +685,12 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       setBackupNote(s, board, name, note);
       await saveSettings(p, s);
     },
+    'GET /api/licenses': async (): Promise<LicensesView> => {
+      const text = o.licensesFile ? await readFile(o.licensesFile, 'utf8').catch(() => undefined) : undefined;
+      if (text === undefined) throw new HttpError(404, 'licensesMissing');
+      return { text };
+    },
+    'POST /api/open-folder': async () => openFolder(p.root),
     'POST /api/backups/open': async (req) => {
       const { board, name } = await body<{ board?: string; name?: string }>(req);
       if ((board && !isSafeName(board)) || (name && !isSafeName(name))) throw new HttpError(400, 'invalidRequest', { what: 'backup' });

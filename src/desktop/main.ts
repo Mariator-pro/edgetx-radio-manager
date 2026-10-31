@@ -34,6 +34,8 @@ async function start(): Promise<void> {
     staticDir: join(app.getAppPath(), 'dist', 'ui'),
     // own projects' checkouts next to this repo only when run from the source folder
     repoParent: app.isPackaged ? undefined : join(app.getAppPath(), '..'),
+    // packed: in the resources folder; started from the source: in dist/
+    licensesFile: app.isPackaged ? join(process.resourcesPath, 'THIRD_PARTY_LICENSES.txt') : join(app.getAppPath(), 'dist', 'THIRD_PARTY_LICENSES.txt'),
   });
   // At most 1280 × 860, but always inside the free screen area (no menu bar, dock or taskbar) with a margin, centred there.
   const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;

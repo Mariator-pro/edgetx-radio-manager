@@ -10,6 +10,7 @@ import { ModelsPage, type ModelsRequest } from './pages/ModelsPage.tsx';
 import { PackagesPage } from './pages/PackagesPage.tsx';
 import { RadioPage } from './pages/RadioPage.tsx';
 import { RestoreFlow } from './pages/RestoreFlow.tsx';
+import { SettingsPage } from './pages/SettingsPage.tsx';
 import { SourcesPage } from './pages/SourcesPage.tsx';
 import { UpdateFlow } from './pages/UpdateFlow.tsx';
 import type { Texts } from './texts.ts';
@@ -223,6 +224,8 @@ export function App() {
               start('flash');
             }}
           />
+        ) : page === 'settings' ? (
+          <SettingsPage run={run} />
         ) : page === 'packages' ? (
           <PackagesPage run={run} refreshKey={`${state.lastCheck}|${state.busy}`} />
         ) : page === 'backups' ? (

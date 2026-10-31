@@ -56,6 +56,7 @@ export const ERRORS = {
       : 'SD update cancelled during the backup. Nothing on the SD card changed.',
   radioTimeout: () => 'The radio didn’t show up in time. Check the steps and try again.',
 
+  licensesMissing: () => 'The list of open source licenses is missing. Build the app first with “npm run build”.',
   appUpdateFailed: () => 'Couldn’t download the app update. Check your internet connection and try again.',
 };
 

@@ -19,7 +19,12 @@ function apiServer(): Plugin {
     async config() {
       const { startServer } = await import('./src/server/server.ts');
       const { paths } = await import('./src/core/paths.ts');
-      const s = await startServer({ paths: paths(), port: 0, repoParent: resolve(import.meta.dirname, '..') });
+      const s = await startServer({
+        paths: paths(),
+        port: 0,
+        repoParent: resolve(import.meta.dirname, '..'),
+        licensesFile: resolve(import.meta.dirname, 'dist', 'THIRD_PARTY_LICENSES.txt'),
+      });
       ({ page, close } = s);
       return { server: { proxy: { '/api/': s.url.replace('localhost', '127.0.0.1') } } };
     },
