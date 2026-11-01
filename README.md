@@ -108,7 +108,7 @@ The "Packages" page lists every downloaded version. Nothing there is deleted aut
 
 The "Models" page lists the models in the backups of a radio. Each model shows its picture, labels, EdgeTX version and whether the connected radio has it: "on the SD card", "on the SD card, changed" or "not on the SD card". Open a model to see its earlier versions (each different state in the backups is one version) and pick the one you want. "Compare" lists what differs between two versions, or between a version and the model on the SD card, grouped like the radio's model menus. Models that are on the SD card but in no backup yet show up as "only on the SD card".
 
-![The models page with the models of a RadioMaster TX16S MK3, one of them opened to its two versions](docs/screenshots/models.png)
+![The models page with the models of a RadioMaster TX15, one of them opened to its two versions](docs/screenshots/models.png)
 
 Tick one or more models, then:
 

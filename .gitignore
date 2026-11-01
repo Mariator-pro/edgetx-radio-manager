@@ -36,3 +36,6 @@ secrets.json
 
 # Desktop builds
 release/
+
+# Local tools
+scripts/screenshots.ts
