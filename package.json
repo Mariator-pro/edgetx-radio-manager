@@ -1,6 +1,7 @@
 {
   "name": "edgetx-radio-manager",
   "productName": "EdgeTX Radio Manager",
+  "desktopName": "edgetx-radio-manager.desktop",
   "private": true,
   "version": "0.4.5",
   "description": "Backup, package download and SD card update for EdgeTX radios",
@@ -118,6 +119,7 @@
         }
       ],
       "category": "Utility",
+      "syncDesktopName": true,
       "artifactName": "edgetx-radio-manager-linux-v${version}.${ext}"
     },
     "nsis": {
