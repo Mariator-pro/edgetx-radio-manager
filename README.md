@@ -1,6 +1,6 @@
-![EdgeTX Radio Manager: firmware, SD card, models and backups in one place](docs/banner.png)
-
 # EdgeTX Radio Manager
+
+![EdgeTX Radio Manager: firmware, SD card, models and backups in one place](docs/banner.png)
 
 Keep your EdgeTX radio up to date without copying files by hand. Plug in the radio, and the app shows what is new: firmware, SD card content, sounds (voice announcements) and your Lua scripts and widgets from GitHub. It backs up the SD card before every change and never silently overwrites files you changed yourself.
 
