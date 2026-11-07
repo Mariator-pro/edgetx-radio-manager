@@ -36,7 +36,7 @@ The app is not signed with an Apple or Microsoft certificate, so the system warn
 
 On start the app looks for a newer release and shows it at the top left:
 
-- **Windows (installed) and Linux**: "Update and restart" downloads the new version, installs it in place and starts it again. Your data and settings stay.
+- **Windows (installed) and Linux**: "Update" downloads the new version, installs it in place and starts it again. Your data and settings stay.
 - **Windows (portable)**: "Download" opens the release page; unzip the new version and delete the old folder.
 - **macOS**: "Download" opens the release page. Install the new version like the first one; the app replaces the old one in Applications. macOS accepts an in-place update only for apps signed with an Apple certificate, which this one is not.
 

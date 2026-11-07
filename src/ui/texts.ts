@@ -20,7 +20,7 @@ const en = {
   notChecked: 'Not checked yet',
   checkUpdates: 'Check for updates',
   appUpdateAvailable: (v: string) => `Radio Manager ${v} is available`,
-  appUpdateInstall: 'Update and restart',
+  appUpdateInstall: 'Update',
   appUpdateDownload: 'Download',
   appDownloading: (pct: number) => `Downloading update … ${pct} %`,
   appRestarting: 'Restarting …',

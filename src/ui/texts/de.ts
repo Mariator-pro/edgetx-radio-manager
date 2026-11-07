@@ -16,7 +16,7 @@ export const de: Texts = {
   notChecked: 'Noch nicht geprüft',
   checkUpdates: 'Nach Updates suchen',
   appUpdateAvailable: (v) => `Radio Manager ${v} ist verfügbar`,
-  appUpdateInstall: 'Aktualisieren und neu starten',
+  appUpdateInstall: 'Aktualisieren',
   appUpdateDownload: 'Herunterladen',
   appDownloading: (pct) => `Update wird heruntergeladen … ${pct} %`,
   appRestarting: 'Wird neu gestartet …',
