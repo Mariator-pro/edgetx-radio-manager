@@ -32,6 +32,7 @@ export function bundledFiles() {
     apply: 'build' as const,
     generateBundle(this: { getModuleIds(): IterableIterator<string> }) {
       const files = [...this.getModuleIds()].map((id) => id.replace(/^\0/, '').split('?')[0]!);
+      mkdirSync(dist, { recursive: true }); // a fresh checkout has no dist/ yet
       writeFileSync(join(dist, 'ui-files.json'), JSON.stringify(files));
     },
   };
