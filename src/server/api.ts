@@ -277,7 +277,6 @@ export interface SourceCheckView {
   tag: string;
   sdDir?: string;
   files: number;
-  sample: string[];
 }
 
 export interface FirmwareView {

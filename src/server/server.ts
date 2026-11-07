@@ -700,7 +700,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       const { repo } = await body<{ repo: string }>(req);
       return op('source', async (): Promise<SourceCheckView> => {
         const r = await checkSource(p, s, repo.trim());
-        return { repo: r.source.repo, name: r.source.name, tag: r.tag, sdDir: r.source.sdDir, files: r.files, sample: r.sample };
+        return { repo: r.source.repo, name: r.source.name, tag: r.tag, sdDir: r.source.sdDir, files: r.files };
       });
     },
     'POST /api/sources/add': async (req) => {

@@ -75,7 +75,7 @@ export async function remoteZipNames(url: string, size: number, fetchFn: FetchFn
     const res = await fetchFn(url, { headers: { Range: `bytes=${start}-${end}`, 'User-Agent': 'edgetx-radio-manager' } }).catch(() => {
       throw new AppError('noConnection');
     });
-    if (!res.ok) throw new AppError('downloadFailed', { status: res.status, url });
+    if (!res.ok) throw new AppError('downloadFailed', { status: res.status });
     const data = Buffer.from(await res.arrayBuffer());
     // a server that ignores Range sends the whole file
     return res.status === 206 ? data : data.subarray(start, end + 1);

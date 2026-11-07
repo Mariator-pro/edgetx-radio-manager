@@ -73,7 +73,7 @@ async function fetchTo(url: string, path: string, fetchFn: FetchFn): Promise<voi
   const res = await fetchFn(url, { headers: { 'User-Agent': 'edgetx-radio-manager' } }).catch(() => {
     throw new AppError('noConnection');
   });
-  if (!res.ok || !res.body) throw new AppError('downloadFailed', { status: res.status, url });
+  if (!res.ok || !res.body) throw new AppError('downloadFailed', { status: res.status });
   const part = `${path}.part`;
   await pipeline(Readable.fromWeb(res.body as ReadableStream<Uint8Array>), createWriteStream(part));
   await rename(part, path);

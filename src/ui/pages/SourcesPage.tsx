@@ -12,13 +12,17 @@ function AddSource({ state, run, board }: { state: StateView; run: Run; board?: 
   const [repo, setRepo] = useState('');
   const [check, setCheck] = useState<SourceCheckView>();
   const [error, setError] = useState<unknown>();
+  const [added, setAdded] = useState<string>();
   const checking = state.busy === 'source';
 
   const doCheck = async () => {
     setError(undefined);
+    setAdded(undefined);
     setCheck(undefined);
     try {
-      setCheck(await post<SourceCheckView>('/api/sources/check', { repo }));
+      const found = await post<SourceCheckView>('/api/sources/check', { repo });
+      setRepo(found.repo); // a pasted address shows as owner/name
+      setCheck(found);
     } catch (e) {
       setError(e);
     }
@@ -51,22 +55,20 @@ function AddSource({ state, run, board }: { state: StateView; run: Run; board?: 
             {errorText(t, error)}
           </p>
         )}
+        {added && (
+          <p role="status" className="m-0 text-sm text-success">
+            {t.sourceAdded(added)}
+          </p>
+        )}
         {check && (
           <div className="flex flex-col gap-3 rounded-xl bg-surface-secondary p-4">
-            <p className="m-0">
-              {t.checkResult(check.name, check.tag, check.files)}{' '}
-              <code className="font-mono">{check.sdDir ? `${check.sdDir}/` : t.zipRoot}</code>
-            </p>
-            <ul className="m-0 list-none p-0 font-mono text-xs text-muted">
-              {check.sample.map((f) => (
-                <li key={f}>{f}</li>
-              ))}
-            </ul>
+            <p className="m-0">{t.checkResult(check.name, check.tag, check.files)}</p>
             <div className="flex gap-2">
               <Button
                 onPress={() =>
                   run(async () => {
                     await post('/api/sources/add', { ...check, board });
+                    setAdded(check.name);
                     setCheck(undefined);
                     setRepo('');
                   })

@@ -92,7 +92,7 @@ Two more options sit below the version list:
 
 ### 5. Add your own Lua scripts and widgets
 
-On the "Sources" page, enter a GitHub repo (`owner/name`) and click "Check". The app looks for the folder with `SCRIPTS/` or `WIDGETS/` in its newest release and shows it for you to confirm. Added sources can be removed again; EdgeTX firmware, SD content and sounds are built in.
+On the "Sources" page, paste a project's GitHub address or enter `owner/name` and click "Check". The app looks for the folder with `SCRIPTS/` or `WIDGETS/` in its newest release and asks you to confirm how many files it found. Added sources can be removed again; EdgeTX firmware, SD content and sounds are built in.
 
 ![The sources page with the built-in EdgeTX sources and several Lua projects](docs/screenshots/sources.png)
 

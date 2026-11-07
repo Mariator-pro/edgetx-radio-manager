@@ -181,14 +181,14 @@ export const de: Texts = {
 
   kinds: { firmware: 'Firmware', sdcard: 'SD-Grundinhalt', sounds: 'Ansagen', project: 'Projekt' },
   addSource: 'Quelle hinzufügen',
-  addSourceText: 'Gib ein GitHub-Repo mit Releases an. Die App lädt sein neuestes Release herunter, um die Dateien für die SD-Karte zu finden.',
+  addSourceText: 'Hier fügst du ein Projekt von GitHub hinzu, z. B. ein Lua-Skript. Die App schreibt seine Dateien auf die SD-Karte und zeigt an, wenn es eine neue Version gibt. Füge seine GitHub-Adresse ein oder gib besitzer/name ein.',
   githubRepo: 'GitHub-Repo',
   repoPlaceholder: 'besitzer/name',
   checkingRepo: 'Wird geprüft …',
   check: 'Prüfen',
-  checkResult: (n, t, f) => `${n} ${t}: ${f} Dateien für die SD-Karte, gefunden in`,
-  zipRoot: 'der obersten Ebene des Zip-Archivs',
+  checkResult: (n, t, f) => `${n} ${t} mit ${f} ${f === 1 ? 'Datei' : 'Dateien'} für die SD-Karte als Quelle hinzufügen?`,
   add: 'Quelle hinzufügen',
+  sourceAdded: (n) => `${n} ist jetzt eine Quelle.`,
   colSource: 'Quelle',
   colKind: 'Art',
   colNewest: 'Neuester Download',
@@ -350,7 +350,7 @@ export const de: Texts = {
         ? `GitHub nimmt gerade keine weiteren Anfragen an. Versuche es ab ${new Date(reset).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr noch einmal.`
         : 'GitHub nimmt gerade keine weiteren Anfragen an. Versuche es später noch einmal.',
     githubStatus: ({ status }) => `GitHub antwortet mit Fehler ${status}. Versuche es später noch einmal.`,
-    downloadFailed: ({ status, url }) => `${url} konnte nicht heruntergeladen werden (Fehler ${status}).`,
+    downloadFailed: ({ status }) => `Die App konnte die Datei nicht von GitHub laden (Fehler ${status}). Versuche es später noch einmal.`,
 
     radioNotConnected: () => 'Der Sender ist nicht mehr verbunden.',
     chooseRadioType: () => 'Wähle zuerst den Sendertyp aus.',
@@ -363,11 +363,12 @@ export const de: Texts = {
     wrongRadioForBackup: ({ connected, board }) => `Der verbundene Sender ist ein ${connected}, das Backup stammt aber von einem ${board}.`,
     restoreInterrupted: () => 'Die SD-Karte wurde während der Wiederherstellung getrennt. Schließe sie wieder an und stelle das Backup noch einmal wieder her.',
 
-    repoFormat: () => 'Gib das Repo als besitzer/name an.',
+    repoFormat: () => 'Gib das Repo als besitzer/name an oder füge seine GitHub-Adresse ein.',
     alreadySource: ({ name }) => `${name} ist schon eine Quelle.`,
     noRelease: ({ repo }) => `${repo} hat noch kein Release.`,
+    repoNotFound: ({ repo }) => `${repo} ist auf GitHub nicht zu finden. Prüfe den Namen. Private Repos kannst du nicht hinzufügen.`,
     noCommit: ({ repo }) => `${repo} hat noch keinen Commit.`,
-    noSdFolder: ({ repo, tag }) => `In ${repo} ${tag} gibt es keinen Ordner SCRIPTS/ oder WIDGETS/.`,
+    noSdFolder: ({ repo, tag }) => `Version ${tag} von ${repo} enthält keine Dateien für die SD-Karte.`,
     onlyProjectsRemovable: () => 'Entfernen kannst du nur Projekt-Quellen.',
     installedOn: ({ name, tag, radios }) => `${name} ${tag} ist auf ${radios} installiert, deshalb kannst du es nicht löschen.`,
 

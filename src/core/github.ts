@@ -63,6 +63,11 @@ export async function latestCommit(repo: string, fetchFn: FetchFn = fetch): Prom
   return c && { sha: c.sha, date: c.commit.committer.date, zipball: `https://api.github.com/repos/${repo}/zipball/${c.sha}` };
 }
 
+// Whether GitHub shows the repo; a mistyped or private one answers 404.
+export async function repoExists(repo: string, fetchFn: FetchFn = fetch): Promise<boolean> {
+  return (await getJson<object>(`https://api.github.com/repos/${repo}`, fetchFn)) !== undefined;
+}
+
 async function getJson<T>(url: string, fetchFn: FetchFn, missing = [404]): Promise<T | undefined> {
   const res = await fetchFn(url, { headers: HEADERS }).catch(() => {
     throw new AppError('noConnection');

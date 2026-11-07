@@ -10,7 +10,7 @@ export const ERRORS = {
       ? `GitHub takes no more requests for now. Try again after ${new Date(p.reset).toTimeString().slice(0, 5)}.`
       : 'GitHub takes no more requests for now. Try again later.',
   githubStatus: (p: { status: number }) => `GitHub responded with error ${p.status}. Try again later.`,
-  downloadFailed: (p: { status: number; url: string }) => `Couldn’t download ${p.url} (error ${p.status}).`,
+  downloadFailed: (p: { status: number }) => `Couldn’t download the file from GitHub (error ${p.status}). Try again later.`,
 
   radioNotConnected: () => 'The radio is no longer connected.',
   chooseRadioType: () => 'Choose the radio type first.',
@@ -30,11 +30,12 @@ export const ERRORS = {
   modelsInterrupted: (p: { done: string }) =>
     `The SD card was disconnected while the models were being written${p.done ? ` (done: ${p.done})` : ''}. Connect it again and start once more.`,
 
-  repoFormat: () => 'Enter the repo as owner/name.',
+  repoFormat: () => 'Enter the repo as owner/name or paste its GitHub address.',
   alreadySource: (p: { name: string }) => `${p.name} is already a source.`,
   noRelease: (p: { repo: string }) => `${p.repo} has no release yet.`,
+  repoNotFound: (p: { repo: string }) => `Can’t find ${p.repo} on GitHub. Check the name. You can’t add private repos.`,
   noCommit: (p: { repo: string }) => `${p.repo} has no commit yet.`,
-  noSdFolder: (p: { repo: string; tag: string }) => `${p.repo} ${p.tag} has no SCRIPTS/ or WIDGETS/ folder.`,
+  noSdFolder: (p: { repo: string; tag: string }) => `Version ${p.tag} of ${p.repo} has no files for the SD card.`,
   onlyProjectsRemovable: () => 'You can only remove project sources.',
   installedOn: (p: { name: string; tag: string; radios: string }) => `${p.name} ${p.tag} is installed on ${p.radios}, so you can’t delete it.`,
 
