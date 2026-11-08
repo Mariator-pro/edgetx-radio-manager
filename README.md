@@ -138,6 +138,16 @@ For every radio the app stores which sources go on the SD card and where they co
 
 What is installed is recorded in `.radio-manager/installed.json` on the SD card, written when the app first reads the card and after every update. With it the app tells which files came from a package and which were changed since; it checks them by size and file time each time the radio is connected and only reads files that changed. `.radio-manager/radio.json` holds an id for the SD card.
 
+### Local checkouts
+
+"Local" puts the files of a project from your computer on the SD card, to try out changes before a version is out. For the app to find a project and read its files:
+
+- Choose the folder that holds the projects (e.g. `C:\Users\<name>\Projects`), not the folder of one project.
+- Each project sits in a folder named exactly like its repo, e.g. `edgetx-lipo-nanny` (not `lipo-nanny` or `edgetx-lipo-nanny-main`).
+- Each project is cloned with git, e.g. `git clone https://github.com/Mariator-pro/edgetx-lipo-nanny.git`. A folder unpacked from "Download ZIP" on GitHub has no `.git` folder, so the app doesn't find it.
+- Git is installed and in the `PATH`, because the app runs `git` to read the files and the state of the checkout. The git inside GitHub Desktop is not enough, other apps can't find it.
+- Only files that git tracks go on the SD card, with their changes in the folder whether committed or not. A new file goes on the card once you add it with `git add`.
+
 ## Your data on the computer
 
 Settings, downloads and backups live where apps keep their data on each system ("Open folder" on the Settings page shows it):
