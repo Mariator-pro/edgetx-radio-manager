@@ -282,6 +282,7 @@ export const de: Texts = {
   modelsText: 'Hier findest du alle Modelle aus den Backups eines Senders, jeweils mit ihren früheren Ständen. Du kannst sie auf den verbundenen Sender kopieren, von seiner SD-Karte löschen, exportieren oder vergleichen.',
   modelsOf: 'Sender',
   importFile: 'Datei importieren …',
+  comparedWith: (r) => `Verglichen mit der SD-Karte von ${r}`,
   importHint: 'Eine Modelldatei (.yml) oder eine .etx-Datei',
   readingModels: 'Modelle werden gelesen …',
   noModelBackups: 'Noch keine Backups und damit auch keine Modelle. Sichere zuerst einen Sender.',

@@ -274,6 +274,7 @@ const en = {
   modelsText: 'All models from a radio’s backups, each with its earlier versions. Copy them to the connected radio, delete them from its SD card, export them, or compare them.',
   modelsOf: 'Radio',
   importFile: 'Import file …',
+  comparedWith: (r: string) => `Compared with the SD card of ${r}`,
   importHint: 'A .yml model file or an .etx file',
   readingModels: 'Reading the models …',
   noModelBackups: 'No backups yet, so no models either. Back up a radio first.',

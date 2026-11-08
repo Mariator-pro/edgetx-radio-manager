@@ -226,6 +226,8 @@ export function ModelsPage({
           <span id="import-hint" className="sr-only">
             {t.importHint}
           </span>
+          {/* the list comes from the backups chosen above, the comparison and copying go to the radio in the sidebar */}
+          {radio && <span className="self-center text-sm text-muted">{t.comparedWith(radio.label)}</span>}
         </div>
       </div>
 
