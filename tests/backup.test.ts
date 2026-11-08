@@ -26,9 +26,11 @@ describe('backupCard', () => {
 
     const r = await backupCard(card, 'tx16smk3', p, when);
     expect(r.name).toBe('2026-10-21_1430');
-    expect(r.files).toBe(4);
+    expect(r.files).toBe(5);
     const copied = (await readdir(r.dir, { recursive: true })).sort();
     expect(copied).toContain(join('.radio-manager', 'installed.json'));
+    // a card without an id gets one first, so the backup tells which card it is from
+    expect(JSON.parse(await readFile(join(r.dir, '.radio-manager', 'radio.json'), 'utf8'))).toEqual({ id: r.cardId });
     expect(copied).toContain(join('SCRIPTS', 'GPSHOMER', 'flights.lua'));
     expect(copied.some((f) => f.includes('Spotlight') || f.includes('fseventsd') || f.includes('._') || f.includes('System Volume'))).toBe(false);
     expect(await readFile(join(r.dir, 'MODELS/model00.yml'), 'utf8')).toBe('header: {}\n');

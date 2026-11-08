@@ -112,6 +112,10 @@ describe('readCard', () => {
     expect(id).toMatch(/^[\w-]{8,64}$/);
     expect(await ensureCardId(root)).toBe(id);
     expect(JSON.parse(await readFile(join(root, '.radio-manager', 'radio.json'), 'utf8'))).toEqual({ id });
+    // asked twice at once (a backup while the card is first read): one id for both
+    const other = await tempDir();
+    const [a, b] = await Promise.all([ensureCardId(other), ensureCardId(other)]);
+    expect(a).toBe(b);
   });
 
   it('leaves no "._" file of macOS next to its own files', async () => {

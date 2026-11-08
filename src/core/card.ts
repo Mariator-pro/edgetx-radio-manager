@@ -147,13 +147,22 @@ async function writeIdentity(root: string, id: string, name?: string): Promise<v
   await dropAppleDouble(dirname(path));
 }
 
-// The card's own id, written once; it tells two radios of the same type apart.
-export async function ensureCardId(root: string): Promise<string> {
-  const have = await readIdentity(root);
-  if (have.cardId) return have.cardId;
-  const id = randomUUID();
-  await writeIdentity(root, id, have.cardName);
-  return id;
+// The card's own id, written once; it tells two radios of the same type apart. One at a time per card, so a
+// backup and the first reading of the card, both asking at once, don't each write an id of their own.
+const givingId = new Map<string, Promise<string>>();
+export function ensureCardId(root: string): Promise<string> {
+  let pending = givingId.get(root);
+  if (!pending) {
+    pending = (async () => {
+      const have = await readIdentity(root);
+      if (have.cardId) return have.cardId;
+      const id = randomUUID();
+      await writeIdentity(root, id, have.cardName);
+      return id;
+    })().finally(() => givingId.delete(root));
+    givingId.set(root, pending);
+  }
+  return pending;
 }
 
 // Gives the card a name, or takes it away with an empty one.

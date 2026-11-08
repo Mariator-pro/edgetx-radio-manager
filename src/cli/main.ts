@@ -200,7 +200,7 @@ async function runBackup(p: Paths, s: Settings, card: RadioCard, board: string, 
   if (process.stdout.isTTY) process.stdout.write('\n');
   console.log(`Done: ${result.files} files, ${mb(result.bytes)} in ${result.dir}`);
   (s.backupInfo[board] ??= {})[result.name] = info;
-  const removed = await pruneBackups(p, board, s.backupsToKeep, [...(s.keptBackups[board] ?? []), ...(alsoKeep ? [alsoKeep] : [])], card.cardId);
+  const removed = await pruneBackups(p, board, s.backupsToKeep, [...(s.keptBackups[board] ?? []), ...(alsoKeep ? [alsoKeep] : [])], result.cardId);
   forgetBackups(s, board, removed);
   await saveSettings(p, s);
   if (removed.length > 0) console.log(`Deleted old backups: ${removed.join(', ')}`);

@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readdir, readFile, rm, stat, utimes } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { isAppleDouble, SYSTEM_DIRS } from './appledouble.ts';
-import { parseRadioYml, readIdentity } from './card.ts';
+import { ensureCardId, parseRadioYml, readIdentity } from './card.ts';
 import { AppError } from './errors.ts';
 import { isSafeName, type Paths } from './paths.ts';
 
@@ -24,6 +24,7 @@ export interface BackupResult {
   name: string;
   files: number;
   bytes: number;
+  cardId: string; // the SD card it is from
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -72,6 +73,9 @@ export async function backupCard(
   onProgress: (pr: BackupProgress) => void = () => {},
   signal?: AbortSignal,
 ): Promise<BackupResult> {
+  // the card gets its id first, so every backup tells which SD card it is from, also one made while the app is
+  // still reading a newly connected card
+  const cardId = await ensureCardId(volume);
   const base = join(p.backups, board);
   await mkdir(base, { recursive: true });
   const name = await freeName(base, backupName(now));
@@ -94,7 +98,7 @@ export async function backupCard(
     bytesDone += f.size;
     onProgress({ file: rel, done: i + 1, total: files.length, bytesDone, bytesTotal });
   }
-  return { dir, name, files: files.length, bytes: bytesTotal };
+  return { dir, name, files: files.length, bytes: bytesTotal, cardId };
 }
 
 // EdgeTX version in a backup folder's radio.yml.

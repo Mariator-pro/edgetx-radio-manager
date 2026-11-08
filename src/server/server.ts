@@ -397,7 +397,8 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       signal,
     );
     (s.backupInfo[board] ??= {})[r.name] = info;
-    dropBackups(board, await pruneBackups(p, board, s.backupsToKeep, [...(s.keptBackups[board] ?? []), ...(alsoKeep ? [alsoKeep] : [])], c.cardId));
+    dropBackups(board, await pruneBackups(p, board, s.backupsToKeep, [...(s.keptBackups[board] ?? []), ...(alsoKeep ? [alsoKeep] : [])], r.cardId));
+    for (const x of cards) if (x.volume === c.volume) x.cardId = r.cardId;
     await saveSettings(p, s);
     return r;
   };
