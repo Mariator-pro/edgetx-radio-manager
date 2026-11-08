@@ -1,4 +1,4 @@
-import { Alert, Button, CloseButton, Spinner } from '@heroui/react';
+import { Alert, Button, Spinner, Toast } from '@heroui/react';
 import { useEffect, useRef, useState } from 'react';
 import type { DownloadResultView, RadioView } from '../server/api.ts';
 import { errorText, post, useServer } from './api.ts';
@@ -6,6 +6,7 @@ import { Sidebar, type Page } from './components/Sidebar.tsx';
 import { BackupsPage } from './pages/BackupsPage.tsx';
 import { FlashFlow } from './pages/FlashFlow.tsx';
 import { ModelsFlow } from './pages/ModelsFlow.tsx';
+import { notify, type Notice } from './notify.ts';
 import { ModelsPage, type ModelsRequest } from './pages/ModelsPage.tsx';
 import { PackagesPage } from './pages/PackagesPage.tsx';
 import { RadioPage } from './pages/RadioPage.tsx';
@@ -15,8 +16,6 @@ import { SourcesPage } from './pages/SourcesPage.tsx';
 import { UpdateFlow } from './pages/UpdateFlow.tsx';
 import type { Texts } from './texts.ts';
 import { usePrefs } from './usePrefs.ts';
-
-type Notice = { status: 'success' | 'danger' | 'default'; title: string; text?: string };
 
 // The guided flows, the server operation each one runs and the page it starts from.
 type Flow = 'update' | 'restore' | 'modelsFlow' | 'flash';
@@ -64,7 +63,6 @@ export function App() {
   // while the radio is connected it shows the live one.
   const [restoring, setRestoring] = useState<{ radio: RadioView; name: string }>();
   const [modelsRequest, setModelsRequest] = useState<ModelsRequest>();
-  const [notice, setNotice] = useState<Notice>();
   const known = useRef<Set<string>>(new Set());
 
   const go = (next: Page) => {
@@ -98,7 +96,7 @@ export function App() {
   }, [state, volume, page]);
 
   const run = (fn: () => Promise<unknown>) => {
-    fn().catch((e: unknown) => setNotice({ status: 'danger', title: t.failed, text: errorText(t, e) }));
+    fn().catch((e: unknown) => notify({ status: 'danger', title: t.failed, text: errorText(t, e) }));
   };
 
   const radio = state?.radios.find((r) => r.volume === volume);
@@ -147,6 +145,7 @@ export function App() {
 
   return (
     <div className="flex min-h-screen flex-wrap">
+      <Toast.Provider />
       <Sidebar
         state={state}
         progress={progress}
@@ -158,7 +157,7 @@ export function App() {
           go(back ? kept : p);
           if (v) setVolume(v);
         }}
-        onDownload={() => run(async () => setNotice(downloadNotice(await post<DownloadResultView[]>('/api/download'), t)))}
+        onDownload={() => run(async () => notify(downloadNotice(await post<DownloadResultView[]>('/api/download'), t)))}
         onAppUpdate={() => run(() => post('/api/app-update'))}
       />
       <main className="box-border flex min-w-0 flex-[999_1_640px] flex-col gap-6 p-7">
@@ -169,16 +168,6 @@ export function App() {
               <Alert.Title>{t.noServer}</Alert.Title>
               <Alert.Description>{t.startServer}</Alert.Description>
             </Alert.Content>
-          </Alert>
-        )}
-        {notice && (
-          <Alert status={notice.status}>
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>{notice.title}</Alert.Title>
-              {notice.text && <Alert.Description>{notice.text}</Alert.Description>}
-            </Alert.Content>
-            <CloseButton aria-label={t.close} onPress={() => setNotice(undefined)} />
           </Alert>
         )}
         {kept && page !== kept && flowView && (
