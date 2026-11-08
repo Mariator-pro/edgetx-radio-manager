@@ -39,3 +39,4 @@ release/
 
 # Local tools
 scripts/screenshots.ts
+scripts/test-image/
