@@ -219,6 +219,8 @@ export const de: Texts = {
   deleteBackup: (l, r) => `Backup von ${r} vom ${l} löschen?`,
   restore: 'Wiederherstellen',
   restoreNeedsRadio: (r) => `Schließe den ${r} an, um seine Backups wiederherzustellen`,
+  restoreChooseRadio: 'Wähle in der Seitenleiste den Sender, auf dem ein Backup wiederhergestellt werden soll',
+  restoreOnto: (r) => `„Wiederherstellen“ schreibt auf ${r}`,
   madeByHand: 'Von Hand',
   beforeUpdate: 'Vor SD-Update',
   beforeRestore: (d) => `Vor dem Wiederherstellen von ${d}`,

@@ -9,7 +9,7 @@ import { versionDir } from '../src/core/packages.ts';
 import { paths, type Paths } from '../src/core/paths.ts';
 import { countActions, makePlan, mergePackages } from '../src/core/plan.ts';
 import { ensureSelection, selectionFromCard } from '../src/core/selection.ts';
-import { defaultSettings, findLocalRepos, type Settings } from '../src/core/settings.ts';
+import { defaultSettings, findLocalRepos, radioOf, type Settings } from '../src/core/settings.ts';
 import { prepareUpdate } from '../src/core/update.ts';
 import { checkCard } from '../src/core/initialize.ts';
 import { knownVersions, packKnown, setShippedCatalog } from '../src/core/known.ts';
@@ -346,6 +346,19 @@ describe('selection', () => {
     expect(await ensureSelection(p, s, 'tx16smk3')).toBe(true);
     expect(r.sources!.widget).toEqual({ on: false, origin: 'release' });
   });
+
+  it('keeps a choice per SD card, so a second radio of the same type leaves the first one alone', async () => {
+    const p = paths(await tempDir());
+    const s = defaultSettings();
+    const list = (packages: InstalledList['packages']): InstalledList => ({ tool: 1, updated: '', packages, files: {} });
+    const full = { ...(await readCard(await newCard()))!, cardId: 'card-full-1' };
+    const empty = { ...(await readCard(await newCard()))!, cardId: 'card-empty-1' };
+    await selectionFromCard(p, s, 'tx16smk3', full, list({ 'lipo-nanny': { version: 'v2.1.0', origin: 'release' } }));
+    await selectionFromCard(p, s, 'tx16smk3', empty, list({}));
+    expect(radioOf(s, 'tx16smk3', full.cardId).sources!['lipo-nanny']!.on).toBe(true);
+    expect(radioOf(s, 'tx16smk3', empty.cardId).sources!['lipo-nanny']!.on).toBe(false);
+    expect(Object.keys(s.radios).sort()).toEqual(['tx16smk3/card-empty-1', 'tx16smk3/card-full-1']);
+  });
 });
 
 describe('prepareUpdate', () => {
@@ -372,7 +385,7 @@ describe('prepareUpdate', () => {
       { name: 'edgetx-sounds', to: 'v2.12.3' },
     ]);
 
-    s.radios.tx16smk3!.sources!['gps-homer'] = { on: true, origin: 'local' };
+    radioOf(s, 'tx16smk3', card.cardId).sources!['gps-homer'] = { on: true, origin: 'local' };
     const again = await prepareUpdate(p, s, card, 'tx16smk3');
     expect(again.missing).toEqual(['gps-homer (local)']);
   });

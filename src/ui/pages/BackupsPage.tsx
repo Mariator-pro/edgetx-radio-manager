@@ -38,6 +38,7 @@ export function BackupsPage({
   keep,
   refreshKey,
   radios,
+  selected,
   busy,
   onRestore,
 }: {
@@ -45,13 +46,15 @@ export function BackupsPage({
   keep: number;
   refreshKey: unknown;
   radios: RadioView[];
+  selected?: RadioView; // the radio chosen in the sidebar
   busy?: string;
   onRestore: (radio: RadioView, name: string) => void;
 }) {
   const { t } = usePrefs();
   const [backups, setBackups] = useState<BackupView[]>();
   const [editing, setEditing] = useState<{ board: string; name: string; text: string }>();
-  const load = useCallback(() => get<BackupView[]>('/api/backups').then(setBackups, () => {}), []);
+  const volume = selected?.volume ?? '';
+  const load = useCallback(() => get<BackupView[]>(`/api/backups?volume=${encodeURIComponent(volume)}`).then(setBackups, () => {}), [volume]);
   useEffect(() => {
     void load();
   }, [load, refreshKey]);
@@ -70,15 +73,17 @@ export function BackupsPage({
       </div>
       {backups.length === 0 && <p className="m-0 text-muted">{t.noBackups}</p>}
       {backups.map((b) => {
-        // A backup goes back only onto a connected radio of its own type.
-        const target = radios.find((r) => r.board === b.board);
+        // A backup goes back only onto a connected radio of its own type: the one chosen, else the only one connected.
+        const ofType = radios.filter((r) => r.board === b.board);
+        const target = selected?.board === b.board ? selected : ofType.length === 1 ? ofType[0] : undefined;
         return (
           <Card key={b.board}>
             <Card.Header>
               <Card.Title>{b.radio}</Card.Title>
               <Card.Description>
                 {t.backupCount(b.items.length)}
-                {!target && <span id={`needs-${b.board}`}> · {t.restoreNeedsRadio(b.radio)}</span>}
+                {target && ofType.length > 1 && <span> · {t.restoreOnto(target.label)}</span>}
+                {!target && <span id={`needs-${b.board}`}> · {ofType.length > 1 ? t.restoreChooseRadio : t.restoreNeedsRadio(b.radio)}</span>}
               </Card.Description>
             </Card.Header>
             <Card.Content className="p-0">

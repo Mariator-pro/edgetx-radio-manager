@@ -48,8 +48,10 @@ import { ensureSelection, selectionFromCard } from '../core/selection.ts';
 import {
   findLocalRepos,
   forgetBackups,
+  lastFirmware,
   loadSettings,
   MAX_NOTE,
+  radioKey,
   rememberRadio,
   saveSettings,
   setBackupNote,
@@ -282,12 +284,18 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
   };
   const pushState = async () => send('state', await state());
   const boardOf = (c: RadioCard) => c.board ?? boards.get(c.volume);
+  // The settings of the radio connected at this drive.
+  const radioAt = (volume: unknown) => {
+    const c = cards.find((x) => x.volume === volume);
+    const board = c && boardOf(c);
+    return board ? s.radios[radioKey(board, c.cardId)] : undefined;
+  };
 
   // Called for every newly seen card: note it and make sure it has a selection.
   const adopt = async (c: RadioCard) => {
     const board = boardOf(c);
     let changed = rememberRadio(s, c);
-    if (board) changed = (await ensureSelection(p, s, board)) || changed;
+    if (board) changed = (await ensureSelection(p, s, board, c.cardId)) || changed;
     if (changed) await saveSettings(p, s);
   };
 
@@ -305,7 +313,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       void pushState();
     })
       .then(async (r) => {
-        if (await selectionFromCard(p, s, board, c, r.list)) await saveSettings(p, s);
+        if (await selectionFromCard(p, s, board, { ...c, cardId: r.cardId }, r.list)) await saveSettings(p, s);
         for (const x of cards) if (x.volume === c.volume) x.cardId = r.cardId; // known at once, not only after the next read
         entry.states = r.states;
         entry.key = JSON.stringify([board, r.list.updated]); // its own writing is no reason to read again
@@ -389,7 +397,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       signal,
     );
     (s.backupInfo[board] ??= {})[r.name] = info;
-    dropBackups(board, await pruneBackups(p, board, s.backupsToKeep, [...(s.keptBackups[board] ?? []), ...(alsoKeep ? [alsoKeep] : [])]));
+    dropBackups(board, await pruneBackups(p, board, s.backupsToKeep, [...(s.keptBackups[board] ?? []), ...(alsoKeep ? [alsoKeep] : [])], c.cardId));
     await saveSettings(p, s);
     return r;
   };
@@ -428,7 +436,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     const view: FirmwareView = {
       board,
       method,
-      installed: s.radios[board]?.firmware,
+      installed: cards.find((c) => boardOf(c) === board)?.firmware ?? lastFirmware(s, board),
       versions: all.map((v) => v.tag),
       prereleases: all.filter((v) => v.prerelease).map((v) => v.tag),
       names: Object.fromEntries(all.filter((v) => v.name).map((v) => [v.tag, v.name!])),
@@ -463,8 +471,8 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       await pushState();
     },
     'POST /api/radio/selection': async (req) => {
-      const { board, source, on, origin } = await body<{ board: string; source: string; on?: boolean; origin?: 'release' | 'main' | 'local' }>(req);
-      const r = s.radios[board];
+      const { volume, source, on, origin } = await body<{ volume: string; source: string; on?: boolean; origin?: 'release' | 'main' | 'local' }>(req);
+      const r = radioAt(volume);
       const choice = r?.sources?.[source];
       const src = s.sources.find((x) => x.name === source);
       if (!r || !choice || !src) throw new HttpError(404, 'unknownRadioOrSource');
@@ -494,12 +502,13 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       await poll(true);
     },
     'POST /api/radio/sounds': async (req) => {
-      const { board, sounds } = await body<{ board: string; sounds: string[] }>(req);
-      if (typeof board !== 'string' || !isSafeKey(board)) throw new HttpError(400, 'invalidRequest', { what: 'board' });
+      const { volume, sounds } = await body<{ volume: string; sounds: string[] }>(req);
+      const r = radioAt(volume);
+      if (!r) throw new HttpError(404, 'radioNotConnected');
       if (!Array.isArray(sounds) || sounds.some((id) => !/^[a-z]{2,3}([_-][a-z0-9-]+)?$/i.test(id))) throw new HttpError(400, 'invalidRequest', { what: 'sounds' });
       const langs = sounds.map(voiceLanguage);
       if (new Set(langs).size !== langs.length) throw new HttpError(400, 'oneVoicePerLanguage');
-      (s.radios[board] ??= {}).sounds = [...sounds].sort();
+      r.sounds = [...sounds].sort();
       await saveSettings(p, s);
       // a newly chosen voice is downloaded right away, so the next update has it
       const src = s.sources.find((x) => x.kind === 'sounds');
@@ -709,7 +718,13 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       const { name, tag } = await body<{ name: string; tag: string }>(req);
       await deleteVersion(p, s, name, tag);
     },
-    'GET /api/backups': () => backupViews(p, s, cards.map((c) => ({ board: boardOf(c), cardId: c.cardId, cardName: c.cardName }))),
+    'GET /api/backups': (_req, q) =>
+      backupViews(
+        p,
+        s,
+        cards.map((c) => ({ board: boardOf(c), volume: c.volume, cardId: c.cardId, cardName: c.cardName })),
+        q.get('volume') ?? undefined,
+      ),
     'POST /api/backups/keep': async (req) => {
       const { board, name, keep } = await body<{ board: string; name: string; keep: boolean }>(req);
       if (typeof board !== 'string' || !isSafeKey(board) || !isBackupName(name)) throw new HttpError(400, 'invalidRequest', { what: 'backup' });
@@ -754,9 +769,11 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       });
     },
     'POST /api/sources/add': async (req) => {
-      const v = await body<SourceCheckView & { board?: string }>(req);
+      const v = await body<SourceCheckView & { volume?: string }>(req);
       if (s.sources.some((x) => x.name === v.name)) throw new HttpError(400, 'alreadySource', { name: v.name });
-      addSource(s, { name: v.name, repo: v.repo, kind: 'project', ...(v.sdDir ? { sdDir: v.sdDir } : {}) }, v.board);
+      const c = cards.find((x) => x.volume === v.volume);
+      const board = c && boardOf(c);
+      addSource(s, { name: v.name, repo: v.repo, kind: 'project', ...(v.sdDir ? { sdDir: v.sdDir } : {}) }, board ? [radioKey(board, c.cardId)] : []);
       for (const c of cards) await adopt(c);
       await saveSettings(p, s);
       await pushState();

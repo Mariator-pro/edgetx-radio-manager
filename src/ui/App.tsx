@@ -234,6 +234,7 @@ export function App() {
             keep={state.backupsToKeep}
             refreshKey={state.radios.map((r) => r.lastBackup).join()}
             radios={state.radios}
+            selected={radio}
             busy={state.busy}
             onRestore={(r, name) => {
               setRestoring({ radio: r, name });
@@ -241,7 +242,7 @@ export function App() {
             }}
           />
         ) : (
-          <SourcesPage state={state} run={run} board={radio?.board} />
+          <SourcesPage state={state} run={run} volume={radio?.volume} />
         )}
       </main>
     </div>

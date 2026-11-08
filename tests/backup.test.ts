@@ -1,7 +1,7 @@
 import { mkdir, readFile, readdir, stat, utimes } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { backupCard, backupName, listBackups, pruneBackups } from '../src/core/backup.ts';
+import { backupCard, backupName, cardBackups, listBackups, pruneBackups } from '../src/core/backup.ts';
 import { paths } from '../src/core/paths.ts';
 import { tempDir, writeTree } from './helpers.ts';
 
@@ -73,6 +73,18 @@ describe('pruneBackups', () => {
     const p = await setup(['2026-10-01_1000', '2026-10-02_1000', '2026-10-03_1000']);
     expect(await pruneBackups(p, 'tx16s', 1, ['2026-10-01_1000'])).toEqual(['2026-10-02_1000']);
     expect(await listBackups(p, 'tx16s')).toEqual(['2026-10-03_1000', '2026-10-01_1000']);
+  });
+
+  it('counts per SD card, so one radio of a type never pushes out the backups of another', async () => {
+    const p = await setup(['2026-10-01_1000', '2026-10-02_1000', '2026-10-03_1000', '2026-10-04_1000', '2026-10-05_1000']);
+    const id = (name: string, cardId: string) => writeTree(join(p.backups, 'tx16s', name), { '.radio-manager/radio.json': JSON.stringify({ id: cardId }) });
+    await id('2026-10-02_1000', 'other-card-1');
+    await id('2026-10-04_1000', 'this-card-1');
+    await id('2026-10-05_1000', 'this-card-1');
+    // this card's own two and the one from before cards had an id (10-03) stay; 10-01 has no id either and goes
+    expect(await pruneBackups(p, 'tx16s', 3, [], 'this-card-1')).toEqual(['2026-10-01_1000']);
+    expect(await listBackups(p, 'tx16s')).toContain('2026-10-02_1000');
+    expect(await cardBackups(p, 'tx16s', 'other-card-1')).toEqual(['2026-10-03_1000', '2026-10-02_1000']);
   });
 
   it('formats names as date and time', () => {

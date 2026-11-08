@@ -119,9 +119,8 @@ describe('readCard', () => {
     await setCardName(root, '');
     expect(await readIdentity(root)).toEqual({ cardId: id });
 
-    expect(cardLabel('RadioMaster TX15', { cardId: '3f9a1234-x', cardName: 'Wing' }, true)).toBe('Wing');
-    expect(cardLabel('RadioMaster TX15', { cardId: '3f9a1234-x' }, false)).toBe('RadioMaster TX15');
-    expect(cardLabel('RadioMaster TX15', { cardId: '3f9a1234-x' }, true)).toBe('RadioMaster TX15 · 3f9a');
+    expect(cardLabel('RadioMaster TX15', { cardId: '3f9a1234-x', cardName: 'Wing' })).toBe('Wing');
+    expect(cardLabel('RadioMaster TX15', { cardId: '3f9a1234-x' })).toBe('RadioMaster TX15');
   });
 
   it('finds the sound languages EdgeTX put on the card', async () => {

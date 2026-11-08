@@ -168,7 +168,7 @@ describe('server', () => {
     expect(large).toBe(413);
     expect((await post('/api/backups/keep', '{not json')).status).toBe(400);
     for (const board of ['__proto__', 'constructor']) {
-      expect((await post('/api/radio/sounds', JSON.stringify({ board, sounds: ['en'] }))).status).toBe(400);
+      expect((await post('/api/radio/sounds', JSON.stringify({ volume: board, sounds: ['en'] }))).status).toBe(404);
       expect((await post('/api/backups/keep', JSON.stringify({ board, name: '2026-10-01_1200', keep: true }))).status).toBe(400);
       expect((await post('/api/backups/delete', JSON.stringify({ board, name: '2026-10-01_1200' }))).status).toBe(400);
     }
@@ -367,10 +367,28 @@ describe('two radios of the same type', () => {
       fetch(srv.url + path, { method: body ? 'POST' : 'GET', headers: { [TOKEN_HEADER]: srv.token, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
     try {
       const mine = async () => ((await (await req('/api/state')).json()) as StateView).radios.find((r) => r.volume === radio);
-      for (let i = 0; i < 300 && (await mine())?.checking !== false; i++) await new Promise((r) => setTimeout(r, 10));
+      const all = async () => ((await (await req('/api/state')).json()) as StateView).radios;
+      for (let i = 0; i < 300 && !(await all()).every((r) => r.checking === false); i++) await new Promise((r) => setTimeout(r, 10));
+      // two cards of this type connected: without names both go by their type, no part of the id
+      expect((await all()).map((r) => r.label)).toEqual(['tx16smk3', 'tx16smk3']);
+      // each card keeps its own choice
+      const sounds = async (volume: string) => (await all()).find((r) => r.volume === volume)!.sources.find((x) => x.name === 'edgetx-sounds')!.on;
+      expect(await sounds(card)).toBe(true);
+      expect((await req('/api/radio/selection', { volume: radio, source: 'edgetx-sounds', on: false })).status).toBe(200);
+      expect(await sounds(radio)).toBe(false);
+      expect(await sounds(card)).toBe(true);
       const made = (await (await req('/api/backup', { volume: radio })).json()) as string;
-      const group = ((await (await req('/api/backups')).json()) as BackupView[]).find((g) => g.board === 'tx16smk3');
-      expect(group!.items.find((i) => i.name === made)).toMatchObject({ thisCard: true, card: expect.stringMatching(/^tx16smk3 · [\w-]{4}$/) }); // two cards of this type known: with the start of the id
+      // the last backup and the count on the radio page are those of this SD card
+      const view = async (volume: string) => (await all()).find((r) => r.volume === volume)!;
+      expect(await view(radio)).toMatchObject({ lastBackup: made, backups: 2 }); // its own and the one without an id
+      expect((await view(card)).lastBackup).not.toBe(made);
+      // "this SD card" is the radio chosen in the app; with two of the type connected and none chosen, neither
+      const backups = async (volume: string) =>
+        ((await (await req(`/api/backups?volume=${encodeURIComponent(volume)}`)).json()) as BackupView[]).find((g) => g.board === 'tx16smk3')!;
+      const group = await backups(radio);
+      expect(group.items.find((i) => i.name === made)).toMatchObject({ thisCard: true, card: 'tx16smk3' });
+      expect((await backups(card)).items.find((i) => i.name === made)).not.toHaveProperty('thisCard');
+      expect((await backups('')).items.find((i) => i.name === made)).not.toHaveProperty('thisCard');
       expect(group!.items.find((i) => i.name === '2026-10-01_1200')).not.toHaveProperty('card');
 
       expect((await req('/api/radio/name', { volume: radio, name: 'Mk3 Wing' })).status).toBe(200);

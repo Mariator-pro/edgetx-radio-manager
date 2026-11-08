@@ -137,10 +137,25 @@ export function forgetBackups(s: Settings, board: string, names: string[]): void
   for (const n of names) delete s.backupInfo[board]?.[n];
 }
 
+// Each SD card keeps its own settings, so two radios of one type don't share a choice; a card without an id yet
+// goes by its type alone.
+export const radioKey = (board: string, cardId?: string) => (cardId ? `${board}/${cardId}` : board);
+export const boardOfKey = (key: string) => key.split('/')[0]!;
+
+// The settings of one SD card, made when missing.
+export function radioOf(s: Settings, board: string, cardId?: string): RadioSettings {
+  return (s.radios[radioKey(board, cardId)] ??= {});
+}
+
+// The firmware last seen on a radio of this type.
+export function lastFirmware(s: Settings, board: string): string | undefined {
+  return Object.entries(s.radios).find(([key, r]) => boardOfKey(key) === board && r.firmware)?.[1].firmware;
+}
+
 // Notes what a detected radio has (language, firmware, installed versions); true when settings changed.
 export function rememberRadio(s: Settings, card: RadioCard): boolean {
   if (!card.board) return false;
-  const r = (s.radios[card.board] ??= {});
+  const r = radioOf(s, card.board, card.cardId);
   const before = JSON.stringify(r);
   if (card.language) r.language = card.language;
   if (card.firmware) r.firmware = card.firmware;

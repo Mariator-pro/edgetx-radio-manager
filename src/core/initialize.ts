@@ -6,7 +6,7 @@ import { AppError } from './errors.ts';
 import { knownVersions, type KnownFile } from './known.ts';
 import type { Paths } from './paths.ts';
 import { updateSources } from './selection.ts';
-import { voiceLanguage, type Settings, type Source } from './settings.ts';
+import { radioKey, voiceLanguage, type Settings, type Source } from './settings.ts';
 
 // Reading the SD card: which version of each package it holds, and which of its files are missing or changed.
 // A card without the app's list gets one, as if the app had put the packages there; a card with a list has its
@@ -154,7 +154,7 @@ export async function checkCard(
     : { tool: 1, updated: new Date().toISOString(), packages: {}, files: {} };
   let changed = !card.installed;
   const sources = updateSources(s).sort((a, b) => ORDER[a.kind] - ORDER[b.kind]);
-  const choices = s.radios[board]?.sources ?? {};
+  const choices = s.radios[radioKey(board, card.cardId)]?.sources ?? {};
   for (const src of sources) {
     if (signal?.aborted) throw new AppError('cancelled');
     // a package the list doesn't know: put there another way, or never on this card

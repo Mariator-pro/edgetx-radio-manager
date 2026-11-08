@@ -161,11 +161,9 @@ export async function setCardName(root: string, name: string): Promise<void> {
   await writeIdentity(root, await ensureCardId(root), cleanName(name) || undefined);
 }
 
-// How the app calls a radio: its name; without one its type, with the start of its id when the app knows more SD
-// cards of that type.
-export function cardLabel(type: string, card: CardIdentity, severalOfType: boolean): string {
-  if (card.cardName) return card.cardName;
-  return severalOfType && card.cardId ? `${type} · ${card.cardId.slice(0, 4)}` : type;
+// How the app calls a radio: its name, else its type. Two radios of one type tell apart once they have names.
+export function cardLabel(type: string, card: CardIdentity): string {
+  return card.cardName ?? type;
 }
 
 export async function findCards(volumes: string[]): Promise<RadioCard[]> {

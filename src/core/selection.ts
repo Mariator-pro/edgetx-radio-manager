@@ -2,7 +2,7 @@ import type { InstalledList, RadioCard } from './card.ts';
 import type { Origin } from './content.ts';
 import { localVersions, mainInfo } from './packages.ts';
 import type { Paths } from './paths.ts';
-import type { Choice, Settings, Source } from './settings.ts';
+import { radioOf, type Choice, type Settings, type Source } from './settings.ts';
 
 // Sources that put files on the SD card (firmware is flashed instead).
 export function updateSources(s: Settings): Source[] {
@@ -20,7 +20,7 @@ export async function defaultOrigin(p: Paths, source: Source): Promise<Origin> {
 // origin, and the sounds with their voices. More is chosen in the app and holds until the radio is connected again.
 // An empty card gets the sounds of the radio's voice language; SD content is always on. True when the choice changed.
 export async function selectionFromCard(p: Paths, s: Settings, board: string, card: RadioCard, list: InstalledList): Promise<boolean> {
-  const r = (s.radios[board] ??= {});
+  const r = radioOf(s, board, card.cardId);
   const before = JSON.stringify([r.sources, r.sounds]);
   const empty = Object.keys(list.packages).length === 0;
   const sources: Record<string, Choice> = {};
@@ -37,8 +37,8 @@ export async function selectionFromCard(p: Paths, s: Settings, board: string, ca
 }
 
 // Sources the radio's choice doesn't know yet (added since the card was read) come in switched off.
-export async function ensureSelection(p: Paths, s: Settings, board: string): Promise<boolean> {
-  const r = (s.radios[board] ??= {});
+export async function ensureSelection(p: Paths, s: Settings, board: string, cardId?: string): Promise<boolean> {
+  const r = radioOf(s, board, cardId);
   const sel = (r.sources ??= {});
   let changed = false;
   for (const src of updateSources(s)) {

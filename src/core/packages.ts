@@ -2,7 +2,7 @@ import { readdir, readFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AppError } from './errors.ts';
 import { isSafeName, type Paths } from './paths.ts';
-import type { Settings } from './settings.ts';
+import { boardOfKey, type Settings } from './settings.ts';
 
 // release.json next to the zips of one package version.
 export interface ReleaseInfo {
@@ -65,9 +65,10 @@ export async function folderSize(dir: string): Promise<number> {
 
 // Radios that had this package version installed when last seen; such versions can't be deleted.
 export function installedOn(s: Settings, name: string, tag: string): string[] {
-  return Object.entries(s.radios)
+  const keys = Object.entries(s.radios)
     .filter(([, r]) => r.installed?.[name] === tag || (name === 'edgetx-firmware' && r.firmware && `v${r.firmware}` === tag))
-    .map(([board]) => board);
+    .map(([key]) => boardOfKey(key));
+  return [...new Set(keys)];
 }
 
 export async function deleteVersion(p: Paths, s: Settings, name: string, tag: string): Promise<void> {

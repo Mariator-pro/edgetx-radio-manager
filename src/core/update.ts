@@ -4,7 +4,7 @@ import { AppError } from './errors.ts';
 import type { Paths } from './paths.ts';
 import { makePlan, mergePackages, type PlanItem, type Wanted } from './plan.ts';
 import { ensureSelection, updateSources } from './selection.ts';
-import { soundsOf, type PackageChange, type Settings } from './settings.ts';
+import { radioOf, soundsOf, type PackageChange, type Settings } from './settings.ts';
 
 export interface UpdateSetup {
   contents: PackageContent[];
@@ -28,9 +28,10 @@ function holdMissing(list: InstalledList, wanted: Map<string, Wanted>, missing: 
 export async function prepareUpdate(p: Paths, s: Settings, card: RadioCard, board: string): Promise<UpdateSetup> {
   const list = card.installed;
   if (!list) throw new AppError('cardChecking');
-  const ctx = { board, voices: soundsOf(s.radios[board]) };
-  const selectionChanged = await ensureSelection(p, s, board);
-  const choices = s.radios[board]!.sources!;
+  const r = radioOf(s, board, card.cardId);
+  const ctx = { board, voices: soundsOf(r) };
+  const selectionChanged = await ensureSelection(p, s, board, card.cardId);
+  const choices = r.sources!;
   const contents: PackageContent[] = [];
   const missing: string[] = [];
   const unavailable = new Set<string>();

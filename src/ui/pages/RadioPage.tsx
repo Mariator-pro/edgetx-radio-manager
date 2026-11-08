@@ -86,7 +86,7 @@ function SourceRow({ radio, s, run }: { radio: RadioView; s: RadioSourceView; ru
     ] as const
   ).filter(([id, has]) => has || id === s.origin || (id === 'main' && !s.releaseOnly)); // main is fetched when chosen
   const set = (change: { on?: boolean; origin?: string }) =>
-    run(() => post('/api/radio/selection', { board: radio.board, source: s.name, ...change }));
+    run(() => post('/api/radio/selection', { volume: radio.volume, source: s.name, ...change }));
   return (
     <tr className="border-t border-separator">
       <td className="px-5 py-2.5">
@@ -170,7 +170,7 @@ function SoundsRow({ radio, run }: { radio: RadioView; run: Run }) {
   useEffect(() => {
     get<VoiceView[]>('/api/voices').then(setVoices, () => {});
   }, []);
-  const save = (sounds: string[]) => run(() => post('/api/radio/sounds', { board: radio.board, sounds }));
+  const save = (sounds: string[]) => run(() => post('/api/radio/sounds', { volume: radio.volume, sounds }));
   const name = (code: string) => languageName(code, t.locale);
   const used = radio.sounds.map((id) => voices.find((v) => v.id === id)?.language ?? id.split(/[_-]/)[0]!);
   const addable = [...new Set(voices.map((v) => v.language))].filter((l) => !used.includes(l));
@@ -255,7 +255,7 @@ function RadioName({ radio, run }: { radio: RadioView; run: Run }) {
     return (
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="m-0 text-3xl font-bold tracking-tight">{radio.label}</h1>
-        {radio.label !== radio.name && <span className="text-sm text-muted">{radio.name}</span>}
+        {radio.cardName && <span className="text-sm text-muted">{radio.name}</span>}
         {radio.board && (
           <Button size="sm" variant="ghost" isDisabled={radio.checking} onPress={() => setEditing(radio.cardName ?? '')}>
             {t.rename}

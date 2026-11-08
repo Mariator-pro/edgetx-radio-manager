@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readdir, readFile, rm, stat, utimes } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { isAppleDouble, SYSTEM_DIRS } from './appledouble.ts';
-import { parseRadioYml } from './card.ts';
+import { parseRadioYml, readIdentity } from './card.ts';
 import { AppError } from './errors.ts';
 import { isSafeName, type Paths } from './paths.ts';
 
@@ -115,9 +115,20 @@ export async function listBackups(p: Paths, board: string): Promise<string[]> {
     .reverse();
 }
 
-// Keeps the newest `keep` backups of a radio; kept ones don't count and are never deleted.
-export async function pruneBackups(p: Paths, board: string, keep: number, kept: string[] = []): Promise<string[]> {
-  const candidates = (await listBackups(p, board)).filter((n) => !kept.includes(n));
+// The backups of one SD card, newest first: those with its id and those from before cards had one. Two radios of a
+// type share the folder, but neither pushes out the other's backups.
+export async function cardBackups(p: Paths, board: string, cardId?: string): Promise<string[]> {
+  const out: string[] = [];
+  for (const name of await listBackups(p, board)) {
+    const id = (await readIdentity(join(p.backups, board, name))).cardId;
+    if (!id || id === cardId) out.push(name);
+  }
+  return out;
+}
+
+// Keeps the newest `keep` backups of an SD card; kept ones don't count and are never deleted.
+export async function pruneBackups(p: Paths, board: string, keep: number, kept: string[] = [], cardId?: string): Promise<string[]> {
+  const candidates = (await cardBackups(p, board, cardId)).filter((n) => !kept.includes(n));
   const doomed = candidates.slice(Math.max(keep, 0));
   for (const n of doomed) await rm(join(p.backups, board, n), { recursive: true, force: true });
   return doomed;

@@ -62,14 +62,16 @@ export async function checkSource(p: Paths, s: Settings, input: string, fetchFn:
   return { source, tag: r.tag, files: card.length, sample: card.slice(0, 8) };
 }
 
-// Adds a checked source; a radio connected right now gets it switched on.
-export function addSource(s: Settings, source: Source, connectedBoard?: string): void {
+// Adds a checked source; the radios connected right now (by radioKey) get it switched on.
+export function addSource(s: Settings, source: Source, connected: string[] = []): void {
   // as checkSource makes it: named after its repo, the SD folder inside the download
   const safe = REPO.test(source.repo) && source.name === source.repo.split('/')[1] && isSafeName(source.name);
   if (!safe || (source.sdDir && !source.sdDir.split('/').every(isSafeName))) throw new AppError('invalidRequest', { what: 'source' });
   s.sources.push(source);
-  const sel = connectedBoard ? s.radios[connectedBoard]?.sources : undefined;
-  if (sel) sel[source.name] = { on: true, origin: 'release' };
+  for (const key of connected) {
+    const sel = s.radios[key]?.sources;
+    if (sel) sel[source.name] = { on: true, origin: 'release' };
+  }
 }
 
 // Removes a project source from the list and from every radio; downloaded versions stay.

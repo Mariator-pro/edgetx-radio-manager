@@ -42,7 +42,9 @@ import { updateSources } from '../core/selection.ts';
 import {
   findLocalRepos,
   forgetBackups,
+  lastFirmware,
   loadSettings,
+  radioKey,
   rememberRadio,
   saveSettings,
   soundsOf,
@@ -142,7 +144,7 @@ async function status(p: Paths, s: Settings, volume?: string): Promise<void> {
     const fw = c.firmware ?? 'unknown';
     const low = c.firmware && isBelowMin(c.firmware) ? `  older than EdgeTX ${MIN_EDGETX}, flash the firmware first` : '';
     console.log(`  Firmware   ${fw}${low}`);
-    if (c.board) console.log(`  Sounds     ${soundsOf(s.radios[c.board]).join(', ') || 'unknown'}`);
+    if (c.board) console.log(`  Sounds     ${soundsOf(s.radios[radioKey(c.board, c.cardId)]).join(', ') || 'unknown'}`);
     const installed = Object.entries(c.installed?.packages ?? {});
     if (installed.length === 0) {
       console.log('  Installed  not read yet; "update" reads the SD card first');
@@ -198,7 +200,7 @@ async function runBackup(p: Paths, s: Settings, card: RadioCard, board: string, 
   if (process.stdout.isTTY) process.stdout.write('\n');
   console.log(`Done: ${result.files} files, ${mb(result.bytes)} in ${result.dir}`);
   (s.backupInfo[board] ??= {})[result.name] = info;
-  const removed = await pruneBackups(p, board, s.backupsToKeep, [...(s.keptBackups[board] ?? []), ...(alsoKeep ? [alsoKeep] : [])]);
+  const removed = await pruneBackups(p, board, s.backupsToKeep, [...(s.keptBackups[board] ?? []), ...(alsoKeep ? [alsoKeep] : [])], card.cardId);
   forgetBackups(s, board, removed);
   await saveSettings(p, s);
   if (removed.length > 0) console.log(`Deleted old backups: ${removed.join(', ')}`);
@@ -232,15 +234,15 @@ async function update(p: Paths, s: Settings, volume?: string, boardOpt?: string)
     const v = list.packages[name]?.version;
     if (v) console.log(`  ${name.padEnd(16)} ${v}`);
   });
-  if (await selectionFromCard(p, s, board, connected, checked.list)) await saveSettings(p, s);
+  if (await selectionFromCard(p, s, board, { ...connected, cardId: checked.cardId }, checked.list)) await saveSettings(p, s);
   for (const st of checked.states) {
     if (st.missing.length + st.changed.length === 0) continue;
     console.log(`  ${st.name.padEnd(16)} + custom: ${st.missing.length} missing, ${st.changed.length} changed`);
   }
-  const card: RadioCard = { ...connected, installed: checked.list };
+  const card: RadioCard = { ...connected, cardId: checked.cardId, installed: checked.list };
   const setup = await prepareUpdate(p, s, card, board);
   if (setup.selectionChanged) await saveSettings(p, s);
-  const choices = s.radios[board]!.sources!;
+  const choices = s.radios[radioKey(board, card.cardId)]!.sources!;
 
   console.log(`${radioName(await radioTypes(p, s), board)} at ${card.volume}\n\nSources on this radio:`);
   for (const src of updateSources(s)) {
@@ -613,7 +615,7 @@ async function flash(p: Paths, s: Settings, tagArg?: string, volume?: string, bo
   const method = await flashMethod(p, tag, board).catch((e: Error) => {
     throw new UserError(e.message);
   });
-  console.log(`Flashing EdgeTX ${tag} to the ${radioName(await radioTypes(p, s), board)} (installed: ${s.radios[board]?.firmware ?? 'unknown'}).\n`);
+  console.log(`Flashing EdgeTX ${tag} to the ${radioName(await radioTypes(p, s), board)} (installed: ${lastFirmware(s, board) ?? 'unknown'}).\n`);
   const file = await flashAndReport(board, await firmwareFile(p, tag, board), method);
   console.log(`Done: ${file} written. The radio restarts with EdgeTX ${tag}.`);
 }
@@ -651,7 +653,7 @@ async function flashOwnFile(p: Paths, s: Settings, path: string, force: boolean,
   const check = checkFirmwareFile(name, data, board, known);
   if (!check.board && !force) throw new UserError(`${name} has no EdgeTX identification, so the app can't check it. Add --force to flash it anyway.`);
   const what = check.version ? `EdgeTX ${check.version} (${name})` : name;
-  console.log(`Flashing ${what} to the ${radioName(await radioTypes(p, s), board)} (installed: ${s.radios[board]?.firmware ?? 'unknown'}).\n`);
+  console.log(`Flashing ${what} to the ${radioName(await radioTypes(p, s), board)} (installed: ${lastFirmware(s, board) ?? 'unknown'}).\n`);
   const file = await flashAndReport(board, { name, data }, check.method);
   console.log(`Done: ${file} written. The radio restarts${check.version ? ` with EdgeTX ${check.version}` : ''}.`);
 }
@@ -667,7 +669,7 @@ async function sources(p: Paths, s: Settings, args: string[]): Promise<void> {
     for (const f of r.sample) console.log(`  ${f}`);
     if ((await ask('Add this source? [y/N] ')) !== 'y') return;
     const cards = await findCards(await listVolumes());
-    addSource(s, r.source, cards.length === 1 ? cards[0]!.board : undefined);
+    addSource(s, r.source, cards.length === 1 && cards[0]!.board ? [radioKey(cards[0]!.board, cards[0]!.cardId)] : []);
     await saveSettings(p, s);
     console.log(`Added ${r.source.name}.`);
     return;

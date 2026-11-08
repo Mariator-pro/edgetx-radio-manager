@@ -7,7 +7,7 @@ import { usePrefs } from '../usePrefs.ts';
 
 type Run = (fn: () => Promise<unknown>) => void;
 
-function AddSource({ state, run, board }: { state: StateView; run: Run; board?: string }) {
+function AddSource({ state, run, volume }: { state: StateView; run: Run; volume?: string }) {
   const { t } = usePrefs();
   const [repo, setRepo] = useState('');
   const [check, setCheck] = useState<SourceCheckView>();
@@ -67,7 +67,7 @@ function AddSource({ state, run, board }: { state: StateView; run: Run; board?: 
               <Button
                 onPress={() =>
                   run(async () => {
-                    await post('/api/sources/add', { ...check, board });
+                    await post('/api/sources/add', { ...check, volume });
                     setAdded(check.name);
                     setCheck(undefined);
                     setRepo('');
@@ -87,7 +87,7 @@ function AddSource({ state, run, board }: { state: StateView; run: Run; board?: 
   );
 }
 
-export function SourcesPage({ state, run, board }: { state: StateView; run: Run; board?: string }) {
+export function SourcesPage({ state, run, volume }: { state: StateView; run: Run; volume?: string }) {
   const { t } = usePrefs();
   return (
     <div className="flex flex-col gap-6">
@@ -146,7 +146,7 @@ export function SourcesPage({ state, run, board }: { state: StateView; run: Run;
           </table>
         </Card.Content>
       </Card>
-      <AddSource state={state} run={run} board={board} />
+      <AddSource state={state} run={run} volume={volume} />
     </div>
   );
 }

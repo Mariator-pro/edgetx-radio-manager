@@ -212,6 +212,8 @@ const en = {
   deleteBackup: (l: string, r: string) => `Delete the backup of the ${r} from ${l}?`,
   restore: 'Restore',
   restoreNeedsRadio: (r: string) => `connect the ${r} to restore its backups`,
+  restoreChooseRadio: 'choose the radio in the sidebar to restore a backup onto it',
+  restoreOnto: (r: string) => `“Restore” writes to ${r}`,
   madeByHand: 'Made by hand',
   beforeUpdate: 'Before SD update',
   beforeRestore: (d: string) => `Before restoring ${d}`,
