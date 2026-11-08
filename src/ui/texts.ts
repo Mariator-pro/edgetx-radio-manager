@@ -196,6 +196,13 @@ const en = {
   none: 'none',
   remove: 'Remove',
   removeConfirm: (n: string) => `Remove ${n} from the sources? Its downloaded versions stay.`,
+  localRepos: 'Local checkouts',
+  localReposText:
+    'Choose the folder that holds the Git checkouts of your projects, each in a folder named like its repo. For the projects in it, you can choose “Local” on a radio to try out changes before a version is out.',
+  folder: 'Folder',
+  folderPlaceholder: 'e.g. ~/Projects',
+  chooseFolder: 'Choose folder …',
+  localReposFound: (n: number) => (n === 0 ? 'None of your projects is in this folder.' : `${n} ${n === 1 ? 'project' : 'projects'} found in this folder.`),
 
   packagesText: 'Each downloaded version stays until you delete it. You can’t delete a version that’s installed on a radio.',
   nothingDownloaded: 'Nothing downloaded yet.',

@@ -76,6 +76,8 @@ export interface StateView {
   lastCheck?: string;
   backupsToKeep: number;
   appUpdate?: AppUpdateView;
+  localRepos?: string; // folder with the local checkouts of the own projects
+  pickFolder?: boolean; // the folder can be chosen in the system's dialog (desktop app)
 }
 
 export interface ProgressEvent {

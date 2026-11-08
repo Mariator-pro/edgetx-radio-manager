@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline/promises';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { applyPlan, type Resolution } from '../core/apply.ts';
 import { backupCard, backupFirmware, cardBackups, listBackups, pruneBackups } from '../core/backup.ts';
@@ -709,7 +709,6 @@ async function ui(p: Paths): Promise<void> {
     paths: p,
     port: 0,
     staticDir,
-    repoParent: dirname(REPO_ROOT),
     licensesFile: join(REPO_ROOT, 'dist', 'THIRD_PARTY_LICENSES.txt'),
   });
   const forget = await noteServer(p.server, server.open);
@@ -741,7 +740,7 @@ async function main(): Promise<void> {
   }
   const p = paths();
   const s = await loadSettings(p);
-  if (findLocalRepos(s, dirname(REPO_ROOT))) await saveSettings(p, s);
+  if (findLocalRepos(s, s.localRepos)) await saveSettings(p, s);
   switch (command) {
     case 'status':
       return status(p, s, values.volume);

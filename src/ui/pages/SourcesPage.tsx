@@ -87,6 +87,65 @@ function AddSource({ state, run, volume }: { state: StateView; run: Run; volume?
   );
 }
 
+// Keyed by the saved folder, so the field shows it again once it changes (also through the folder dialog).
+function LocalRepos({ state }: { state: StateView }) {
+  const { t } = usePrefs();
+  const [dir, setDir] = useState(state.localRepos ?? '');
+  const [error, setError] = useState<unknown>();
+  const found = state.sources.filter((s) => s.kind === 'project' && s.localDir).length;
+
+  const save = async (path: string, body?: { dir: string }) => {
+    setError(undefined);
+    try {
+      await post(path, body);
+    } catch (e) {
+      setError(e);
+    }
+  };
+
+  return (
+    <Card>
+      <Card.Header>
+        <Card.Title>{t.localRepos}</Card.Title>
+        <Card.Description>{t.localReposText}</Card.Description>
+      </Card.Header>
+      <Card.Content className="flex flex-col gap-4">
+        <form
+          className="flex flex-wrap items-end gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save('/api/sources/local-repos', { dir });
+          }}
+        >
+          <TextField className="min-w-64 flex-1" value={dir} onChange={setDir}>
+            <Label>{t.folder}</Label>
+            <Input placeholder={t.folderPlaceholder} className="font-mono" />
+          </TextField>
+          {state.pickFolder && (
+            <Button variant="outline" isDisabled={!!state.busy} onPress={() => void save('/api/sources/local-repos/pick')}>
+              {t.chooseFolder}
+            </Button>
+          )}
+          <Button type="submit" isDisabled={dir === (state.localRepos ?? '') || !!state.busy}>
+            {t.save}
+          </Button>
+        </form>
+        {error !== undefined ? (
+          <p role="alert" className="m-0 text-sm text-danger">
+            {errorText(t, error)}
+          </p>
+        ) : (
+          state.localRepos && (
+            <p role="status" className="m-0 text-sm text-muted">
+              {t.localReposFound(found)}
+            </p>
+          )
+        )}
+      </Card.Content>
+    </Card>
+  );
+}
+
 export function SourcesPage({ state, run, volume }: { state: StateView; run: Run; volume?: string }) {
   const { t } = usePrefs();
   return (
@@ -146,6 +205,7 @@ export function SourcesPage({ state, run, volume }: { state: StateView; run: Run
           </table>
         </Card.Content>
       </Card>
+      <LocalRepos key={state.localRepos ?? ''} state={state} />
       <AddSource state={state} run={run} volume={volume} />
     </div>
   );

@@ -142,13 +142,24 @@ describe('package content', () => {
     expect(await localVersion(source)).toMatch(/^local [0-9a-f]{7,}$/);
   });
 
-  it('finds own checkouts next to the tool', async () => {
+  it('finds own checkouts in the folder with the local repos, and drops those no longer there', async () => {
     const parent = await tempDir();
     await mkdir(join(parent, 'edgetx-lipo-nanny', '.git'), { recursive: true });
     const s = defaultSettings();
+    const local = (name: string) => s.sources.find((x) => x.name === name)!.localDir;
     expect(findLocalRepos(s, parent)).toBe(true);
-    expect(s.sources.find((x) => x.name === 'lipo-nanny')!.localDir).toBe(join(parent, 'edgetx-lipo-nanny'));
-    expect(s.sources.find((x) => x.name === 'gps-homer')!.localDir).toBeUndefined();
+    expect(local('lipo-nanny')).toBe(join(parent, 'edgetx-lipo-nanny'));
+    expect(local('gps-homer')).toBeUndefined();
+    expect(local('elrs-lua')).toBeUndefined(); // one file from a release: never local
+    expect(findLocalRepos(s, parent)).toBe(false);
+
+    const other = await tempDir();
+    await mkdir(join(other, 'edgetx-gps-homer', '.git'), { recursive: true });
+    expect(findLocalRepos(s, other)).toBe(true);
+    expect(local('lipo-nanny')).toBeUndefined();
+    expect(local('gps-homer')).toBe(join(other, 'edgetx-gps-homer'));
+    expect(findLocalRepos(s, undefined)).toBe(true);
+    expect(s.sources.every((x) => !x.localDir)).toBe(true);
   });
 });
 

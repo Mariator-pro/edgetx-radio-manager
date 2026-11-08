@@ -134,7 +134,7 @@ For every radio the app stores which sources go on the SD card and where they co
 
 - **Release**: the newest downloaded GitHub release
 - **Main**: the newest commit of the main branch (own projects only), downloaded when needed
-- **Local**: a local git checkout, only when the app runs from source (see [Development](docs/development.md#running-from-source))
+- **Local**: a local git checkout of your own project, found in the folder you choose under **Local checkouts** on the sources page (each project in a folder named like its repo)
 
 What is installed is recorded in `.radio-manager/installed.json` on the SD card, written when the app first reads the card and after every update. With it the app tells which files came from a package and which were changed since; it checks them by size and file time each time the radio is connected and only reads files that changed. `.radio-manager/radio.json` holds an id for the SD card.
 

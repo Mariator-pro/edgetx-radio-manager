@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { app, BrowserWindow, screen, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, screen, session, shell } from 'electron';
 import { paths } from '../core/paths.ts';
 import { startServer } from '../server/server.ts';
 import { isOwnPage, isWebLink } from './links.ts';
@@ -32,8 +32,12 @@ async function start(): Promise<void> {
     port: 0,
     appUpdates: updates,
     staticDir: join(app.getAppPath(), 'dist', 'ui'),
-    // own projects' checkouts next to this repo only when run from the source folder
-    repoParent: app.isPackaged ? undefined : join(app.getAppPath(), '..'),
+    pickFolder: async () => {
+      const [win] = BrowserWindow.getAllWindows();
+      const options: Electron.OpenDialogOptions = { properties: ['openDirectory'] };
+      const r = await (win ? dialog.showOpenDialog(win, options) : dialog.showOpenDialog(options));
+      return r.canceled ? undefined : r.filePaths[0];
+    },
     // packed: in the resources folder; started from the source: in dist/
     licensesFile: app.isPackaged ? join(process.resourcesPath, 'THIRD_PARTY_LICENSES.txt') : join(app.getAppPath(), 'dist', 'THIRD_PARTY_LICENSES.txt'),
   });

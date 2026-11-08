@@ -203,6 +203,13 @@ export const de: Texts = {
   none: 'keiner',
   remove: 'Entfernen',
   removeConfirm: (n) => `${n} aus den Quellen entfernen? Die heruntergeladenen Versionen bleiben erhalten.`,
+  localRepos: 'Lokale Repos',
+  localReposText:
+    'Wähle den Ordner mit den Git-Repos deiner Projekte, jedes in einem Ordner mit dem Namen seines Repos. Für die Projekte darin kannst du bei einem Sender „Lokal“ wählen und Änderungen ausprobieren, bevor eine Version erscheint.',
+  folder: 'Ordner',
+  folderPlaceholder: 'z. B. ~/Projekte',
+  chooseFolder: 'Ordner auswählen …',
+  localReposFound: (n) => (n === 0 ? 'In diesem Ordner liegt keins deiner Projekte.' : `${n} ${n === 1 ? 'Projekt' : 'Projekte'} in diesem Ordner gefunden.`),
 
   packagesText: 'Jede heruntergeladene Version bleibt, bis du sie löschst. Eine Version, die auf einem Sender installiert ist, kannst du nicht löschen.',
   nothingDownloaded: 'Noch nichts heruntergeladen.',
@@ -392,6 +399,7 @@ export const de: Texts = {
     noRelease: ({ repo }) => `${repo} hat noch kein Release.`,
     repoNotFound: ({ repo }) => `${repo} ist auf GitHub nicht zu finden. Prüfe den Namen. Private Repos kannst du nicht hinzufügen.`,
     noCommit: ({ repo }) => `${repo} hat noch keinen Commit.`,
+    folderNotFound: ({ dir }) => `Die App findet den Ordner ${dir} nicht. Gib seinen vollständigen Pfad ein.`,
     noSdFolder: ({ repo, tag }) => `Version ${tag} von ${repo} enthält keine Dateien für die SD-Karte.`,
     onlyProjectsRemovable: () => 'Entfernen kannst du nur Projekt-Quellen.',
     installedOn: ({ name, tag, radios }) => `${name} ${tag} ist auf ${radios} installiert, deshalb kannst du es nicht löschen.`,

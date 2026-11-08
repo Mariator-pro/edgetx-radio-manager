@@ -2,7 +2,8 @@ import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { extname, join, normalize, sep } from 'node:path';
+import { homedir } from 'node:os';
+import { extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import { applyPlan, type Resolution } from '../core/apply.ts';
 import { backupCard, deleteBackup, isBackupName, listBackups, pruneBackups } from '../core/backup.ts';
 import { findCards, MAX_CARD_NAME, readCard, setCardName, type RadioCard } from '../core/card.ts';
@@ -100,7 +101,7 @@ export interface ServerOptions {
   port: number;
   staticDir?: string; // built interface; without it only /api is served (Vite serves the page)
   licensesFile?: string; // THIRD_PARTY_LICENSES.txt from the build, shown under About
-  repoParent?: string; // where the own projects' checkouts are looked for; without it none are looked for
+  pickFolder?: () => Promise<string | undefined>; // desktop app only: the system's folder dialog
   pollMs?: number;
   appUpdates?: AppUpdates; // desktop app only
 }
@@ -249,7 +250,8 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
   const p = o.paths;
   const token = randomBytes(24).toString('base64url');
   const s: Settings = await loadSettings(p);
-  if (o.repoParent && findLocalRepos(s, o.repoParent)) await saveSettings(p, s);
+  // checkouts added or removed since the last start count too; without a chosen folder there are none
+  if (findLocalRepos(s, s.localRepos)) await saveSettings(p, s);
 
   let cards: RadioCard[] = [];
   const boards = new Map<string, string>(); // volume -> type chosen for a card without radio.yml
@@ -280,7 +282,12 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     });
   const state = async () => {
     const appUpdate = o.appUpdates?.view();
-    return { ...(await stateView(p, s, cards, boards, busy, checks)), ...(appUpdate ? { appUpdate } : {}) };
+    return {
+      ...(await stateView(p, s, cards, boards, busy, checks)),
+      ...(appUpdate ? { appUpdate } : {}),
+      ...(s.localRepos ? { localRepos: s.localRepos } : {}),
+      ...(o.pickFolder ? { pickFolder: true } : {}),
+    };
   };
   const pushState = async () => send('state', await state());
   const boardOf = (c: RadioCard) => c.board ?? boards.get(c.volume);
@@ -778,6 +785,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       const c = cards.find((x) => x.volume === v.volume);
       const board = c && boardOf(c);
       addSource(s, { name: v.name, repo: v.repo, kind: 'project', ...(v.sdDir ? { sdDir: v.sdDir } : {}) }, board ? [radioKey(board, c.cardId)] : []);
+      findLocalRepos(s, s.localRepos);
       for (const c of cards) await adopt(c);
       await saveSettings(p, s);
       await pushState();
@@ -800,6 +808,16 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       s.ui = { ...s.ui, ...(lang ? { lang } : {}), ...(theme ? { theme } : {}) };
       await saveSettings(p, s);
     },
+    // empty: no folder, so no project has a local checkout
+    'POST /api/sources/local-repos': async (req) => {
+      const { dir } = await body<{ dir: string }>(req);
+      await setLocalRepos(dir);
+    },
+    'POST /api/sources/local-repos/pick': async () => {
+      if (!o.pickFolder) throw new HttpError(400, 'invalidRequest', { what: 'folder dialog' });
+      const dir = await o.pickFolder();
+      if (dir) await setLocalRepos(dir);
+    },
     'POST /api/sources/remove': async (req) => {
       const { name } = await body<{ name: string }>(req);
       if (!removeSource(s, name)) throw new HttpError(400, 'onlyProjectsRemovable');
@@ -807,6 +825,17 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       await pushState();
     },
   };
+
+  async function setLocalRepos(input: string): Promise<void> {
+    const typed = String(input ?? '').trim();
+    const dir = process.platform !== 'win32' && (typed === '~' || typed.startsWith('~/')) ? homedir() + typed.slice(1) : typed;
+    if (dir && (!isAbsolute(dir) || !(await stat(dir).catch(() => undefined))?.isDirectory())) throw new HttpError(400, 'folderNotFound', { dir: typed });
+    if (dir) s.localRepos = resolve(dir);
+    else delete s.localRepos;
+    findLocalRepos(s, s.localRepos);
+    await saveSettings(p, s);
+    await pushState();
+  }
 
   const page = (html: string) => withPageData(html, s.ui ?? {}, token);
 

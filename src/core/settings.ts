@@ -57,6 +57,7 @@ export interface Settings {
   firmwarePrereleases?: boolean; // flash page also offers the firmware release candidates
   knownDefaults?: string[]; // default sources already offered; a removed one isn't added again
   ui?: { lang?: string; theme?: 'light' | 'dark' }; // interface language and theme as last chosen
+  localRepos?: string; // folder with the local checkouts of the own projects, chosen on the sources page
 }
 
 export const DEFAULT_SOURCES: readonly Source[] = [
@@ -163,16 +164,18 @@ export function rememberRadio(s: Settings, card: RadioCard): boolean {
   return JSON.stringify(r) !== before;
 }
 
-// Checkouts of the own projects next to this tool's repo (e.g. ../edgetx-lipo-nanny).
-export function findLocalRepos(s: Settings, parentDir: string): boolean {
+// Checkouts of the own projects in the folder with the local repos, each in a folder named like its repo
+// (e.g. edgetx-lipo-nanny). Without a folder no project has one.
+export function findLocalRepos(s: Settings, folder: string | undefined): boolean {
   let changed = false;
   for (const src of s.sources) {
-    if (src.kind !== 'project' || src.localDir || src.file) continue;
-    const dir = join(parentDir, src.repo.split('/')[1] ?? src.name);
-    if (existsSync(join(dir, '.git'))) {
-      src.localDir = dir;
-      changed = true;
-    }
+    if (src.kind !== 'project' || src.file) continue;
+    const dir = folder && join(folder, src.repo.split('/')[1] ?? src.name);
+    const found = dir && existsSync(join(dir, '.git')) ? dir : undefined;
+    if (found === src.localDir) continue;
+    if (found) src.localDir = found;
+    else delete src.localDir;
+    changed = true;
   }
   return changed;
 }

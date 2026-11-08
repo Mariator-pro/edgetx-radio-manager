@@ -15,7 +15,7 @@ npm run build   # builds the browser interface into dist/ui, the desktop main pr
 
 This is also what the [browser interface](browser-interface.md) and the [command line](command-line.md) need.
 
-For your own Lua projects, the source type **Local** finds checkouts of the projects next to this repo (e.g. `../edgetx-lipo-nanny`) automatically when the tool runs from source.
+For your own Lua projects, the origin **Local** uses the checkouts in the folder chosen under **Local checkouts** on the sources page. Without a chosen folder no project has a local checkout, also when the app runs from source.
 
 ## Desktop app
 

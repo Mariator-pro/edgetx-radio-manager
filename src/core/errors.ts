@@ -40,6 +40,7 @@ export const ERRORS = {
   repoNotFound: (p: { repo: string }) => `Can’t find ${p.repo} on GitHub. Check the name. You can’t add private repos.`,
   noCommit: (p: { repo: string }) => `${p.repo} has no commit yet.`,
   noSdFolder: (p: { repo: string; tag: string }) => `Version ${p.tag} of ${p.repo} has no files for the SD card.`,
+  folderNotFound: (p: { dir: string }) => `Can’t find the folder ${p.dir}. Enter its full path.`,
   onlyProjectsRemovable: () => 'You can only remove project sources.',
   installedOn: (p: { name: string; tag: string; radios: string }) => `${p.name} ${p.tag} is installed on ${p.radios}, so you can’t delete it.`,
 

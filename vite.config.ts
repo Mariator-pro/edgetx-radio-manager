@@ -22,7 +22,6 @@ function apiServer(): Plugin {
       const s = await startServer({
         paths: paths(),
         port: 0,
-        repoParent: resolve(import.meta.dirname, '..'),
         licensesFile: resolve(import.meta.dirname, 'dist', 'THIRD_PARTY_LICENSES.txt'),
       });
       ({ page, close } = s);

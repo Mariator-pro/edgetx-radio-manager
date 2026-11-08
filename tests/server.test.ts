@@ -44,7 +44,7 @@ beforeAll(async () => {
   card = await tempDir();
   await writeTree(card, { 'RADIO/radio.yml': 'semver: 2.12.3\nboard: tx16smk3\nttsLanguage: "en"\n', 'MODELS/m.yml': 'm' });
   process.env.RADIO_MANAGER_VOLUMES = card;
-  const s = await startServer({ paths: p, port: 0, repoParent: await tempDir(), licensesFile: join(p.root, 'THIRD_PARTY_LICENSES.txt'), pollMs: 60_000 });
+  const s = await startServer({ paths: p, port: 0, licensesFile: join(p.root, 'THIRD_PARTY_LICENSES.txt'), pollMs: 60_000 });
   url = s.url;
   token = s.token;
   close = s.close;
@@ -283,6 +283,27 @@ describe('server', () => {
     await writeFile(file, JSON.stringify({ url: s.url, pid: 2 ** 22 + 1 }));
     expect(await runningServer(file)).toBeUndefined();
   });
+
+  it('finds the local checkouts in the chosen folder, and none once it is cleared', async () => {
+    const folder = await tempDir();
+    await mkdir(join(folder, 'edgetx-gps-homer', '.git'), { recursive: true });
+    const missing = await call('/api/sources/local-repos', { method: 'POST', body: JSON.stringify({ dir: join(folder, 'nope') }) });
+    expect(missing.status).toBe(400);
+    expect(((await missing.json()) as { code: string }).code).toBe('folderNotFound');
+    expect((await call('/api/sources/local-repos', { method: 'POST', body: JSON.stringify({ dir: 'relative' }) })).status).toBe(400);
+
+    await post('/api/sources/local-repos', { dir: folder });
+    let state = await get<StateView>('/api/state');
+    expect(state.localRepos).toBe(folder);
+    expect(state.sources.filter((x) => x.localDir).map((x) => x.name)).toEqual(['gps-homer']);
+    expect(state.pickFolder).toBeUndefined();
+    expect((await call('/api/sources/local-repos/pick', { method: 'POST', body: '{}' })).status).toBe(400);
+
+    await post('/api/sources/local-repos', { dir: '' });
+    state = await get<StateView>('/api/state');
+    expect(state.localRepos).toBeUndefined();
+    expect(state.sources.filter((x) => x.localDir)).toEqual([]);
+  });
 });
 
 describe('app update', () => {
@@ -362,7 +383,7 @@ describe('two radios of the same type', () => {
     await writeTree(join(q.backups, 'tx16smk3', '2026-10-01_1200'), { 'RADIO/radio.yml': 'semver: 2.12.3\nboard: tx16smk3\n', 'MODELS/m.yml': 'm' });
     const before = process.env.RADIO_MANAGER_VOLUMES;
     process.env.RADIO_MANAGER_VOLUMES = [before, radio].filter(Boolean).join(delimiter); // the other test card stays connected
-    const srv = await startServer({ paths: q, port: 0, repoParent: await tempDir(), licensesFile: join(q.root, 'none.txt'), pollMs: 60_000 });
+    const srv = await startServer({ paths: q, port: 0, licensesFile: join(q.root, 'none.txt'), pollMs: 60_000 });
     const req = (path: string, body?: unknown) =>
       fetch(srv.url + path, { method: body ? 'POST' : 'GET', headers: { [TOKEN_HEADER]: srv.token, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
     try {
