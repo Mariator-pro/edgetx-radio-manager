@@ -226,6 +226,22 @@ describe('plan and apply', () => {
     expect(Object.keys(card.installed!.files).sort()).toEqual(['WIDGETS/A/main.lua', 'WIDGETS/A/same.lua']);
   });
 
+  it('removes the "._" files macOS leaves on the card, outside its own housekeeping folders', async () => {
+    const root = await newCard({
+      '._WIDGETS': 'x',
+      'WIDGETS/Mine/main.lua': 'mine',
+      'WIDGETS/Mine/._main.lua': 'x',
+      '.radio-manager/._installed.json': 'x',
+      '.Spotlight-V100/._store.db': 'x',
+    });
+    const contents = [pkg('a', 'release', 1, { 'WIDGETS/A/main.lua': 'new' })];
+    await applyPlan(root, { plan: await makePlan(root, mergePackages(contents)), contents });
+    expect(await readdir(root)).not.toContain('._WIDGETS');
+    expect(await readdir(join(root, 'WIDGETS/Mine'))).toEqual(['main.lua']);
+    expect(await readdir(join(root, '.radio-manager'))).toEqual(['installed.json']);
+    expect(await readdir(join(root, '.Spotlight-V100'))).toEqual(['._store.db']);
+  });
+
   it('changes nothing when a path leads off the card', async () => {
     const root = await newCard({ 'WIDGETS/A/main.lua': 'old' });
     const contents = [pkg('a', 'release', 1, { 'WIDGETS/A/main.lua': 'new' })];

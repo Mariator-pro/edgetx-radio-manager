@@ -1,12 +1,12 @@
 import { copyFile, mkdir, readdir, readFile, rm, stat, utimes } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
+import { isAppleDouble, SYSTEM_DIRS } from './appledouble.ts';
 import { parseRadioYml } from './card.ts';
 import { AppError } from './errors.ts';
 import { isSafeName, type Paths } from './paths.ts';
 
 // OS housekeeping on the card, never part of a backup.
-const SKIP_NAMES = new Set(['.Spotlight-V100', '.fseventsd', '.Trashes', '.TemporaryItems', 'System Volume Information']);
-const skip = (name: string) => SKIP_NAMES.has(name) || name.startsWith('._');
+const skip = (name: string) => SYSTEM_DIRS.has(name) || isAppleDouble(name);
 
 const BACKUP_NAME = /^\d{4}-\d{2}-\d{2}_\d{4}(_\d+)?$/;
 export const isBackupName = (name: string) => BACKUP_NAME.test(name);

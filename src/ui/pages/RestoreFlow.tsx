@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import type { ProgressEvent, RadioView, RestoreAction, RestorePlanView, RestoreResultView } from '../../server/api.ts';
 import { errorText, post } from '../api.ts';
 import { Stepper } from '../components/Stepper.tsx';
-import { backupLabel } from '../format.ts';
+import { backupLabel, isLastWrite } from '../format.ts';
 import { COLORS, TILES } from '../planColors.ts';
 import { usePrefs } from '../usePrefs.ts';
 
@@ -56,6 +56,7 @@ export function RestoreFlow({ radio, name, progress, onBack }: { radio: RadioVie
   };
 
   const step = phase === 'running' ? (progress?.step === 'write' || !backupFirst ? 2 : 1) : phase === 'done' ? 3 : 0;
+  const finishing = phase === 'running' && isLastWrite(progress);
   const c = plan?.counts;
   const nothing = c && c.add + c.replace + c.delete === 0;
   const otherFirmware = plan?.backupFirmware && plan.cardFirmware && plan.backupFirmware !== plan.cardFirmware;
@@ -201,14 +202,14 @@ export function RestoreFlow({ radio, name, progress, onBack }: { radio: RadioVie
 
       {phase === 'running' && (
         <div className="flex flex-col gap-3">
-          <ProgressBar aria-label={t.restoreSteps[step]} value={progress?.done ?? 0} maxValue={progress?.total ?? 100}>
-            <Label>{step === 1 ? t.backingUpCard : t.restoring}</Label>
-            <ProgressBar.Output />
+          <ProgressBar aria-label={t.restoreSteps[step]} value={progress?.done ?? 0} maxValue={progress?.total ?? 100} isIndeterminate={finishing}>
+            <Label>{finishing ? t.finishing : step === 1 ? t.backingUpCard : t.restoring}</Label>
+            {!finishing && <ProgressBar.Output />}
             <ProgressBar.Track>
               <ProgressBar.Fill />
             </ProgressBar.Track>
           </ProgressBar>
-          <code className="truncate font-mono text-xs text-muted">{progress?.text}</code>
+          <code className="truncate font-mono text-xs text-muted">{finishing ? '' : progress?.text}</code>
         </div>
       )}
 

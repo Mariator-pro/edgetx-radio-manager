@@ -4,7 +4,7 @@ import type { Action, PlanFileView, PlanView, ProgressEvent, RadioView, UpdateRe
 import { ApiError, errorText, post } from '../api.ts';
 import { WarningIcon } from '../components/icons.tsx';
 import { Stepper } from '../components/Stepper.tsx';
-import { backupLabel } from '../format.ts';
+import { backupLabel, isLastWrite } from '../format.ts';
 import { COLORS, TILES } from '../planColors.ts';
 import { usePrefs } from '../usePrefs.ts';
 
@@ -100,6 +100,8 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
   };
 
   const step = phase === 'running' ? (progress?.step === 'write' ? 3 : 2) : phase === 'done' ? 4 : 1;
+  // after the last file the list and the cleanup are written, which takes a moment on the radio's slow USB
+  const finishing = phase === 'running' && isLastWrite(progress);
   const c = plan?.counts;
   const nothing = c && c.add + c.replace + c.delete + c.conflict === 0;
   const cancelled = error instanceof ApiError && error.info.code === 'updateCancelled';
@@ -260,18 +262,19 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
             aria-label={step === 2 ? t.steps[2] : t.steps[3]}
             value={progress?.done ?? 0}
             maxValue={progress?.total ?? 100}
+            isIndeterminate={finishing}
           >
-            <Label>{step === 2 ? t.backingUpCard : t.writingCard}</Label>
-            <ProgressBar.Output />
+            <Label>{finishing ? t.finishing : step === 2 ? t.backingUpCard : t.writingCard}</Label>
+            {!finishing && <ProgressBar.Output />}
             <ProgressBar.Track>
               <ProgressBar.Fill />
             </ProgressBar.Track>
           </ProgressBar>
-          <code className="truncate font-mono text-xs text-muted">{progress?.text}</code>
+          <code className="truncate font-mono text-xs text-muted">{finishing ? '' : progress?.text}</code>
           <div>
             <Button
               variant="outline"
-              isDisabled={cancelling}
+              isDisabled={cancelling || finishing}
               onPress={() => {
                 setCancelling(true);
                 void post('/api/cancel');

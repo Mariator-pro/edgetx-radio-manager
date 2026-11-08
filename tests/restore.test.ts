@@ -87,6 +87,14 @@ describe('applyRestore', () => {
     expect((await planRestore(card, p, 'tx16s', name)).items).toEqual([]);
   });
 
+  it('removes the "._" files macOS leaves on the card', async () => {
+    const { card, p, name } = await setup();
+    await writeTree(card, { 'MODELS/._model00.yml': 'x', '._MODELS': 'x' });
+    await applyRestore(card, await planRestore(card, p, 'tx16s', name));
+    expect(await readdir(join(card, 'MODELS'))).not.toContain('._model00.yml');
+    expect(await readdir(card)).not.toContain('._MODELS');
+  });
+
   it('restores a file renamed only in case under its old name', async () => {
     const { card, p, name } = await setup();
     await rename(join(card, 'MODELS/model00.yml'), join(card, 'MODELS/MODEL00.yml'));

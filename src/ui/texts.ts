@@ -131,6 +131,7 @@ const en = {
   backUpAndUpdate: 'Back up and update',
   backingUpCard: 'Backing up the SD card …',
   writingCard: 'Writing to the SD card …',
+  finishing: 'Finishing …',
   updated: 'SD card updated',
   updatedText: (w: number, d: number, k: number, b: string) => `${w} files written, ${d} deleted, ${k} kept. Backup: ${b}.`,
   backToRadio: 'Back to the radio',

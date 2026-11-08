@@ -127,6 +127,7 @@ export const de: Texts = {
   backUpAndUpdate: 'Sichern und aktualisieren',
   backingUpCard: 'SD-Karte wird gesichert …',
   writingCard: 'Wird auf die SD-Karte geschrieben …',
+  finishing: 'Wird abgeschlossen …',
   updated: 'SD-Karte aktualisiert',
   updatedText: (w, d, k, b) => `${w} Dateien geschrieben, ${d} gelöscht, ${k} behalten. Backup: ${b}.`,
   backToRadio: 'Zurück zum Sender',

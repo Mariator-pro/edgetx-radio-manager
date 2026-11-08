@@ -1,6 +1,7 @@
 import { copyFile, readdir, readFile, rm, rmdir, stat, utimes } from 'node:fs/promises';
 import { dirname, join, relative, sep } from 'node:path';
 import { makeParent, type ApplyProgress } from './apply.ts';
+import { removeAppleDouble } from './appledouble.ts';
 import { backupFirmware, isBackupName, listFiles, type CardFile } from './backup.ts';
 import { ID_PATH } from './card.ts';
 import { AppError } from './errors.ts';
@@ -103,6 +104,7 @@ export async function applyRestore(
       }
       onProgress({ path: item.path, done: n + 1, total: todo.length });
     }
+    await removeAppleDouble(volume);
   } catch (e) {
     if (!(await stat(volume).catch(() => undefined))) throw new AppError('restoreInterrupted');
     throw e;

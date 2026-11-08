@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { parse } from 'yaml';
+import { dropAppleDouble } from './appledouble.ts';
 import { isCardPath, isSafeKey, printable } from './paths.ts';
 
 export const LIST_FILE = join('.radio-manager', 'installed.json');
@@ -121,6 +122,8 @@ export async function writeList(root: string, list: InstalledList): Promise<void
   await mkdir(dirname(path), { recursive: true });
   await writeFile(`${path}.tmp`, `${JSON.stringify(list, null, 1)}\n`);
   await rename(`${path}.tmp`, path);
+  await dropAppleDouble(path);
+  await dropAppleDouble(dirname(path));
 }
 
 const cleanName = (name: string) => printable(name).trim().slice(0, MAX_CARD_NAME);
@@ -140,6 +143,8 @@ async function writeIdentity(root: string, id: string, name?: string): Promise<v
   const path = join(root, ID_FILE);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, `${JSON.stringify({ id, ...(name ? { name } : {}) }, null, 1)}\n`);
+  await dropAppleDouble(path);
+  await dropAppleDouble(dirname(path));
 }
 
 // The card's own id, written once; it tells two radios of the same type apart.

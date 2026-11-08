@@ -1,3 +1,8 @@
+import type { ProgressEvent } from '../server/api.ts';
+
+// The last file is written; what follows is finishing up (the list on the card, removing macOS files).
+export const isLastWrite = (pr?: ProgressEvent) => pr?.step === 'write' && !!pr.total && pr.done === pr.total;
+
 // EdgeTX uses some non-standard folder names for languages.
 const LANG_ALIAS: Record<string, string> = {
   cn: 'zh-CN',

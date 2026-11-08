@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { cardLabel, ensureCardId, findCards, parseRadioYml, readCard, readIdentity, setCardName } from '../src/core/card.ts';
@@ -99,6 +99,14 @@ describe('readCard', () => {
     expect(id).toMatch(/^[\w-]{8,64}$/);
     expect(await ensureCardId(root)).toBe(id);
     expect(JSON.parse(await readFile(join(root, '.radio-manager', 'radio.json'), 'utf8'))).toEqual({ id });
+  });
+
+  it('leaves no "._" file of macOS next to its own files', async () => {
+    const root = await tempDir();
+    await writeTree(root, { '._.radio-manager': 'x', '.radio-manager/._radio.json': 'x' });
+    await setCardName(root, 'Wing');
+    expect(await readdir(root)).toEqual(['.radio-manager']);
+    expect(await readdir(join(root, '.radio-manager'))).toEqual(['radio.json']);
   });
 
   it('keeps the id when the card gets a name, and calls a radio by name, else by type', async () => {

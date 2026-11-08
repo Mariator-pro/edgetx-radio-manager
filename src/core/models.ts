@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/p
 import { extname, join } from 'node:path';
 import { parse } from 'yaml';
 import { makeParent } from './apply.ts';
+import { dropAppleDouble } from './appledouble.ts';
 import { listBackups } from './backup.ts';
 import { AppError } from './errors.ts';
 import { isSafeName, printable, type Paths } from './paths.ts';
@@ -548,6 +549,7 @@ export async function applyCopy(
     for (const [n, w] of writes.entries()) {
       await makeParent(volume, w.path);
       await writeFile(join(volume, w.path), w.data);
+      await dropAppleDouble(join(volume, w.path));
       if (w.path.startsWith('MODELS/') && w.path.endsWith('.yml')) done.push(items.find((i) => `MODELS/${i.target}` === w.path)!.name);
       onProgress({ path: w.path, done: n + 1, total: writes.length });
     }
@@ -598,10 +600,12 @@ export async function applyDelete(
   const done: string[] = [];
   try {
     await mkdir(join(volume, 'MODELS', 'DELETED'), { recursive: true });
+    await dropAppleDouble(join(volume, 'MODELS', 'DELETED'));
     for (const [n, f] of moves.entries()) {
       const to = join(volume, 'MODELS', 'DELETED', f);
       await rm(to, { force: true });
       await rename(join(volume, 'MODELS', f), to);
+      await dropAppleDouble(to);
       const item = items.find((i) => i.file === f);
       if (item) done.push(item.name);
       onProgress({ path: `MODELS/${f}`, done: n + 1, total: moves.length });

@@ -1,5 +1,6 @@
 import { mkdir, readdir, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { removeAppleDouble } from './appledouble.ts';
 import { writeList, type InstalledList, type ListedFile } from './card.ts';
 import type { PackageContent } from './content.ts';
 import { AppError } from './errors.ts';
@@ -80,6 +81,7 @@ export async function applyPlan(
     onProgress({ path: item.path, done: n + 1, total: todo.length });
   }
   await writeList(root, await listAfter(root, plan, contents, held, kept));
+  await removeAppleDouble(root);
   return result;
 }
 
