@@ -383,6 +383,8 @@ export const de: Texts = {
     backupNotFound: ({ name }) => `Die App findet das Backup ${name} nicht.`,
     wrongRadioForBackup: ({ connected, board }) => `Der verbundene Sender ist ein ${connected}, das Backup stammt aber von einem ${board}.`,
     restoreInterrupted: () => 'Die SD-Karte wurde während der Wiederherstellung getrennt. Schließe sie wieder an und stelle das Backup noch einmal wieder her.',
+    updateInterrupted: ({ backup }) =>
+      `Die SD-Karte wurde während des SD-Updates getrennt. Die bis dahin geschriebenen Dateien bleiben auf der SD-Karte${backup ? `, das Backup ${backup} enthält den Stand davor` : ''}. Schließe sie wieder an und starte das SD-Update noch einmal.`,
 
     repoFormat: () => 'Gib das Repo als besitzer/name an oder füge seine GitHub-Adresse ein.',
     alreadySource: ({ name }) => `${name} ist schon eine Quelle.`,

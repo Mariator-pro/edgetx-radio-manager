@@ -1,7 +1,7 @@
 import { mkdir, readdir, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { removeAppleDouble } from './appledouble.ts';
-import { writeList, type InstalledList, type ListedFile } from './card.ts';
+import { cardGone, writeList, type InstalledList, type ListedFile } from './card.ts';
 import type { PackageContent } from './content.ts';
 import { AppError } from './errors.ts';
 import { isCardPath } from './paths.ts';
@@ -60,28 +60,32 @@ export async function applyPlan(
   if (outside) throw new AppError('invalidRequest', { what: `path ${outside.path}` });
   const todo = plan.filter((i) => i.action !== 'unchanged');
   const kept = new Set<string>();
-  for (const [n, item] of todo.entries()) {
-    if (signal?.aborted) throw new AppError('cancelled');
-    const go = item.action !== 'conflict' || resolutions.get(item.path) === 'apply';
-    if (!go) {
-      result.kept++;
-      kept.add(item.path);
+  try {
+    for (const [n, item] of todo.entries()) {
+      if (signal?.aborted) throw new AppError('cancelled');
+      const go = item.action !== 'conflict' || resolutions.get(item.path) === 'apply';
+      if (!go) {
+        result.kept++;
+        kept.add(item.path);
+      } else if (item.wanted) {
+        await makeParent(root, item.path);
+        await writeFile(join(root, item.path), item.wanted.data);
+        await dropLuac(root, item.path);
+        result.written++;
+      } else {
+        await rm(join(root, item.path), { force: true });
+        await dropLuac(root, item.path);
+        await dropEmptyDirs(root, item.path);
+        result.deleted++;
+      }
+      onProgress({ path: item.path, done: n + 1, total: todo.length });
     }
-    else if (item.wanted) {
-      await makeParent(root, item.path);
-      await writeFile(join(root, item.path), item.wanted.data);
-      await dropLuac(root, item.path);
-      result.written++;
-    } else {
-      await rm(join(root, item.path), { force: true });
-      await dropLuac(root, item.path);
-      await dropEmptyDirs(root, item.path);
-      result.deleted++;
-    }
-    onProgress({ path: item.path, done: n + 1, total: todo.length });
+    await writeList(root, await listAfter(root, plan, contents, held, kept));
+    await removeAppleDouble(root);
+  } catch (e) {
+    if (!(e instanceof AppError) && (await cardGone(root, e))) throw new AppError('updateInterrupted', {});
+    throw e;
   }
-  await writeList(root, await listAfter(root, plan, contents, held, kept));
-  await removeAppleDouble(root);
   return result;
 }
 

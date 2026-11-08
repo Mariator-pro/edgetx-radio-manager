@@ -161,6 +161,17 @@ export async function setCardName(root: string, name: string): Promise<void> {
   await writeIdentity(root, await ensureCardId(root), cleanName(name) || undefined);
 }
 
+// Whether a write failed because the card went away (cable pulled, radio off). Right after a pull the drive's
+// folder can still be there for a moment, so the system's device errors count too, and a file on the card that
+// is suddenly missing.
+export async function cardGone(volume: string, e: unknown): Promise<boolean> {
+  const err = e as { code?: string; path?: string; dest?: string } | undefined;
+  if (err?.code && ['ENXIO', 'EIO', 'ENODEV'].includes(err.code)) return true;
+  const onCard = (p?: string) => !!p && p.startsWith(volume);
+  if (err?.code === 'ENOENT' && (onCard(err.path) || onCard(err.dest))) return true;
+  return !(await stat(volume).catch(() => undefined));
+}
+
 // How the app calls a radio: its name, else its type. Two radios of one type tell apart once they have names.
 export function cardLabel(type: string, card: CardIdentity): string {
   return card.cardName ?? type;

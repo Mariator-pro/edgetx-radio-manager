@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { cardLabel, ensureCardId, findCards, parseRadioYml, readCard, readIdentity, setCardName } from '../src/core/card.ts';
+import { cardGone, cardLabel, ensureCardId, findCards, parseRadioYml, readCard, readIdentity, setCardName } from '../src/core/card.ts';
 import { isBelowMin, parseRadioTypes, radioName } from '../src/core/radios.ts';
 import { parseMounts } from '../src/platform/volumes.ts';
 import { SDCARD_JSON, tempDir, writeTree } from './helpers.ts';
@@ -38,6 +38,19 @@ describe('Linux drives', () => {
       'tmpfs /run tmpfs rw 0 0',
     ].join('\n');
     expect(parseMounts(mounts)).toEqual(['/media/pilot/TX15', '/run/media/pilot/RADIO CARD', '/media/pilot/RPI-RP2']);
+  });
+});
+
+describe('cardGone', () => {
+  it('sees a pulled card in device errors, a missing file on the card or a missing drive', async () => {
+    const vol = await tempDir();
+    const err = (code: string, path?: string) => Object.assign(new Error(code), { code, ...(path ? { path } : {}) });
+    expect(await cardGone(vol, err('ENXIO'))).toBe(true); // right after a pull, while the drive's folder is still there
+    expect(await cardGone(vol, err('EIO'))).toBe(true);
+    expect(await cardGone(vol, err('ENOENT', join(vol, 'MODELS/model1.yml')))).toBe(true);
+    expect(await cardGone(vol, err('ENOENT', '/elsewhere/backup/model1.yml'))).toBe(false); // the source missing, the card is fine
+    expect(await cardGone(vol, err('EACCES'))).toBe(false);
+    expect(await cardGone(join(vol, 'gone'), new Error('any'))).toBe(true);
   });
 });
 

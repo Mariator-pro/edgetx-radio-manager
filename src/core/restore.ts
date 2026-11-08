@@ -3,7 +3,7 @@ import { dirname, join, relative, sep } from 'node:path';
 import { makeParent, type ApplyProgress } from './apply.ts';
 import { removeAppleDouble } from './appledouble.ts';
 import { backupFirmware, isBackupName, listFiles, type CardFile } from './backup.ts';
-import { ID_PATH } from './card.ts';
+import { cardGone, ID_PATH } from './card.ts';
 import { AppError } from './errors.ts';
 import { isSafeName, type Paths } from './paths.ts';
 
@@ -106,7 +106,7 @@ export async function applyRestore(
     }
     await removeAppleDouble(volume);
   } catch (e) {
-    if (!(await stat(volume).catch(() => undefined))) throw new AppError('restoreInterrupted');
+    if (await cardGone(volume, e)) throw new AppError('restoreInterrupted');
     throw e;
   }
   return result;

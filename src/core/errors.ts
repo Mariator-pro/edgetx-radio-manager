@@ -24,6 +24,8 @@ export const ERRORS = {
   wrongRadioForBackup: (p: { connected: string; board: string }) => `The connected radio is a ${p.connected}, but the backup is from a ${p.board}.`,
   backupFromOtherCard: () => 'This backup is from another SD card. Confirm that you want to restore it anyway.',
   restoreInterrupted: () => 'The SD card was disconnected during the restore. Connect it again and restore the backup once more.',
+  updateInterrupted: (p: { backup?: string }) =>
+    `The SD card was disconnected during the SD update. The files written until then stay on the SD card${p.backup ? `, the backup ${p.backup} holds the state before` : ''}. Connect it again and start the SD update once more.`,
 
   modelNotFound: (p: { name: string }) => `Can’t find the model ${p.name}.`,
   notModelFile: (p: { file: string }) => `${p.file} isn’t a model file (.yml or .etx).`,

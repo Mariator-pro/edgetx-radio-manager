@@ -5,6 +5,7 @@ import { parse } from 'yaml';
 import { makeParent } from './apply.ts';
 import { dropAppleDouble } from './appledouble.ts';
 import { listBackups } from './backup.ts';
+import { cardGone } from './card.ts';
 import { AppError } from './errors.ts';
 import { isSafeName, printable, type Paths } from './paths.ts';
 import type { RadioType } from './radios.ts';
@@ -528,7 +529,7 @@ export interface ModelsResult {
 }
 
 const interrupted = async (volume: string, done: string[], e: unknown) => {
-  if (!(await stat(volume).catch(() => undefined))) throw new AppError('modelsInterrupted', { done: done.join(', ') });
+  if (await cardGone(volume, e)) throw new AppError('modelsInterrupted', { done: done.join(', ') });
   throw e;
 };
 

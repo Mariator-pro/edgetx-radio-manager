@@ -548,8 +548,11 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       return op('update', async (signal): Promise<UpdateResultView> => {
         const setup = await prepareUpdate(p, s, c, board);
         // cancelled: during the backup the card is untouched; while writing, the backup holds the state before
+        // cancelled or the card pulled: the message names the backup that holds the state before
         const cancelled = (backup?: string) => (e: unknown) => {
-          throw e instanceof AppError && e.code === 'cancelled' ? new AppError('updateCancelled', { backup }) : e;
+          if (e instanceof AppError && e.code === 'cancelled') throw new AppError('updateCancelled', { backup });
+          if (e instanceof AppError && e.code === 'updateInterrupted') throw new AppError('updateInterrupted', { backup });
+          throw e;
         };
         const b = await runBackup(c, board, { reason: 'update', changes: setup.changes }, undefined, signal).catch(cancelled());
         const r = await applyPlan(
