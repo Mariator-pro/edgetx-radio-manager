@@ -18,10 +18,20 @@ export interface ModelsRequest {
 const entryKey = (e: ModelEntryView) => `e:${e.name}\u0000${e.file ?? ''}`;
 const STATUS_COLOR = { same: 'success', changed: 'warning', missing: 'default' } as const;
 
-export function ModelsPage({ state, run, onStart }: { state: StateView; run: Run; onStart: (r: ModelsRequest) => void }) {
+export function ModelsPage({
+  state,
+  run,
+  selected,
+  onStart,
+}: {
+  state: StateView;
+  run: Run;
+  selected?: RadioView; // the radio chosen in the sidebar
+  onStart: (r: ModelsRequest) => void;
+}) {
   const { t } = usePrefs();
   const radios = state.radios.filter((r) => r.board);
-  const [board, setBoard] = useState<string>();
+  const [source, setSource] = useState<string>(); // whose backups, as chosen above the list; else the server's choice
   const [view, setView] = useState<ModelsView>();
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [chosen, setChosen] = useState<Record<string, number>>({}); // entry -> version to use
@@ -32,27 +42,22 @@ export function ModelsPage({ state, run, onStart }: { state: StateView; run: Run
   const [error, setError] = useState<unknown>();
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const shown = board ?? radios[0]?.board ?? '';
-  // compared with the radio of the shown type, else with whatever radio is connected
-  const radio = radios.find((r) => r.board === shown) ?? radios[0];
+  // compared with and written to the radio chosen in the sidebar, else the only or first one connected
+  const radio = (selected?.board ? selected : undefined) ?? radios[0];
   const refreshKey = `${state.radios.map((r) => `${r.volume}|${r.lastBackup}`).join()}|${state.busy}`;
 
   const volume = radio?.volume;
   useEffect(() => {
     let stale = false;
-    get<ModelsView>(`/api/models?board=${encodeURIComponent(shown)}${volume ? `&volume=${encodeURIComponent(volume)}` : ''}`).then(
-      (v) => {
-        if (stale) return;
-        // nothing of the connected radio backed up yet: show the first radio that has backups
-        if (!board && !v.boards.some((b) => b.board === v.board) && v.boards[0]) setBoard(v.boards[0].board);
-        else setView(v);
-      },
+    const q = new URLSearchParams({ source: source ?? '', volume: volume ?? '' });
+    get<ModelsView>(`/api/models?${q}`).then(
+      (v) => !stale && setView(v),
       (e: unknown) => !stale && setError(e),
     );
     return () => {
       stale = true;
     };
-  }, [shown, volume, board, refreshKey]);
+  }, [source, volume, refreshKey]);
 
   if (!view) return error ? <p className="m-0 text-danger">{errorText(t, error)}</p> : <Spinner />;
 
@@ -173,14 +178,14 @@ export function ModelsPage({ state, run, onStart }: { state: StateView; run: Run
           <p className="m-0 text-muted">{t.modelsText}</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
-          {view.boards.length > 0 && (
+          {view.sources.length > 0 && (
             <Select
               aria-label={t.modelsOf}
               className="w-56"
-              selectedKey={view.board}
+              selectedKey={view.source}
               onSelectionChange={(k) => {
                 if (k === null) return;
-                setBoard(String(k));
+                setSource(String(k));
                 setPicked(new Set([...picked].filter((x) => x.startsWith('i:'))));
                 setChosen({});
                 setOpen(new Set());
@@ -194,8 +199,8 @@ export function ModelsPage({ state, run, onStart }: { state: StateView; run: Run
               </Select.Trigger>
               <Select.Popover>
                 <ListBox>
-                  {view.boards.map((b) => (
-                    <ListBox.Item key={b.board} id={b.board} textValue={b.radio}>
+                  {view.sources.map((b) => (
+                    <ListBox.Item key={b.key} id={b.key} textValue={b.radio}>
                       {b.radio}
                       <ListBox.ItemIndicator />
                     </ListBox.Item>
@@ -259,7 +264,7 @@ export function ModelsPage({ state, run, onStart }: { state: StateView; run: Run
         </Card>
       )}
 
-      {view.boards.length === 0 ? (
+      {view.sources.length === 0 ? (
         <p className="m-0 text-muted">{t.noModelBackups}</p>
       ) : view.entries.length === 0 && view.onlyOnCard.length === 0 ? (
         <p className="m-0 text-muted">{t.noModelsInBackups}</p>
@@ -397,7 +402,7 @@ export function ModelsPage({ state, run, onStart }: { state: StateView; run: Run
               {t.deleteFromCard}
             </Button>
             <Button isDisabled={!canCopy || !!state.busy} onPress={copy}>
-              {t.copyTo(radio?.name ?? '')}
+              {t.copyTo(radio?.label ?? '')}
             </Button>
           </div>
         </div>

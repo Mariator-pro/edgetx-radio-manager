@@ -203,6 +203,7 @@ export function App() {
           <ModelsPage
             state={state}
             run={run}
+            selected={radio}
             onStart={(r) => {
               setModelsRequest(r);
               start('modelsFlow');

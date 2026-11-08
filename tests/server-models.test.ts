@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { paths } from '../src/core/paths.ts';
@@ -18,6 +18,7 @@ let url = '';
 let token = '';
 let close = () => {};
 let card = '';
+let p = paths('');
 
 const call = (path: string, init: RequestInit & { headers?: Record<string, string> } = {}) =>
   fetch(url + path, { ...init, headers: { ...init.headers, [TOKEN_HEADER]: token } });
@@ -30,7 +31,7 @@ const model = (name: string, weight: number, bitmap = '') =>
   `semver: 2.12.5\nheader: \n   name: "${name}"\n   bitmap: "${bitmap}"\n   labels: ""\nmixData: \n -\n   destCh: 0\n   swtch: "SA0"\n   weight: ${weight}\n`;
 
 beforeAll(async () => {
-  const p = paths(await tempDir());
+  p = paths(await tempDir());
   card = await tempDir();
   await writeTree(card, { 'RADIO/radio.yml': RADIO, 'MODELS/model1.yml': model('Copter', 100, 'c.png'), 'IMAGES/c.png': 'png' });
   process.env.RADIO_MANAGER_VOLUMES = card;
@@ -51,12 +52,28 @@ describe('models page', () => {
   it('lists the models of the backups and compares them with the card', async () => {
     backup = await post<string>('/api/backup', { volume: card });
     await writeTree(card, { 'MODELS/model1.yml': model('Copter', 80), 'MODELS/model2.yml': model('New', 1) });
-    const v = await get<ModelsView>(`/api/models?board=tx15&volume=${encodeURIComponent(card)}`);
-    expect(v.boards.map((b) => b.board)).toEqual(['tx15']);
+    const v = await get<ModelsView>(`/api/models?volume=${encodeURIComponent(card)}`);
+    expect(v.sources).toEqual([{ key: expect.stringMatching(/^tx15\/[\w-]+$/), board: 'tx15', card: expect.any(String), radio: 'tx15' }]);
+    expect(v.source).toBe(v.sources[0]!.key); // the chosen radio's own backups
     expect(v.entries).toEqual([
       { name: 'Copter', versions: [{ file: 'model1.yml', backup, since: backup, semver: '2.12.5', bitmap: 'c.png', labels: [] }], card: 'changed' },
     ]);
     expect(v.onlyOnCard.map((m) => m.name)).toEqual(['New']);
+  });
+
+  it('shows the models of each SD card of a type on its own', async () => {
+    const other = join(p.backups, 'tx15', '2026-01-01_0000');
+    await writeTree(other, { 'RADIO/radio.yml': RADIO, 'MODELS/model1.yml': model('Glider', 50), '.radio-manager/radio.json': '{"id":"other-card-1","name":"Wing"}' });
+    try {
+      const own = await get<ModelsView>(`/api/models?volume=${encodeURIComponent(card)}`);
+      expect(own.sources.map((x) => x.radio).sort()).toEqual(['Wing', 'tx15']);
+      expect(own.entries.map((e) => e.name)).toEqual(['Copter']); // the other card's Glider is not mixed in
+      const theirs = await get<ModelsView>(`/api/models?source=tx15%2Fother-card-1&volume=${encodeURIComponent(card)}`);
+      expect(theirs).toMatchObject({ source: 'tx15/other-card-1', radio: 'Wing' });
+      expect(theirs.entries.map((e) => [e.name, e.card])).toEqual([['Glider', 'missing']]); // compared with the chosen radio
+    } finally {
+      await rm(other, { recursive: true });
+    }
   });
 
   it('serves the picture and the export, and refuses unsafe names', async () => {

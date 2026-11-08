@@ -6,7 +6,7 @@ import { createInterface } from 'node:readline/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { applyPlan, type Resolution } from '../core/apply.ts';
-import { backupCard, backupFirmware, listBackups, pruneBackups } from '../core/backup.ts';
+import { backupCard, backupFirmware, cardBackups, listBackups, pruneBackups } from '../core/backup.ts';
 import { findCards, readCard, readIdentity, type RadioCard } from '../core/card.ts';
 import { localVersion } from '../core/content.ts';
 import { checkFirmwareFile, firmwareFile, flashFile, flashMethod, knownMethod, type FlashMethod } from '../core/firmware.ts';
@@ -406,7 +406,9 @@ async function modelsList(p: Paths, s: Settings, o: ModelOpts): Promise<void> {
   const board = o.board ?? card?.board;
   if (!board) throw new UserError('Which radio? Connect it in "USB Storage" mode, or pass --board.');
   const radio = radioName(await radioTypes(p, s), board);
-  const entries = await modelEntries(p, board);
+  // the connected card's own backups; with --board for another type, all of that type
+  const own = card?.cardId && card.board === board ? await cardBackups(p, board, card.cardId) : undefined;
+  const entries = await modelEntries(p, board, undefined, own);
   if (entries.length === 0) {
     console.log(`No models in the backups of the ${radio} yet.`);
     return;

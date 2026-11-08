@@ -156,10 +156,11 @@ export async function backupModels(p: Paths, board: string, name: string, cache?
 }
 
 // Grouped by name, each distinct content one version; two models of the same name in a backup stay apart.
-export async function modelEntries(p: Paths, board: string, cache?: ModelCache): Promise<ModelEntry[]> {
+export async function modelEntries(p: Paths, board: string, cache?: ModelCache, backups?: string[]): Promise<ModelEntry[]> {
   const entries = new Map<string, ModelEntry>();
   let newer: string | undefined; // the backup read just before, one step newer
-  for (const backup of await listBackups(p, board)) {
+  // all backups of the type, or those of one SD card (newest first)
+  for (const backup of backups ?? (await listBackups(p, board))) {
     const models = await backupModels(p, board, backup, cache);
     const count = new Map<string, number>();
     for (const m of models) count.set(m.name, (count.get(m.name) ?? 0) + 1);

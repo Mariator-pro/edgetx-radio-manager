@@ -583,11 +583,11 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       });
     },
     'GET /api/models': async (_req, q) => {
-      const board = q.get('board') ?? '';
-      if (board && !isSafeName(board)) throw new HttpError(400, 'invalidRequest', { what: 'board' });
+      const source = q.get('source') || undefined; // checked against the sources found in the backups
       const volume = q.get('volume');
       const c = volume ? cards.find((x) => x.volume === volume) : undefined;
-      return modelsView(p, s, board, c && { volume: c.volume, board: boardOf(c) }, modelCache);
+      const connected = cards.map((x) => ({ cardId: x.cardId, cardName: x.cardName }));
+      return modelsView(p, s, source, c && { volume: c.volume, board: boardOf(c), cardId: c.cardId }, modelCache, connected);
     },
     'GET /api/models/image': async (_req, q) => {
       const img = await modelImage(p, q.get('board') ?? '', q.get('backup') ?? '', q.get('file') ?? '');

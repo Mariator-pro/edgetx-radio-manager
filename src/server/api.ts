@@ -167,9 +167,11 @@ export interface CardModelView {
 }
 
 export interface ModelsView {
-  board: string;
-  radio: string;
-  boards: { board: string; radio: string }[]; // radios with backups
+  board: string; // the type of the backups shown
+  source: string; // whose backups are shown: an entry of sources
+  radio: string; // its name
+  // SD cards with backups (key "<board>/<card id>"), or a type whose backups have no card id yet (key "<board>")
+  sources: { key: string; board: string; card?: string; radio: string }[];
   entries: ModelEntryView[];
   card?: { volume: string; board?: string; radio: string; models: CardModelView[] }; // the connected radio
   onlyOnCard: CardModelView[]; // on the card of this radio type, in no backup

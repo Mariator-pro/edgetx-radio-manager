@@ -84,7 +84,7 @@ export function ModelsFlow({ request, radio, progress, onBack }: { request: Mode
     <div className="flex flex-col gap-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="font-bold">{radio.name}</span>
+          <span className="font-bold">{radio.label}</span>
           <span className="font-mono text-xs text-muted">
             {radio.board} · EdgeTX {radio.firmware}
           </span>
@@ -115,7 +115,7 @@ export function ModelsFlow({ request, radio, progress, onBack }: { request: Mode
       {phase === 'plan' && plan && (
         <>
           <div className="flex flex-col gap-1.5">
-            <h1 className="m-0 text-2xl font-bold tracking-tight">{copying ? t.copyTitle(n, radio.name) : t.deleteTitle(n, radio.name)}</h1>
+            <h1 className="m-0 text-2xl font-bold tracking-tight">{copying ? t.copyTitle(n, radio.label) : t.deleteTitle(n, radio.label)}</h1>
             <p className="m-0 text-muted">{copying ? t.copyText : t.deleteText}</p>
           </div>
 

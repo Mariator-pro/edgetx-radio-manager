@@ -1,7 +1,7 @@
 import { readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, sep } from 'node:path';
-import { backupFirmware, listBackups } from '../core/backup.ts';
+import { backupFirmware, cardBackups, listBackups } from '../core/backup.ts';
 import { cardLabel, ID_FILE, readIdentity, type CardIdentity, type InstalledList, type RadioCard } from '../core/card.ts';
 import { localVersion, sameOnCard, voicesChanged } from '../core/content.ts';
 import type { PackageState } from '../core/initialize.ts';
@@ -284,24 +284,51 @@ export async function backupViews(
 
 const cardModelView = (m: ModelFile): CardModelView => ({ name: m.name, file: m.file, ...(m.semver ? { semver: m.semver } : {}), labels: m.labels });
 
-// The models of a radio from its backups, compared with the connected card (card: its volume and type).
+// Whose backups the models page can show: one entry per SD card with backups (radioKey), or per type while no
+// backup of it has an id yet.
+async function modelSources(p: Paths, s: Settings, connected: CardIdentity[]): Promise<ModelsView['sources']> {
+  const types = await radioTypes(p, s);
+  const dirs = (await readdir(p.backups, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory()).map((e) => e.name);
+  const sources: ModelsView['sources'] = [];
+  for (const board of dirs.sort()) {
+    const names = await listBackups(p, board);
+    if (names.length === 0) continue;
+    const ids = new Set<string>();
+    for (const n of names) {
+      const id = (await backupIdentity(p, board, n)).cardId;
+      if (id) ids.add(id);
+    }
+    const type = radioName(types, board);
+    if (ids.size === 0) sources.push({ key: board, board, radio: type });
+    const known = await knownCards(p, board, connected);
+    for (const id of ids) sources.push({ key: radioKey(board, id), board, card: id, radio: cardLabel(type, { cardId: id, cardName: known.get(id) }) });
+  }
+  return sources;
+}
+
+// The models of an SD card (or of a type) from its backups, compared with the radio chosen in the app (card).
+// Without a source asked for, the chosen radio's own; else the first that has backups.
 export async function modelsView(
   p: Paths,
   s: Settings,
-  board: string,
-  card: { volume: string; board?: string } | undefined,
+  wanted: string | undefined,
+  card: (CardIdentity & { volume: string; board?: string }) | undefined,
   cache: ModelCache,
+  connected: CardIdentity[] = [],
 ): Promise<ModelsView> {
   const types = await radioTypes(p, s);
-  const dirs = (await readdir(p.backups, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory()).map((e) => e.name);
-  const boards = [];
-  for (const b of dirs.sort()) if ((await listBackups(p, b)).length > 0) boards.push({ board: b, radio: radioName(types, b) });
-  const entries = await modelEntries(p, board, cache);
+  const sources = await modelSources(p, s, connected);
+  const own = card?.board ? [radioKey(card.board, card.cardId), card.board] : [];
+  const source =
+    sources.find((x) => x.key === wanted) ?? (wanted ? undefined : (sources.find((x) => own.includes(x.key)) ?? sources[0]));
+  const board = source?.board ?? '';
+  const entries = source ? await modelEntries(p, board, cache, source.card ? await cardBackups(p, board, source.card) : undefined) : [];
   const onCard = card ? await readModels(card.volume) : [];
   const view: ModelsView = {
     board,
-    radio: radioName(types, board),
-    boards,
+    source: source?.key ?? '',
+    radio: source?.radio ?? radioName(types, board),
+    sources,
     entries: entries.map((e) => {
       const { versions, ...rest } = e;
       const st = card ? cardStatus(e, onCard) : undefined;

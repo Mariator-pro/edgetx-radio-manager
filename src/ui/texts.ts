@@ -300,8 +300,8 @@ const en = {
 
   modelSteps: ['Plan', 'Backup', 'Write'],
   modelStepsLabel: 'Steps for the models',
-  copyTitle: (n: number, r: string) => `Copy ${n} ${n === 1 ? 'model' : 'models'} to the ${r}`,
-  deleteTitle: (n: number, r: string) => `Delete ${n} ${n === 1 ? 'model' : 'models'} from the ${r}`,
+  copyTitle: (n: number, r: string) => `Copy ${n} ${n === 1 ? 'model' : 'models'} to ${r}`,
+  deleteTitle: (n: number, r: string) => `Delete ${n} ${n === 1 ? 'model' : 'models'} from ${r}`,
   copyText: 'Only these models change. All other models and the radio settings stay as they are.',
   deleteText: 'As on the radio, the models move to MODELS/DELETED on the SD card. You can get them back from there.',
   fromBackup: (r: string, d: string) => `From the ${r}, backup from ${d}`,
