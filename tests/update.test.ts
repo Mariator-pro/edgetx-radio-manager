@@ -1,16 +1,18 @@
 import { execFileSync } from 'node:child_process';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { applyPlan } from '../src/core/apply.ts';
-import { readCard, type RadioCard } from '../src/core/card.ts';
-import { detectVersion, isExcluded, localContent, localVersion, releaseContent, sameOnCard, sdPrefix, sha256, voicesChanged, type PackageContent } from '../src/core/content.ts';
+import { readCard, type InstalledList, type RadioCard } from '../src/core/card.ts';
+import { isExcluded, localContent, localVersion, releaseContent, sameOnCard, sdPrefix, sha256, voicesChanged, type PackageContent } from '../src/core/content.ts';
 import { versionDir } from '../src/core/packages.ts';
 import { paths, type Paths } from '../src/core/paths.ts';
 import { countActions, makePlan, mergePackages } from '../src/core/plan.ts';
-import { ensureSelection, ownFolders } from '../src/core/selection.ts';
+import { ensureSelection, selectionFromCard } from '../src/core/selection.ts';
 import { defaultSettings, findLocalRepos, type Settings } from '../src/core/settings.ts';
 import { prepareUpdate } from '../src/core/update.ts';
+import { checkCard } from '../src/core/initialize.ts';
+import { knownVersions, packKnown, setShippedCatalog } from '../src/core/known.ts';
 import { makeZip, SDCARD_JSON, tempDir, writeTree } from './helpers.ts';
 
 const src = (name: string) => defaultSettings().sources.find((s) => s.name === name)!;
@@ -32,6 +34,12 @@ async function newCard(files: Record<string, string> = {}): Promise<string> {
   const root = await tempDir();
   await writeTree(root, { 'RADIO/radio.yml': 'semver: 2.12.3\nboard: tx16smk3\nttsLanguage: "en"\n', 'MODELS/model00.yml': 'm', ...files });
   return root;
+}
+
+// The card as the app has it after reading it: with its list.
+async function checked(p: Paths, s: Settings, root: string): Promise<{ card: RadioCard; states: Awaited<ReturnType<typeof checkCard>>['states'] }> {
+  const r = await checkCard(p, s, (await readCard(root))!, 'tx16smk3');
+  return { card: (await readCard(root))!, states: r.states };
 }
 
 describe('package content', () => {
@@ -92,26 +100,6 @@ describe('package content', () => {
     const c = await releaseContent(p, src('elrs-lua'), {});
     expect([...c!.files.keys()]).toEqual(['SCRIPTS/TOOLS/elrs.lua']);
     expect(c!.version).toBe('4.1.0');
-  });
-
-  it('finds the version of a project copied to the card by hand', async () => {
-    const p = paths(await tempDir());
-    await writeRelease(p, 'lipo-nanny', 'v1.0.0', '2026-08-01T00:00:00Z', { 'l.zip': { 'src/WIDGETS/LIPONY/main.lua': 'old', 'src/WIDGETS/LIPONY/ui.lua': 'ui' } });
-    await writeRelease(p, 'lipo-nanny', 'v1.1.0', '2026-09-01T00:00:00Z', { 'l.zip': { 'src/WIDGETS/LIPONY/main.lua': 'new', 'src/WIDGETS/LIPONY/ui.lua': 'ui' } });
-    const nanny = src('lipo-nanny');
-    expect(await detectVersion(p, nanny, await newCard({ 'WIDGETS/LIPONY/main.lua': 'old', 'WIDGETS/LIPONY/ui.lua': 'ui' }), 'release')).toMatchObject({
-      version: 'v1.0.0',
-      origin: 'release',
-      onCard: true,
-    });
-    expect(await detectVersion(p, nanny, await newCard({ 'WIDGETS/LIPONY/main.lua': 'mine', 'WIDGETS/LIPONY/ui.lua': 'ui' }), 'release')).toEqual({
-      onCard: true,
-    });
-    expect(await detectVersion(p, nanny, await newCard({ 'WIDGETS/LIPONY/ui.lua': 'ui' }), 'release')).toEqual({ onCard: false });
-
-    await writeRelease(p, 'elrs-lua', '4.1.0', '2026-10-01T00:00:00Z', {});
-    await writeFile(join(versionDir(p, 'elrs-lua', '4.1.0'), 'elrs.lua'), 'lua');
-    expect(await detectVersion(p, src('elrs-lua'), await newCard({ 'SCRIPTS/TOOLS/elrs.lua': 'lua' }), 'main')).toMatchObject({ version: '4.1.0', onCard: true });
   });
 
   it('sees the same files under another version label as no update', async () => {
@@ -311,35 +299,36 @@ describe('plan and apply', () => {
 });
 
 describe('selection', () => {
-  it('counts only folders a single package brings', () => {
-    const own = ownFolders([
-      pkg('flight-wingman', 'local', 1, { 'WIDGETS/WINGMAN/main.lua': '', 'SCRIPTS/LIPONY/core.lua': '', 'SCRIPTS/TOOLS/FLIGHTBAG.lua': '' }),
-      pkg('lipo-nanny', 'release', 1, { 'WIDGETS/LIPONY/main.lua': '', 'SCRIPTS/LIPONY/core.lua': '', 'SCRIPTS/TOOLS/FLIGHTBAG.lua': '' }),
-    ]);
-    expect(own.get('flight-wingman')).toEqual(['WIDGETS/WINGMAN']);
-    expect(own.get('lipo-nanny')).toEqual(['WIDGETS/LIPONY']);
-  });
-
-  it('switches on EdgeTX content, Flight Wingman and the projects already on the card, later sources come in as new', async () => {
+  it('takes what goes on a radio from its card: packages with origin, sounds with voices', async () => {
     const p = paths(await tempDir());
-    await writeRelease(p, 'lipo-nanny', 'v1.1.1', '2026-09-18T00:00:00Z', { 'l.zip': { 'src/WIDGETS/LIPONY/main.lua': 'w', 'src/SCRIPTS/TOOLS/FLIGHTBAG.lua': 'f' } });
-    await writeRelease(p, 'link-sentinel', 'v2.1.1', '2026-09-18T00:00:00Z', { 's.zip': { 'src/WIDGETS/SNTNL/main.lua': 'w', 'src/SCRIPTS/TOOLS/FLIGHTBAG.lua': 'f' } });
-    const root = await newCard({ 'WIDGETS/LIPONY/main.lua': 'deployed', 'SCRIPTS/TOOLS/FLIGHTBAG.lua': 'f' });
     const s = defaultSettings();
-    expect(await ensureSelection(p, s, 'tx16smk3', root, {})).toBe(true);
-    const sel = s.radios.tx16smk3!.sources!;
-    expect(sel['edgetx-sdcard']).toEqual({ on: true, origin: 'release' });
-    expect(sel['flight-wingman']!.on).toBe(true);
-    expect(sel['lipo-nanny']).toEqual({ on: true, origin: 'release' });
-    expect(sel['link-sentinel']!.on).toBe(false);
-    expect(sel['gps-homer']!.on).toBe(false);
-    expect(sel['elrs-lua']!.on).toBe(false);
-    expect(sel['edgetx-firmware']).toBeUndefined();
+    const card = (await readCard(await newCard({ 'SOUNDS/en/SYSTEM/hello.wav': 'h', 'SOUNDS/de/SYSTEM/hallo.wav': 'h' })))!;
+    const list = (packages: InstalledList['packages']): InstalledList => ({ tool: 1, updated: '', packages, files: {} });
 
+    expect(await selectionFromCard(p, s, 'tx16smk3', card, list({ 'lipo-nanny': { version: 'local abc1234', origin: 'local' }, 'edgetx-sounds': { version: 'v2.12.3', origin: 'release', voices: ['en_gb-ryan'] } }))).toBe(true);
+    const r = s.radios.tx16smk3!;
+    expect(r.sources).toMatchObject({
+      'edgetx-sdcard': { on: true },
+      'edgetx-sounds': { on: true, origin: 'release' },
+      'lipo-nanny': { on: true, origin: 'local' },
+      'flight-wingman': { on: false },
+    });
+    expect(r.sources!['edgetx-firmware']).toBeUndefined();
+    expect(r.sounds).toEqual(['en_gb-ryan']);
+    // a list from before the app noted voices: the language folders
+    await selectionFromCard(p, s, 'tx16smk3', card, list({ 'edgetx-sounds': { version: 'v2.12.3', origin: 'release' } }));
+    expect(r.sounds).toEqual(['de', 'en']);
+    expect(r.sources!['lipo-nanny']!.on).toBe(false);
+    // an empty card: SD content, and the sounds of the radio's voice language
+    await selectionFromCard(p, s, 'tx16smk3', card, list({}));
+    expect(Object.entries(r.sources!).filter(([, c]) => c.on).map(([n]) => n)).toEqual(['edgetx-sdcard', 'edgetx-sounds']);
+    expect(r.sounds).toEqual(['en']);
+    expect(await selectionFromCard(p, s, 'tx16smk3', card, list({}))).toBe(false);
+
+    // a source added later comes in switched off
     s.sources.push({ name: 'widget', repo: 'someone/widget', kind: 'project' });
-    expect(await ensureSelection(p, s, 'tx16smk3', root, {})).toBe(true);
-    expect(s.radios.tx16smk3!.sources!.widget).toEqual({ on: false, origin: 'release' });
-    expect(s.radios.tx16smk3!.newSources).toEqual(['widget']);
+    expect(await ensureSelection(p, s, 'tx16smk3')).toBe(true);
+    expect(r.sources!.widget).toEqual({ on: false, origin: 'release' });
   });
 });
 
@@ -349,9 +338,11 @@ describe('prepareUpdate', () => {
     await writeRelease(p, 'edgetx-sdcard', 'v2.12.3', '2026-09-01T00:00:00Z', { 'c800x480.zip': { 'WIDGETS/BattAnalog/main.lua': 'b', 'MODELS/README.txt': 'r' } });
     await writeRelease(p, 'edgetx-sounds', 'v2.12.3', '2026-09-01T00:00:00Z', { 'edgetx-sdcard-sounds-en-2.12.3.zip': { 'SOUNDS/en/hello.wav': 'h' } });
     const root = await newCard();
-    const card: RadioCard = (await readCard(root))!;
     const s: Settings = defaultSettings();
     s.radios.tx16smk3 = { language: 'en' };
+    await expect(prepareUpdate(p, s, (await readCard(root))!, 'tx16smk3')).rejects.toThrow('still reading the SD card');
+    const { card } = await checked(p, s, root);
+    await selectionFromCard(p, s, 'tx16smk3', card, card.installed!);
     const setup = await prepareUpdate(p, s, card, 'tx16smk3');
     expect(setup.contents.map((c) => c.name)).toEqual(['edgetx-sdcard', 'edgetx-sounds']);
     expect(setup.plan.map((i) => [i.path, i.action])).toEqual([
@@ -359,8 +350,7 @@ describe('prepareUpdate', () => {
       ['SOUNDS/en/hello.wav', 'add'],
       ['WIDGETS/BattAnalog/main.lua', 'add'],
     ]);
-    // Flight Wingman is on for a new radio but not downloaded here, so it changes nothing on the card
-    expect(setup.missing).toEqual(['flight-wingman (release)']);
+    expect(setup.missing).toEqual([]);
     expect(setup.changes).toEqual([
       { name: 'edgetx-sdcard', to: 'v2.12.3' },
       { name: 'edgetx-sounds', to: 'v2.12.3' },
@@ -368,7 +358,7 @@ describe('prepareUpdate', () => {
 
     s.radios.tx16smk3!.sources!['gps-homer'] = { on: true, origin: 'local' };
     const again = await prepareUpdate(p, s, card, 'tx16smk3');
-    expect(again.missing).toEqual(['flight-wingman (release)', 'gps-homer (local)']);
+    expect(again.missing).toEqual(['gps-homer (local)']);
   });
 
   it('leaves a package that is on but not available as it is on the card and in the list', async () => {
@@ -392,20 +382,20 @@ describe('prepareUpdate', () => {
 
 
 describe('projects copied by hand', () => {
-  it('removes an exact copy when switched off and leaves a changed one alone', async () => {
+  it('removes an exact copy when switched off and asks about a changed one', async () => {
     const p = paths(await tempDir());
     await writeRelease(p, 'elrs-lua', '4.1.0', '2026-10-01T00:00:00Z', {});
     await writeFile(join(versionDir(p, 'elrs-lua', '4.1.0'), 'elrs.lua'), 'lua');
     const s: Settings = defaultSettings();
     s.radios.tx16smk3 = { language: 'en', sources: { 'elrs-lua': { on: false, origin: 'release' } } };
 
-    const exact = (await readCard(await newCard({ 'SCRIPTS/TOOLS/elrs.lua': 'lua' })))!;
+    const exact = (await checked(p, s, await newCard({ 'SCRIPTS/TOOLS/elrs.lua': 'lua' }))).card;
     const removed = await prepareUpdate(p, s, exact, 'tx16smk3');
     expect(removed.plan.map((i) => [i.path, i.action, i.pkg])).toEqual([['SCRIPTS/TOOLS/elrs.lua', 'delete', 'elrs-lua']]);
     expect(removed.changes).toEqual([{ name: 'elrs-lua', from: '4.1.0' }]);
 
-    const changed = (await readCard(await newCard({ 'SCRIPTS/TOOLS/elrs.lua': 'my own' })))!;
-    expect((await prepareUpdate(p, s, changed, 'tx16smk3')).plan).toEqual([]);
+    const changed = (await checked(p, s, await newCard({ 'SCRIPTS/TOOLS/elrs.lua': 'my own' }))).card;
+    expect((await prepareUpdate(p, s, changed, 'tx16smk3')).plan).toMatchObject([{ path: 'SCRIPTS/TOOLS/elrs.lua', action: 'conflict', reason: 'removed-modified' }]);
   });
 });
 
@@ -463,60 +453,114 @@ describe('new sources', () => {
 });
 
 describe('first update of a card with older SD content', () => {
-  async function setup() {
+  it('compares with the version the card holds instead of reporting every older file', async () => {
     const p = paths(await tempDir());
     await writeRelease(p, 'edgetx-sdcard', 'v2.12.3', '2026-09-01T00:00:00Z', {
       'c800x480.zip': { 'edgetx.sdcard.version': '2.12.3', 'WIDGETS/Batt/main.lua': 'new', 'WIDGETS/Hist/app.lua': 'new' },
     });
     const old = { 'edgetx.sdcard.version': '2.12.1', 'WIDGETS/Batt/main.lua': 'old', 'WIDGETS/Hist/app.lua': 'old', 'WIDGETS/Gone/main.lua': 'gone' };
-    const root = await newCard({ ...old, 'WIDGETS/Hist/app.lua': 'edited by hand' });
+    await writeRelease(p, 'edgetx-sdcard', 'v2.12.1', '2026-07-01T00:00:00Z', { 'c800x480.zip': old });
     const s = defaultSettings();
     s.radios.tx16smk3 = { language: 'en', sources: { 'edgetx-sdcard': { on: true, origin: 'release' } } };
-    return { p, s, root, old };
-  }
-  const summary = (plan: { path: string; action: string }[]) => plan.map((i) => `${i.action} ${i.path}`);
-
-  it('compares with the version on the card instead of reporting every older file', async () => {
-    const { p, s, root, old } = await setup();
-    await writeRelease(p, 'edgetx-sdcard', 'v2.12.1', '2026-07-01T00:00:00Z', { 'c800x480.zip': old });
-    const setupResult = await prepareUpdate(p, s, (await readCard(root))!, 'tx16smk3', (() => {
-      throw new Error('no network needed');
-    }) as never);
-    expect(summary(setupResult.plan)).toEqual([
+    const { card, states } = await checked(p, s, await newCard({ ...old, 'WIDGETS/Hist/app.lua': 'edited by hand' }));
+    expect(card.installed!.packages['edgetx-sdcard']).toEqual({ version: 'v2.12.1', origin: 'release' });
+    expect(states.find((x) => x.name === 'edgetx-sdcard')).toEqual({ name: 'edgetx-sdcard', missing: [], changed: ['WIDGETS/Hist/app.lua'] });
+    const setup = await prepareUpdate(p, s, card, 'tx16smk3');
+    expect(setup.plan.filter((i) => i.action !== 'unchanged').map((i) => `${i.action} ${i.path}`)).toEqual([
       'replace edgetx.sdcard.version',
       'replace WIDGETS/Batt/main.lua',
       'delete WIDGETS/Gone/main.lua',
       'conflict WIDGETS/Hist/app.lua',
     ]);
   });
+});
 
-  it('downloads that version first when it is missing, and stays as before when offline', async () => {
-    const { p, s, root, old } = await setup();
-    const zip = makeZip(old);
-    const fakeFetch = (async (input: string | URL | Request) => {
-      const url = String(input);
-      if (url.endsWith('/releases/tags/v2.12.1')) {
-        return Response.json({
-          tag_name: 'v2.12.1',
-          published_at: '2026-07-01T00:00:00Z',
-          html_url: '',
-          zipball_url: '',
-          assets: [
-            { name: 'c800x480.zip', browser_download_url: 'https://dl/c800x480.zip', size: zip.length },
-            { name: 'sdcard.json', browser_download_url: 'https://dl/sdcard.json', size: SDCARD_JSON.length },
-          ],
-        });
-      }
-      return new Response(url.endsWith('sdcard.json') ? SDCARD_JSON : zip);
-    }) as typeof fetch;
-    const online = await prepareUpdate(p, s, (await readCard(root))!, 'tx16smk3', fakeFetch);
-    expect(online.plan.find((i) => i.path === 'WIDGETS/Batt/main.lua')!.action).toBe('replace');
+describe('reading the SD card', () => {
+  it('finds the version of a project copied by hand, and what differs', async () => {
+    const p = paths(await tempDir());
+    await writeRelease(p, 'lipo-nanny', 'v1.0.0', '2026-08-01T00:00:00Z', { 'l.zip': { 'src/WIDGETS/LIPONY/main.lua': 'old', 'src/WIDGETS/LIPONY/ui.lua': 'ui' } });
+    await writeRelease(p, 'lipo-nanny', 'v1.1.0', '2026-09-01T00:00:00Z', { 'l.zip': { 'src/WIDGETS/LIPONY/main.lua': 'new', 'src/WIDGETS/LIPONY/ui.lua': 'ui' } });
+    const s = defaultSettings();
+    const nanny = (r: { card: RadioCard; states: { name: string }[] }) => [r.card.installed?.packages['lipo-nanny']?.version, r.states.find((x) => x.name === 'lipo-nanny')];
 
-    const p2 = paths(await tempDir());
-    await writeRelease(p2, 'edgetx-sdcard', 'v2.12.3', '2026-09-01T00:00:00Z', { 'c800x480.zip': { 'WIDGETS/Batt/main.lua': 'new' } });
-    const offline = await prepareUpdate(p2, s, (await readCard(root))!, 'tx16smk3', (async () => {
-      throw new Error('offline');
-    }) as typeof fetch);
-    expect(offline.plan.find((i) => i.path === 'WIDGETS/Batt/main.lua')).toMatchObject({ action: 'conflict', reason: 'unknown' });
+    expect(nanny(await checked(p, s, await newCard({ 'WIDGETS/LIPONY/main.lua': 'old', 'WIDGETS/LIPONY/ui.lua': 'ui' })))).toEqual([
+      'v1.0.0',
+      { name: 'lipo-nanny', missing: [], changed: [] },
+    ]);
+    // both fit equally well: the newer one, with the changed file
+    expect(nanny(await checked(p, s, await newCard({ 'WIDGETS/LIPONY/main.lua': 'mine', 'WIDGETS/LIPONY/ui.lua': 'ui' })))).toEqual([
+      'v1.1.0',
+      { name: 'lipo-nanny', missing: [], changed: ['WIDGETS/LIPONY/main.lua'] },
+    ]);
+    // half of its files or fewer: not on the card
+    expect(nanny(await checked(p, s, await newCard({ 'WIDGETS/LIPONY/ui.lua': 'ui' })))).toEqual([undefined, undefined]);
+  });
+
+  it('finds version and voice of the sounds, an exact older version before a newer one with one more file', async () => {
+    const p = paths(await tempDir());
+    await writeRelease(p, 'edgetx-sounds', 'v2.12.0', '2026-03-01T00:00:00Z', {
+      'edgetx-sdcard-sounds-en-2.12.0.zip': { 'SOUNDS/en/SYSTEM/hello.wav': 'h', 'SOUNDS/en/one.wav': '1' },
+    });
+    await writeRelease(p, 'edgetx-sounds', 'v2.12.3', '2026-09-01T00:00:00Z', {
+      'edgetx-sdcard-sounds-en-2.12.3.zip': { 'SOUNDS/en/SYSTEM/hello.wav': 'h', 'SOUNDS/en/one.wav': '1', 'SOUNDS/en/two.wav': '2' },
+      'edgetx-sdcard-sounds-en_gb-ryan-2.12.3.zip': { 'SOUNDS/en/SYSTEM/hello.wav': 'ryan h', 'SOUNDS/en/one.wav': 'ryan 1', 'SOUNDS/en/two.wav': 'ryan 2' },
+    });
+    const s = defaultSettings();
+    const sounds = async (files: Record<string, string>) => {
+      const r = await checked(p, s, await newCard(files));
+      return [r.card.installed?.packages['edgetx-sounds'], r.states.find((x) => x.name === 'edgetx-sounds')];
+    };
+    expect(await sounds({ 'SOUNDS/en/SYSTEM/hello.wav': 'h', 'SOUNDS/en/one.wav': '1' })).toEqual([
+      { version: 'v2.12.0', origin: 'release', voices: ['en'] },
+      { name: 'edgetx-sounds', missing: [], changed: [] },
+    ]);
+    expect(
+      await sounds({ 'SOUNDS/en/SYSTEM/hello.wav': 'my own', 'SOUNDS/en/one.wav': 'ryan 1', 'SOUNDS/en/two.wav': 'ryan 2', 'SOUNDS/en/mine.wav': 'm' }),
+    ).toEqual([
+      { version: 'v2.12.3', origin: 'release', voices: ['en_gb-ryan'] },
+      { name: 'edgetx-sounds', missing: [], changed: ['SOUNDS/en/SYSTEM/hello.wav'] },
+    ]);
+  });
+
+  it('checks a listed card by size and change time, and writes only what changed', async () => {
+    const p = paths(await tempDir());
+    await writeRelease(p, 'elrs-lua', '4.1.0', '2026-10-01T00:00:00Z', {});
+    await writeFile(join(versionDir(p, 'elrs-lua', '4.1.0'), 'elrs.lua'), 'lua');
+    const s = defaultSettings();
+    s.radios.tx16smk3 = { language: 'en', sources: { 'elrs-lua': { on: true, origin: 'release' } } };
+    // a list as older versions of the app wrote it: no size, no last check
+    const list = { tool: 1, updated: '2026-10-01T00:00:00Z', packages: { 'elrs-lua': { version: '4.1.0', origin: 'release' } }, files: { 'SCRIPTS/TOOLS/elrs.lua': { sha256: sha256(Buffer.from('lua')), from: ['elrs-lua'], written: 'elrs-lua' } } };
+    const root = await newCard({ 'SCRIPTS/TOOLS/elrs.lua': 'lua', '.radio-manager/installed.json': JSON.stringify(list) });
+
+    const first = await checkCard(p, s, (await readCard(root))!, 'tx16smk3');
+    expect(first.written).toBe(true);
+    expect((await readCard(root))!.installed!.files['SCRIPTS/TOOLS/elrs.lua']!.seen).toMatchObject({ size: 3, same: true });
+    expect((await checkCard(p, s, (await readCard(root))!, 'tx16smk3')).written).toBe(false);
+
+    await writeFile(join(root, 'SCRIPTS/TOOLS/elrs.lua'), 'mine');
+    expect((await checkCard(p, s, (await readCard(root))!, 'tx16smk3')).states).toContainEqual({ name: 'elrs-lua', missing: [], changed: ['SCRIPTS/TOOLS/elrs.lua'] });
+    await rm(join(root, 'SCRIPTS/TOOLS/elrs.lua'));
+    expect((await checkCard(p, s, (await readCard(root))!, 'tx16smk3')).states).toContainEqual({ name: 'elrs-lua', missing: ['SCRIPTS/TOOLS/elrs.lua'], changed: [] });
+
+    // after an SD update the list knows the card's files, so the next check reads nothing new
+    const { card } = await checked(p, s, root);
+    await applyPlan(root, await prepareUpdate(p, s, card, 'tx16smk3'));
+    expect((await checkCard(p, s, (await readCard(root))!, 'tx16smk3')).written).toBe(false);
+  });
+
+  it('keeps the checksums of a downloaded version after its package is deleted, next to the shipped ones', async () => {
+    const p = paths(await tempDir());
+    await writeRelease(p, 'elrs-lua', '4.1.0', '2026-10-01T00:00:00Z', {});
+    await writeFile(join(versionDir(p, 'elrs-lua', '4.1.0'), 'elrs.lua'), 'lua');
+    const elrs = src('elrs-lua');
+    expect((await knownVersions(p, elrs)).map((v) => v.tag)).toEqual(['4.1.0']);
+    await rm(versionDir(p, 'elrs-lua', '4.1.0'), { recursive: true });
+    const shipped = { tag: '4.0.0', published: '2026-06-01T00:00:00Z', variants: new Map([['', new Map([['SCRIPTS/TOOLS/elrs.lua', { sha: sha256(Buffer.from('old')), size: 3 }]])]]) };
+    setShippedCatalog({ 'elrs-lua': packKnown([shipped]) });
+    try {
+      expect((await knownVersions(p, elrs)).map((v) => v.tag)).toEqual(['4.1.0', '4.0.0']);
+    } finally {
+      setShippedCatalog({});
+    }
   });
 });

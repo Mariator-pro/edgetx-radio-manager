@@ -24,10 +24,11 @@ export interface RadioSourceView {
   kind: SourceKind;
   on: boolean;
   origin: 'release' | 'main' | 'local';
-  isNew: boolean;
   fixed: boolean; // SD content: always on
   installed?: string;
-  found?: 'match' | 'unknown'; // copied to the card by hand: version found by comparing files, or not found
+  checking?: boolean; // the app is still reading the card for this package
+  missing?: string[]; // files of the installed version not on the card
+  changed?: string[]; // files of the installed version changed on the card
   available?: string;
   voicesChanged?: boolean; // sound packs: other languages or voices chosen than are on the card
   hasRelease: boolean;
@@ -39,7 +40,9 @@ export interface RadioSourceView {
 export interface RadioView {
   volume: string;
   board?: string; // undefined: card without radio.yml, the type has to be chosen
-  name: string;
+  name: string; // the radio type
+  label: string; // how the app calls this radio: its name, else its type (with the start of its id when there are more)
+  cardName?: string; // the name given to this SD card
   firmware?: string;
   firmwareAvailable?: string;
   firmwareNames: Record<string, string>; // version without "v" -> release title, for the downloaded ones
@@ -48,6 +51,7 @@ export interface RadioView {
   sounds: string[]; // sound packs on this radio, one per language
   sources: RadioSourceView[];
   updates: string[]; // sources whose card state differs from the selection
+  checking: boolean; // the app is still reading the card: no SD update or restore until it's done
   lastBackup?: string;
   backups: number;
 }
@@ -129,6 +133,7 @@ export interface RestorePlanView {
   backupFirmware?: string; // EdgeTX version when the backup was made
   cardFirmware?: string;
   backupDir: string; // where the backup before the restore goes
+  origin: 'same' | 'other' | 'unknown'; // the backup is from this SD card, another one, or from before cards had an id
 }
 
 export interface RestoreResultView {
@@ -257,6 +262,8 @@ export interface BackupItemView {
   restoredFrom?: string; // restore: the backup put back afterwards
   models?: string[]; // models, deleteModels: the models copied or deleted
   note?: string;
+  card?: string; // the radio it is from, as the app calls it; none for backups from before cards had an id
+  thisCard?: boolean; // from the SD card connected now
 }
 
 export interface BackupView {

@@ -108,7 +108,7 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
     <div className="flex flex-col gap-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="font-bold">{radio.name}</span>
+          <span className="font-bold">{radio.label}</span>
           <span className="font-mono text-xs text-muted">
             {radio.board} · EdgeTX {radio.firmware} · {radio.sounds.join(', ')}
           </span>

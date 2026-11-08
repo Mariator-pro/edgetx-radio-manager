@@ -18,9 +18,11 @@ export const ERRORS = {
   unknownRadioOrSource: () => 'Unknown radio or source.',
   oneVoicePerLanguage: () => 'Choose only one voice per language.',
   firmwareTooOld: (p: { version: string; min: string }) => `EdgeTX ${p.version} is older than ${p.min}. Flash the firmware first.`,
+  cardChecking: () => 'The app is still reading the SD card. Try again when it’s done.',
 
   backupNotFound: (p: { name: string }) => `Can’t find the backup ${p.name}.`,
   wrongRadioForBackup: (p: { connected: string; board: string }) => `The connected radio is a ${p.connected}, but the backup is from a ${p.board}.`,
+  backupFromOtherCard: () => 'This backup is from another SD card. Confirm that you want to restore it anyway.',
   restoreInterrupted: () => 'The SD card was disconnected during the restore. Connect it again and restore the backup once more.',
 
   modelNotFound: (p: { name: string }) => `Can’t find the model ${p.name}.`,

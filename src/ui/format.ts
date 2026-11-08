@@ -1,10 +1,19 @@
 // EdgeTX uses some non-standard folder names for languages.
-const LANG_ALIAS: Record<string, string> = { cn: 'zh', cz: 'cs', jp: 'ja', se: 'sv', ua: 'uk', gr: 'el' };
+const LANG_ALIAS: Record<string, string> = {
+  cn: 'zh-CN',
+  tw: 'zh-TW',
+  hk: 'zh-HK',
+  cz: 'cs',
+  jp: 'ja',
+  se: 'sv',
+  ua: 'uk',
+  gr: 'el',
+};
 
 // "de" -> "Deutsch" / "German", in the interface language.
 export function languageName(code: string, locale: string): string {
   try {
-    const name = new Intl.DisplayNames([locale], { type: 'language' }).of(LANG_ALIAS[code] ?? code);
+    const name = new Intl.DisplayNames([locale], { type: 'language', style: 'short' }).of(LANG_ALIAS[code] ?? code);
     return name && name !== code ? `${name.charAt(0).toUpperCase()}${name.slice(1)}` : code;
   } catch {
     return code;

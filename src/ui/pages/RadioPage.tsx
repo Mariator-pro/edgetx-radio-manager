@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Chip, CloseButton, Label, ListBox, Select, Switch, ToggleButton, ToggleButtonGroup } from '@heroui/react';
+import { Alert, Button, Card, Chip, CloseButton, Input, Label, ListBox, Select, Spinner, Switch, TextField, ToggleButton, ToggleButtonGroup } from '@heroui/react';
 import { Fragment, type ReactNode, useEffect, useState } from 'react';
 import type { RadioSourceView, RadioView, VoiceView } from '../../server/api.ts';
 import { get, post } from '../api.ts';
@@ -11,12 +11,33 @@ type Run = (fn: () => Promise<unknown>) => void;
 
 function Versions({ s }: { s: RadioSourceView }) {
   const { t } = usePrefs();
+  const [open, setOpen] = useState(false);
+  if (s.checking) {
+    return (
+      <span className="flex items-center gap-1.5 text-xs text-muted">
+        <Spinner size="sm" />
+        {t.initializing}
+      </span>
+    );
+  }
   const changes = s.on && s.available && s.available !== s.installed;
+  const missing = s.missing ?? [];
+  const changed = s.changed ?? [];
+  const custom = missing.length + changed.length > 0;
   return (
     <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
-      <span className="rounded-md bg-surface-secondary px-2 py-0.5 whitespace-nowrap text-muted">
-        {s.installed ?? (s.found === 'unknown' ? t.versionUnknown : t.notInstalled)}
-      </span>
+      <span className="rounded-md bg-surface-secondary px-2 py-0.5 whitespace-nowrap text-muted">{s.installed ?? t.notInstalled}</span>
+      {custom && (
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={t.showCustom(s.name)}
+          onClick={() => setOpen(!open)}
+          className="rounded-md bg-warning-soft px-2 py-0.5 whitespace-nowrap text-warning-soft-foreground hover:underline"
+        >
+          {t.custom}
+        </button>
+      )}
       {changes && (
         <>
           <ArrowIcon size={14} className="text-warning" />
@@ -27,6 +48,26 @@ function Versions({ s }: { s: RadioSourceView }) {
         <span className="rounded-md bg-warning-soft px-2 py-0.5 text-warning-soft-foreground">{t.voicesChanged}</span>
       )}
       {!s.on && s.installed && <span className="text-muted">{t.removedNext}</span>}
+      {custom && open && (
+        <div className="flex basis-full flex-col gap-1 pt-1 font-sans">
+          {[
+            [t.missingFiles(missing.length), missing],
+            [t.changedFiles(changed.length), changed],
+          ].map(([title, files]) =>
+            files.length > 0 ? (
+              <div key={title as string}>
+                <span className="font-medium">{title as string}</span>
+                <ul className="m-0 max-h-40 list-none overflow-y-auto p-0 font-mono text-muted">
+                  {(files as string[]).map((f) => (
+                    <li key={f}>{f}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null,
+          )}
+          <span className="text-muted">{t.customHint}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -47,16 +88,9 @@ function SourceRow({ radio, s, run }: { radio: RadioView; s: RadioSourceView; ru
   const set = (change: { on?: boolean; origin?: string }) =>
     run(() => post('/api/radio/selection', { board: radio.board, source: s.name, ...change }));
   return (
-    <tr className={`border-t border-separator ${s.isNew ? 'bg-warning-soft/40' : ''}`}>
+    <tr className="border-t border-separator">
       <td className="px-5 py-2.5">
-        <div className="flex items-center gap-2">
-          <span className={`font-semibold ${s.on ? '' : 'text-muted'}`}>{s.name}</span>
-          {s.isNew && (
-            <Chip size="sm" variant="soft" color="warning">
-              {t.tagNew}
-            </Chip>
-          )}
-        </div>
+        <span className={`font-semibold ${s.on ? '' : 'text-muted'}`}>{s.name}</span>
         <div className="text-xs text-muted">{s.repo}</div>
       </td>
       <td className="px-3 py-2.5">
@@ -89,7 +123,7 @@ function SourceRow({ radio, s, run }: { radio: RadioView; s: RadioSourceView; ru
       </td>
       <td className="px-5 py-2.5">
         <div className="flex justify-end">
-          <Switch aria-label={t.onThisRadio(s.name)} isSelected={s.on} isDisabled={s.fixed} onChange={(on) => set({ on })}>
+          <Switch aria-label={t.onThisRadio(s.name)} isSelected={s.on} isDisabled={s.fixed || s.checking} onChange={(on) => set({ on })}>
             <Switch.Content>
               <Switch.Control>
                 <Switch.Thumb />
@@ -152,27 +186,29 @@ function SoundsRow({ radio, run }: { radio: RadioView; run: Run }) {
             return (
               <div key={id} className="flex items-center gap-1.5">
                 <span className="text-sm font-medium">{name(lang)}</span>
-                <Select
-                  className="w-36"
-                  selectedKey={id}
-                  aria-label={t.voiceFor(name(lang))}
-                  onSelectionChange={(key) => key !== null && save(radio.sounds.map((x) => (x === id ? String(key) : x)))}
-                >
-                  <Select.Trigger>
-                    <Select.Value />
-                    <Select.Indicator />
-                  </Select.Trigger>
-                  <Select.Popover>
-                    <ListBox>
-                      {(options.length > 0 ? options : [{ id, language: lang, label: id }]).map((v) => (
-                        <ListBox.Item key={v.id} id={v.id} textValue={v.label}>
-                          {v.label}
-                          <ListBox.ItemIndicator />
-                        </ListBox.Item>
-                      ))}
-                    </ListBox>
-                  </Select.Popover>
-                </Select>
+                {options.length > 1 && (
+                  <Select
+                    className="w-36"
+                    selectedKey={id}
+                    aria-label={t.voiceFor(name(lang))}
+                    onSelectionChange={(key) => key !== null && save(radio.sounds.map((x) => (x === id ? String(key) : x)))}
+                  >
+                    <Select.Trigger>
+                      <Select.Value />
+                      <Select.Indicator />
+                    </Select.Trigger>
+                    <Select.Popover>
+                      <ListBox>
+                        {options.map((v) => (
+                          <ListBox.Item key={v.id} id={v.id} textValue={v.label}>
+                            {v.label}
+                            <ListBox.ItemIndicator />
+                          </ListBox.Item>
+                        ))}
+                      </ListBox>
+                    </Select.Popover>
+                  </Select>
+                )}
                 <CloseButton aria-label={t.removeLanguage(name(lang))} onPress={() => save(radio.sounds.filter((x) => x !== id))} />
               </div>
             );
@@ -204,6 +240,57 @@ function SoundsRow({ radio, run }: { radio: RadioView; run: Run }) {
         </div>
       </td>
     </tr>
+  );
+}
+
+// The radio's heading, and its own name: optional, kept on the SD card, to tell radios of the same type apart.
+function RadioName({ radio, run }: { radio: RadioView; run: Run }) {
+  const { t } = usePrefs();
+  const [editing, setEditing] = useState<string>();
+  const save = () => run(async () => {
+    await post('/api/radio/name', { volume: radio.volume, name: editing ?? '' });
+    setEditing(undefined);
+  });
+  if (editing === undefined) {
+    return (
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="m-0 text-3xl font-bold tracking-tight">{radio.label}</h1>
+        {radio.label !== radio.name && <span className="text-sm text-muted">{radio.name}</span>}
+        {radio.board && (
+          <Button size="sm" variant="ghost" isDisabled={radio.checking} onPress={() => setEditing(radio.cardName ?? '')}>
+            {t.rename}
+          </Button>
+        )}
+      </div>
+    );
+  }
+  return (
+    <form
+      className="flex flex-col gap-1.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        save();
+      }}
+    >
+      <div className="flex flex-wrap items-end gap-2">
+        <TextField
+          className="min-w-64"
+          value={editing}
+          onChange={setEditing}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setEditing(undefined);
+          }}
+        >
+          <Label>{t.radioNameLabel}</Label>
+          <Input placeholder={t.namePlaceholder} maxLength={40} autoFocus />
+        </TextField>
+        <Button type="submit">{t.save}</Button>
+        <Button variant="ghost" onPress={() => setEditing(undefined)}>
+          {t.cancel}
+        </Button>
+      </div>
+      <span className="text-xs text-muted">{t.nameHint}</span>
+    </form>
   );
 }
 
@@ -273,7 +360,9 @@ export function RadioPage(props: {
   const firmwareDone = !!radio.firmware && !newer && !radio.belowMin;
   // the full release title of the version the card shows, e.g. 'EdgeTX "Queen Anne's Revenge" v2.12.5'
   const shownName = radio.firmwareNames[(newer ? radio.firmwareAvailable : radio.firmware) ?? ''];
-  const sdPrimary = !radio.belowMin && n > 0;
+  const sdPrimary = !radio.belowMin && !radio.checking && n > 0;
+  // changed files don't count as updates, but the plan is where you choose to overwrite them
+  const sdNothing = n === 0 && !radio.sources.some((s) => s.on && s.changed?.length);
   const chip = (label: string, color: 'default' | 'success' | 'warning') => (
     <Chip size="sm" variant="soft" color={color}>
       {label}
@@ -283,7 +372,7 @@ export function RadioPage(props: {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
         <span className="text-sm text-muted">{t.connectedRadio(radio.volume)}</span>
-        <h1 className="m-0 text-3xl font-bold tracking-tight">{radio.name}</h1>
+        <RadioName radio={radio} run={run} />
       </div>
 
       {!radio.board ? (
@@ -338,20 +427,30 @@ export function RadioPage(props: {
 
               <Step
                 mark={2}
-                done={n === 0 && !radio.belowMin}
+                done={n === 0 && !radio.belowMin && !radio.checking}
                 primary={sdPrimary}
                 title={t.sdCard}
                 tag={
-                  n > 0 ? chip(t.updatesReady(n), radio.belowMin ? 'default' : 'warning') : !radio.belowMin && chip(t.upToDate, 'success')
+                  radio.checking
+                    ? undefined
+                    : n > 0
+                      ? chip(t.updatesReady(n), radio.belowMin ? 'default' : 'warning')
+                      : !radio.belowMin && chip(t.upToDate, 'success')
                 }
                 action={
-                  <Button variant={sdPrimary ? 'primary' : 'outline'} isDisabled={!!busy || radio.belowMin} onPress={onPlan}>
+                  <Button variant={sdPrimary ? 'primary' : 'outline'} isDisabled={!!busy || radio.belowMin || radio.checking || sdNothing} onPress={onPlan}>
                     {t.reviewPlan}
                   </Button>
                 }
               >
                 <p className="m-0 text-sm text-muted">
-                  {radio.belowMin ? t.waitsForFirmware : n === 0 ? t.matches : t.backupFirst(radio.updates.join(', '))}
+                  {radio.belowMin
+                    ? t.waitsForFirmware
+                    : radio.checking
+                      ? t.readingCard
+                      : n === 0
+                        ? t.matches
+                        : t.backupFirst(radio.updates.join(', '))}
                 </p>
               </Step>
 
@@ -397,7 +496,8 @@ export function RadioPage(props: {
                       <th scope="col" className="px-3 py-2 font-medium">
                         {t.colOrigin}
                       </th>
-                      <th scope="col" className="px-3 py-2 font-medium">
+                      {/* room for "main abc1234 → main def5678", so choosing an origin doesn't shift the columns */}
+                      <th scope="col" className="min-w-64 px-3 py-2 font-medium">
                         {t.colVersion}
                       </th>
                       <th scope="col" className="px-5 py-2 text-right font-medium">

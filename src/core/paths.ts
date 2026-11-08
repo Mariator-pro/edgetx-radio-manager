@@ -8,6 +8,7 @@ export interface Paths {
   backups: string;
   settings: string;
   server: string; // where the browser interface's server runs, so a second start opens it
+  known: string; // checksums of downloaded package versions, kept when a package is deleted
 }
 
 // Where apps keep their data on each system: macOS Application Support (the same folder Electron uses for
@@ -25,6 +26,7 @@ export function paths(root = dataRoot()): Paths {
     backups: join(root, 'Backups'),
     settings: join(root, 'settings.json'),
     server: join(root, 'server.json'),
+    known: join(root, 'Known'),
   };
 }
 

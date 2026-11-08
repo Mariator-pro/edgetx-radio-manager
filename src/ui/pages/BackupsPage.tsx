@@ -1,4 +1,4 @@
-import { Button, Card, Input, Spinner, Switch, TextField } from '@heroui/react';
+import { Button, Card, Chip, Input, Spinner, Switch, TextField } from '@heroui/react';
 import { useCallback, useEffect, useState } from 'react';
 import type { BackupItemView, BackupView, PackageChangeView, RadioView } from '../../server/api.ts';
 import { get, post } from '../api.ts';
@@ -150,7 +150,18 @@ export function BackupsPage({
                           {t.delete}
                         </Button>
                       </div>
-                      {line && <p className="m-0 text-sm text-muted">{line}</p>}
+                      <p className="m-0 text-sm text-muted">
+                        {i.thisCard ? (
+                          <Chip size="sm" variant="soft" color="success">
+                            {t.thisCard}
+                          </Chip>
+                        ) : i.card ? (
+                          t.fromRadio(i.card)
+                        ) : (
+                          t.originUnknown
+                        )}
+                        {line && ` · ${line}`}
+                      </p>
                       {edit ? (
                         <form
                           className="flex flex-wrap items-center gap-2"

@@ -61,7 +61,9 @@ Radios with a UF2 bootloader (for example RadioMaster TX15 and TX16S Mk III) get
 
 Switch the radio on, plug in the USB cable and choose "USB Storage" on the radio. The app opens the radio's page. It shows three cards in the order they are due: firmware, SD card and backup.
 
-Below them you choose what belongs on this radio: switch sources on or off, and for your own projects pick where they come from (see [Where packages come from](#where-packages-come-from)). Below the sounds you add or remove languages and pick a voice for each.
+The first time, the app reads the SD card: for every package it finds the version on the card, also when another tool put it there, and marks it "+ custom" when files of that version are missing or changed. Click "+ custom" to see which. If you have two radios of the same type, "Rename" next to the radio's name gives each its own name; the app stores it on the SD card. Until reading is done (about a minute per sound language over USB), the SD update and restoring a backup wait; backups and flashing work meanwhile.
+
+Below them are the sources on this radio. Each time you connect it, they show what its SD card holds: the packages on it are switched on, with the sound languages and voices on the card. An empty SD card starts with the sounds of the radio's voice language. Switch on more sources, add languages or pick another voice, and the next SD update puts them on the card; switching a source off removes it. Choices not yet written to the card are gone when you connect the radio again. For your own projects you also pick where they come from (see [Where packages come from](#where-packages-come-from)).
 
 ### 2. Check for updates
 
@@ -98,9 +100,9 @@ On the "Sources" page, paste a project's GitHub address or enter `owner/name` an
 
 ### 6. Restore or keep backups
 
-The "Backups" page lists the backups per radio. Below each one it shows the EdgeTX version on the SD card at the time and why the backup was made: by hand, before restoring another backup, or before an SD update together with the packages that update changed. "Note" adds your own short text. Switch on "Keep" for a backup that should never be deleted, for example before a big EdgeTX update. "Open folder" shows the backups on your computer.
+The "Backups" page lists the backups per radio type. Each backup shows which radio it is from: "This SD card" marks the backups of the connected radio, older backups made before the app marked SD cards show "Origin unknown". Below each one it shows the EdgeTX version on the SD card at the time and why the backup was made: by hand, before restoring another backup, or before an SD update together with the packages that update changed. "Note" adds your own short text. Switch on "Keep" for a backup that should never be deleted, for example before a big EdgeTX update. "Open folder" shows the backups on your computer.
 
-"Restore" brings the SD card back to exactly the state of that backup: changed and missing files come back, files added since then are deleted. It works only while a radio of the same type is connected. Before anything is written, the app shows the plan with every file, and points out when the backup was made with a different EdgeTX version than the one on the radio. "Back up the SD card first" is on by default, so a restore can be undone as well.
+"Restore" brings the SD card back to exactly the state of that backup: changed and missing files come back, files added since then are deleted. It works only while a radio of the same type is connected. A backup from another SD card, for example of your second radio of that type or from before you replaced the card, goes back only after "Restore anyway"; the SD card always keeps its own name. Before anything is written, the app shows the plan with every file, and points out when the backup was made with a different EdgeTX version than the one on the radio. "Back up the SD card first" is on by default, so a restore can be undone as well.
 
 ![The backups page with backups of two radios](docs/screenshots/backups.png)
 
@@ -134,7 +136,7 @@ For every radio the app stores which sources go on the SD card and where they co
 - **Main**: the newest commit of the main branch (own projects only), downloaded when needed
 - **Local**: a local git checkout, only when the app runs from source (see [Development](docs/development.md#running-from-source))
 
-What was installed is recorded in `.radio-manager/installed.json` on the SD card. On the next update the app uses it to tell which files it wrote itself and which were changed since.
+What is installed is recorded in `.radio-manager/installed.json` on the SD card, written when the app first reads the card and after every update. With it the app tells which files came from a package and which were changed since; it checks them by size and file time each time the radio is connected and only reads files that changed. `.radio-manager/radio.json` holds an id for the SD card.
 
 ## Your data on the computer
 
@@ -148,6 +150,7 @@ Settings, downloads and backups live where apps keep their data on each system (
 EdgeTX Radio Manager/
 ├── settings.json          sources, radios, backup settings
 ├── Packages/<source>/     downloaded versions, _main/ for the main branch
+├── Known/<source>/        checksums of downloaded versions, to recognize them on a card
 └── Backups/<board>/       one folder per backup, named by date and time
 ```
 

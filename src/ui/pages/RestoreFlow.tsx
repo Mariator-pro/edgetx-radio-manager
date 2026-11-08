@@ -45,7 +45,9 @@ export function RestoreFlow({ radio, name, progress, onBack }: { radio: RadioVie
   const start = async () => {
     setPhase('running');
     try {
-      setResult(await post<RestoreResultView>('/api/restore/run', { volume: radio.volume, board: radio.board, name, backupFirst }));
+      setResult(
+        await post<RestoreResultView>('/api/restore/run', { volume: radio.volume, board: radio.board, name, backupFirst, otherCard: plan?.origin === 'other' }),
+      );
       setPhase('done');
     } catch (e) {
       setError(e);
@@ -105,6 +107,17 @@ export function RestoreFlow({ radio, name, progress, onBack }: { radio: RadioVie
               </div>
             ))}
           </div>
+
+          {plan.origin === 'other' && (
+            <Alert status="warning">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Title>{t.restoreOtherCard}</Alert.Title>
+                <Alert.Description>{t.restoreOtherCardText}</Alert.Description>
+              </Alert.Content>
+            </Alert>
+          )}
+          {plan.origin === 'unknown' && <p className="m-0 text-sm text-muted">{t.restoreUnknownOrigin}</p>}
 
           {otherFirmware && (
             <Alert status="warning">
@@ -179,7 +192,7 @@ export function RestoreFlow({ radio, name, progress, onBack }: { radio: RadioVie
                 {t.back}
               </Button>
               <Button isDisabled={!!nothing} onPress={start}>
-                {t.restore}
+                {plan.origin === 'other' ? t.restoreAnyway : t.restore}
               </Button>
             </div>
           </div>

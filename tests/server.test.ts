@@ -1,6 +1,6 @@
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { versionDir } from '../src/core/packages.ts';
 import { paths } from '../src/core/paths.ts';
@@ -23,6 +23,16 @@ const call = (path: string, init: RequestInit & { headers?: Record<string, strin
 const get = async <T>(path: string) => (await call(path)).json() as Promise<T>;
 const post = async <T>(path: string, body: unknown) =>
   (await call(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json() as Promise<T>;
+
+// The state once the app has read the connected cards.
+async function ready(): Promise<StateView> {
+  for (let i = 0; i < 300; i++) {
+    const state = await get<StateView>('/api/state');
+    if (state.radios.every((r) => !r.checking)) return state;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error('still reading the card');
+}
 
 beforeAll(async () => {
   p = paths(await tempDir());
@@ -47,7 +57,7 @@ afterAll(() => {
 
 describe('server', () => {
   it('shows the connected radio with its selection', async () => {
-    const state = await get<StateView>('/api/state');
+    const state = await ready();
     expect(state.radios).toHaveLength(1);
     const r = state.radios[0]!;
     expect(r).toMatchObject({ board: 'tx16smk3', name: 'RadioMaster TX16S MK3', firmware: '2.12.3', belowMin: false, updates: ['edgetx-sdcard'] });
@@ -62,34 +72,36 @@ describe('server', () => {
   });
 
   it('plans and runs an update with a backup first', async () => {
+    await ready();
     const plan = await post<PlanView>('/api/update/plan', { volume: card });
     expect(plan.counts.add).toBe(1);
     expect(plan.groups.map((g) => g.name)).toEqual(['edgetx-sdcard']);
     const r = await post<UpdateResultView>('/api/update/run', { volume: card, resolutions: {} });
     expect(r).toMatchObject({ written: 1, deleted: 0, kept: 0 });
     expect(r.backup).toMatch(/^\d{4}-\d{2}-\d{2}_\d{4}$/);
-    const state = await get<StateView>('/api/state');
+    const state = await ready();
     expect(state.radios[0]!.updates).toEqual([]);
     expect(state.radios[0]!.lastBackup).toBe(r.backup);
   });
 
   it('restores the backup from before the update, backing up first and keeping the restored one', async () => {
-    const { lastBackup } = (await get<StateView>('/api/state')).radios[0]!;
+    const { lastBackup } = (await ready()).radios[0]!;
     const wrong = await call('/api/restore/plan', { method: 'POST', body: JSON.stringify({ volume: card, board: 'tx15', name: lastBackup }) });
     expect(wrong.status).toBe(400);
     expect(((await wrong.json()) as { code: string }).code).toBe('wrongRadioForBackup');
 
     const plan = await post<RestorePlanView>('/api/restore/plan', { volume: card, board: 'tx16smk3', name: lastBackup });
-    expect(plan.counts).toEqual({ add: 0, replace: 0, delete: 2 });
+    // the card got its list when the app first read it, before the update
+    expect(plan.counts).toEqual({ add: 0, replace: 1, delete: 1 });
     expect(plan.files.map((f) => f.path)).toEqual(['.radio-manager/installed.json', 'WIDGETS/BattAnalog/main.lua']);
     expect(plan.backupFirmware).toBe('2.12.3');
 
     const r = await post<RestoreResultView>('/api/restore/run', { volume: card, board: 'tx16smk3', name: lastBackup, backupFirst: true });
-    expect(r).toMatchObject({ written: 0, deleted: 2 });
+    expect(r).toMatchObject({ written: 1, deleted: 1 });
     expect(r.backup).toMatch(/^\d{4}-\d{2}-\d{2}_\d{4}(_\d+)?$/);
     const [backups] = await get<BackupView[]>('/api/backups');
     expect(backups!.items.map((i) => i.name)).toEqual(expect.arrayContaining([lastBackup, r.backup]));
-    expect((await get<StateView>('/api/state')).radios[0]!.updates).toEqual(['edgetx-sdcard']);
+    expect((await ready()).radios[0]!.updates).toEqual(['edgetx-sdcard']);
   });
 
   it('labels backups with EdgeTX version and reason, and keeps notes until the backup goes', async () => {
@@ -338,5 +350,44 @@ describe('oneAtATime', () => {
     release();
     await first;
     expect(calls).toEqual([false, true]);
+  });
+});
+
+describe('two radios of the same type', () => {
+  it('marks backups of the connected SD card, names it, and asks before restoring one of another card', async () => {
+    const q = paths(await tempDir());
+    const radio = await tempDir();
+    await writeTree(radio, { 'RADIO/radio.yml': 'semver: 2.12.3\nboard: tx16smk3\nttsLanguage: "en"\n', 'MODELS/m.yml': 'm' });
+    // a backup from before cards had an id
+    await writeTree(join(q.backups, 'tx16smk3', '2026-10-01_1200'), { 'RADIO/radio.yml': 'semver: 2.12.3\nboard: tx16smk3\n', 'MODELS/m.yml': 'm' });
+    const before = process.env.RADIO_MANAGER_VOLUMES;
+    process.env.RADIO_MANAGER_VOLUMES = [before, radio].filter(Boolean).join(delimiter); // the other test card stays connected
+    const srv = await startServer({ paths: q, port: 0, repoParent: await tempDir(), licensesFile: join(q.root, 'none.txt'), pollMs: 60_000 });
+    const req = (path: string, body?: unknown) =>
+      fetch(srv.url + path, { method: body ? 'POST' : 'GET', headers: { [TOKEN_HEADER]: srv.token, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+    try {
+      const mine = async () => ((await (await req('/api/state')).json()) as StateView).radios.find((r) => r.volume === radio);
+      for (let i = 0; i < 300 && (await mine())?.checking !== false; i++) await new Promise((r) => setTimeout(r, 10));
+      const made = (await (await req('/api/backup', { volume: radio })).json()) as string;
+      const group = ((await (await req('/api/backups')).json()) as BackupView[]).find((g) => g.board === 'tx16smk3');
+      expect(group!.items.find((i) => i.name === made)).toMatchObject({ thisCard: true, card: expect.stringMatching(/^tx16smk3 · [\w-]{4}$/) }); // two cards of this type known: with the start of the id
+      expect(group!.items.find((i) => i.name === '2026-10-01_1200')).not.toHaveProperty('card');
+
+      expect((await req('/api/radio/name', { volume: radio, name: 'Mk3 Wing' })).status).toBe(200);
+      expect(await mine()).toMatchObject({ label: 'Mk3 Wing', cardName: 'Mk3 Wing' });
+
+      // the backup as if from the other radio of this type
+      await writeFile(join(q.backups, 'tx16smk3', made, '.radio-manager', 'radio.json'), '{"id":"another-card-1"}');
+      const plan = async (name: string) => ((await (await req('/api/restore/plan', { volume: radio, board: 'tx16smk3', name })).json()) as RestorePlanView).origin;
+      expect(await plan(made)).toBe('other');
+      expect(await plan('2026-10-01_1200')).toBe('unknown');
+      const refused = await req('/api/restore/run', { volume: radio, board: 'tx16smk3', name: made, backupFirst: false });
+      expect(((await refused.json()) as { code: string }).code).toBe('backupFromOtherCard');
+      expect((await req('/api/restore/run', { volume: radio, board: 'tx16smk3', name: made, backupFirst: false, otherCard: true })).status).toBe(200);
+      expect(JSON.parse(await readFile(join(radio, '.radio-manager', 'radio.json'), 'utf8'))).toMatchObject({ name: 'Mk3 Wing' });
+    } finally {
+      srv.close();
+      process.env.RADIO_MANAGER_VOLUMES = before;
+    }
   });
 });

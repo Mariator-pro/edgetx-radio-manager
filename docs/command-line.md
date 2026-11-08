@@ -16,7 +16,7 @@ npm run cli -- <command> [options]
 | `download` | Check all sources for new releases and download them |
 | `backup` | Back up the whole SD card of the connected radio |
 | `update` | Show the plan, then back up and update the SD card |
-| `restore [backup]` | Without a name, list the backups of the connected radio with EdgeTX version, reason and note; with one (e.g. `restore 2026-10-23_2015`), show the plan, then back up the SD card and restore the backup |
+| `restore [backup]` | Without a name, list the backups of the connected radio with EdgeTX version, reason, note and whether each is from this SD card; with one (e.g. `restore 2026-10-23_2015`), show the plan, then back up the SD card and restore the backup |
 | `flash [version]` | Flash firmware, without a version the newest downloaded one; any other release is downloaded first (e.g. `flash v2.12.2` or `flash v2.12.0-rc4`); `flash --file <path>` flashes a `.uf2` or `.bin` of your own |
 | `sources` | List sources; `sources add <owner/repo>`, `sources remove <name>` |
 | `models` | List the models in the backups of the connected radio (or `--board`) with their versions, compared with the SD card |
@@ -32,7 +32,7 @@ npm run cli -- <command> [options]
 - `--volume <path>`: use this drive instead of automatic detection
 - `--board <id>`: radio type when the SD card has no `RADIO/radio.yml` yet (e.g. `tx16s`)
 - `--no-backup`: restore, copy or delete models without backing up the SD card first
-- `--force`: with `flash --file`, flash a file that has no EdgeTX identification; with `models copy` or `models import`, copy models that do not fully fit the radio
+- `--force`: with `flash --file`, flash a file that has no EdgeTX identification; with `models copy` or `models import`, copy models that do not fully fit the radio; with `restore`, restore a backup of another SD card (the SD card keeps its own name and id)
 - `--add`: with `models copy` or `models import`, add the models as new ones instead of replacing those of the same name
 - `--from <radio>[/<backup>]`: with `models copy`, `export` or `diff`, take the models from these backups
 - `--out <folder>`: with `models export`, where the files go (default: the current folder)

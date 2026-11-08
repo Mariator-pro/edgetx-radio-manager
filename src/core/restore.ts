@@ -2,6 +2,7 @@ import { copyFile, readdir, readFile, rm, rmdir, stat, utimes } from 'node:fs/pr
 import { dirname, join, relative, sep } from 'node:path';
 import { makeParent, type ApplyProgress } from './apply.ts';
 import { backupFirmware, isBackupName, listFiles, type CardFile } from './backup.ts';
+import { ID_PATH } from './card.ts';
 import { AppError } from './errors.ts';
 import { isSafeName, type Paths } from './paths.ts';
 
@@ -43,12 +44,14 @@ async function same(a: CardFile, b: CardFile): Promise<boolean> {
   return a.size > COMPARE_BYTES || (await readFile(a.path)).equals(await readFile(b.path));
 }
 
-// What it takes to bring the card back to the backup: missing and changed files back, files the backup doesn't have deleted.
+// What it takes to bring the card back to the backup: missing and changed files back, files the backup doesn't have
+// deleted. The card keeps its own id and name (radio.json), also when the backup is from another card.
 export async function planRestore(volume: string, p: Paths, board: string, name: string): Promise<RestorePlan> {
   const dir = backupDir(p, board, name);
   if (!(await stat(dir).catch(() => undefined))?.isDirectory()) throw new AppError('backupNotFound', { name });
-  const wanted = new Map((await listFiles(dir)).map((f) => [relPath(dir, f), f]));
-  const onCard = new Map((await listFiles(volume)).map((f) => [relPath(volume, f), f]));
+  const files = async (root: string) => new Map((await listFiles(root)).map((f) => [relPath(root, f), f] as const).filter(([path]) => path !== ID_PATH));
+  const wanted = await files(dir);
+  const onCard = await files(volume);
   const items: RestoreItem[] = [];
   let unchanged = 0;
   for (const [path, f] of wanted) {

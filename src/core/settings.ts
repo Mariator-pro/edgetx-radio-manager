@@ -23,9 +23,8 @@ export interface Choice {
 
 export interface RadioSettings {
   language?: string; // from radio.yml, refreshed on every detection
-  sounds?: string[]; // sound packs, one per language, e.g. ["de", "en_gb-ryan"]; first taken from the card
-  sources?: Record<string, Choice>; // what goes on this radio; set on first detection
-  newSources?: string[]; // added after the first detection, not decided yet
+  sounds?: string[]; // sound packs, one per language, e.g. ["de", "en_gb-ryan"]; taken from the card when it is read
+  sources?: Record<string, Choice>; // what goes on this radio; taken from the card when it is read
   firmware?: string; // last seen on the card
   installed?: Record<string, string>; // package -> version, last seen on the card
 }
@@ -59,9 +58,6 @@ export interface Settings {
   knownDefaults?: string[]; // default sources already offered; a removed one isn't added again
   ui?: { lang?: string; theme?: 'light' | 'dark' }; // interface language and theme as last chosen
 }
-
-// Projects switched on for a newly detected radio; all other projects start switched off.
-export const ON_FOR_NEW_RADIOS: readonly string[] = ['flight-wingman'];
 
 export const DEFAULT_SOURCES: readonly Source[] = [
   { name: 'edgetx-firmware', repo: 'EdgeTX/edgetx', kind: 'firmware' },
@@ -110,11 +106,19 @@ export async function loadSettings(p: Paths): Promise<Settings> {
   return s;
 }
 
-export async function saveSettings(p: Paths, s: Settings): Promise<void> {
-  await mkdir(dirname(p.settings), { recursive: true });
-  const tmp = `${p.settings}.tmp`;
-  await writeFile(tmp, `${JSON.stringify(s, null, 2)}\n`);
-  await rename(tmp, p.settings);
+// One save at a time: two at once (reading a card in the background, a choice in the interface) would write the same
+// temporary file.
+let saving: Promise<void> = Promise.resolve();
+
+export function saveSettings(p: Paths, s: Settings): Promise<void> {
+  const run = saving.then(async () => {
+    await mkdir(dirname(p.settings), { recursive: true });
+    const tmp = `${p.settings}.tmp`;
+    await writeFile(tmp, `${JSON.stringify(s, null, 2)}\n`);
+    await rename(tmp, p.settings);
+  });
+  saving = run.catch(() => {});
+  return run;
 }
 
 // Sets a backup's note; an empty one removes it, and with it an entry left with nothing in it.
@@ -139,10 +143,6 @@ export function rememberRadio(s: Settings, card: RadioCard): boolean {
   const r = (s.radios[card.board] ??= {});
   const before = JSON.stringify(r);
   if (card.language) r.language = card.language;
-  if (!r.sounds) {
-    const langs = new Set([...(card.soundLanguages ?? []), ...(card.language ? [card.language] : [])]);
-    if (langs.size > 0) r.sounds = [...langs].sort();
-  }
   if (card.firmware) r.firmware = card.firmware;
   if (card.installed) r.installed = Object.fromEntries(Object.entries(card.installed.packages).map(([n, v]) => [n, v.version]));
   return JSON.stringify(r) !== before;

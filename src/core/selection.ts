@@ -1,9 +1,8 @@
-import { stat } from 'node:fs/promises';
-import { join } from 'node:path';
-import { loadContent, type Origin, type PackageContent, type RadioContext } from './content.ts';
+import type { InstalledList, RadioCard } from './card.ts';
+import type { Origin } from './content.ts';
 import { localVersions, mainInfo } from './packages.ts';
 import type { Paths } from './paths.ts';
-import { ON_FOR_NEW_RADIOS, type Settings, type Source } from './settings.ts';
+import type { Choice, Settings, Source } from './settings.ts';
 
 // Sources that put files on the SD card (firmware is flashed instead).
 export function updateSources(s: Settings): Source[] {
@@ -17,57 +16,34 @@ export async function defaultOrigin(p: Paths, source: Source): Promise<Origin> {
   return source.localDir ? 'local' : 'release';
 }
 
-// Folders under SCRIPTS/ and WIDGETS/ that only this package brings. Shared ones like
-// SCRIPTS/TOOLS or the Flight Bag copies say nothing about which project is installed.
-export function ownFolders(contents: PackageContent[]): Map<string, string[]> {
-  const folders = contents.map((c) => {
-    const set = new Set<string>();
-    for (const path of c.files.keys()) {
-      const parts = path.split('/');
-      if (parts.length > 2 && (parts[0] === 'SCRIPTS' || parts[0] === 'WIDGETS')) set.add(`${parts[0]}/${parts[1]}`);
-    }
-    return { name: c.name, set };
-  });
-  return new Map(
-    folders.map(({ name, set }) => [name, [...set].filter((f) => folders.every((o) => o.name === name || !o.set.has(f)))]),
-  );
-}
-
-async function anyExists(root: string, rels: string[]): Promise<boolean> {
-  for (const rel of rels) if (await stat(join(root, rel)).catch(() => undefined)) return true;
-  return false;
-}
-
-// First detection of a radio: EdgeTX content always, Flight Wingman, and projects that are already on the card
-// (switching those off would delete them on the next update).
-// Later: sources added since then come in switched off and listed as new.
-export async function ensureSelection(
-  p: Paths,
-  s: Settings,
-  board: string,
-  cardRoot: string,
-  ctx: RadioContext,
-): Promise<boolean> {
+// What goes on a radio is what its SD card holds when it is connected: every package in the card's list, with its
+// origin, and the sounds with their voices. More is chosen in the app and holds until the radio is connected again.
+// An empty card gets the sounds of the radio's voice language; SD content is always on. True when the choice changed.
+export async function selectionFromCard(p: Paths, s: Settings, board: string, card: RadioCard, list: InstalledList): Promise<boolean> {
   const r = (s.radios[board] ??= {});
-  const sources = updateSources(s);
-  if (!r.sources) {
-    const origins = new Map<string, Origin>();
-    for (const src of sources) origins.set(src.name, await defaultOrigin(p, src));
-    const projects = sources.filter((src) => src.kind === 'project');
-    const contents = await Promise.all(projects.map((src) => loadContent(p, src, origins.get(src.name)!, ctx).catch(() => undefined)));
-    const own = ownFolders(contents.filter((c): c is PackageContent => c !== undefined));
-    r.sources = {};
-    for (const src of sources) {
-      const on = src.kind !== 'project' || ON_FOR_NEW_RADIOS.includes(src.name) || (await anyExists(cardRoot, own.get(src.name) ?? []));
-      r.sources[src.name] = { on, origin: origins.get(src.name)! };
-    }
-    return true;
+  const before = JSON.stringify([r.sources, r.sounds]);
+  const empty = Object.keys(list.packages).length === 0;
+  const sources: Record<string, Choice> = {};
+  for (const src of updateSources(s)) {
+    const listed = list.packages[src.name];
+    const on = src.kind === 'sdcard' || !!listed || (empty && src.kind === 'sounds' && !!card.language);
+    sources[src.name] = { on, origin: listed?.origin ?? (await defaultOrigin(p, src)) };
   }
+  r.sources = sources;
+  const sounds = s.sources.find((x) => x.kind === 'sounds');
+  const listed = sounds ? list.packages[sounds.name] : undefined;
+  r.sounds = listed ? (listed.voices ?? card.soundLanguages ?? []) : card.language ? [card.language] : [];
+  return JSON.stringify([r.sources, r.sounds]) !== before;
+}
+
+// Sources the radio's choice doesn't know yet (added since the card was read) come in switched off.
+export async function ensureSelection(p: Paths, s: Settings, board: string): Promise<boolean> {
+  const r = (s.radios[board] ??= {});
+  const sel = (r.sources ??= {});
   let changed = false;
-  for (const src of sources) {
-    if (r.sources[src.name]) continue;
-    r.sources[src.name] = { on: false, origin: await defaultOrigin(p, src) };
-    (r.newSources ??= []).push(src.name);
+  for (const src of updateSources(s)) {
+    if (sel[src.name]) continue;
+    sel[src.name] = { on: src.kind === 'sdcard', origin: await defaultOrigin(p, src) };
     changed = true;
   }
   return changed;

@@ -26,6 +26,8 @@ npm run dist      # builds the installers for your own system into release/
 
 The app starts the server itself (on a free port) and shows the interface in its own window; links to GitHub open in the browser. The licenses of the bundled open source packages end up in `THIRD_PARTY_LICENSES.txt` in the app's resources folder.
 
+Before every release, run `node scripts/known-files.ts`. It looks for new versions of the SD content, the sounds, the built-in projects and the ELRS script. Versions already in `src/core/known-files.ts` are kept from there, so it downloads only new versions or files added to an old one, such as a new voice. If the file changes, the release must include it, so the app recognizes the new versions on an SD card.
+
 A new release is made with a tag: bump the version in `package.json`, then `git tag v<version> && git push origin v<version>`. The GitHub workflow `.github/workflows/release.yml` builds the app for macOS, Windows and Linux and attaches the files to the release: one zip per installer for download, the portable Windows app as a zip, and for the app's own update on Windows and Linux the bare installer, the AppImage and their `latest*.yml` files.
 
 ## Development workflow
@@ -45,6 +47,7 @@ To test without a real radio, `RADIO_MANAGER_VOLUMES` can point to one or more f
 - **Download**: new releases of all sources from GitHub, and for own projects also the newest commit of the main branch.
 - **Backup**: copies the whole SD card, including file times, into a folder; old backups are pruned.
 - **Restore**: compares the backup with the card by size and file time (small files also by content) and writes only what differs; files the backup does not have are deleted.
+- **Reading the card**: on first connect the app finds the version of every package on the card by comparing it with the checksums of all known versions (shipped in `src/core/known-files.ts` for EdgeTX 2.12 and newer and the built-in projects, plus those of later downloads in `Known/`). The best match wins: most unchanged files, then fewest missing or changed ones, then the newest. The result goes into `.radio-manager/installed.json` with size and file time per file, so later checks only read files that changed.
 - **Update**: compares the packages with the card; files changed on the card come up as conflicts instead of being overwritten.
 - **Models**: reads `MODELS/model<n>.yml` from the backups and the card and groups them by model name. Copying writes the model file unchanged with the current time, so the radio reads it again; `labels.yml` and `radio.yml` are never written, the radio adds missing labels itself. What fits the radio is checked against the switches, pots and internal module listed in its `RADIO/radio.yml`.
 - **Firmware**: radios with a UF2 bootloader get the firmware via the drive, all others via USB DFU (`dfu-util`). The method follows from the firmware file for the radio type.
@@ -57,5 +60,6 @@ To test without a real radio, `RADIO_MANAGER_VOLUMES` can point to one or more f
 - `src/cli/`: command line
 - `src/desktop/`: Electron main process, starts the server and shows the interface in its own window
 - `src/platform/`: drive detection, the only OS-specific part
+- `scripts/known-files.ts`: writes `src/core/known-files.ts`, the checksums of every version of the built-in packages; run it before every release (`node scripts/known-files.ts`, downloads only versions not in the file yet; `GITHUB_TOKEN` raises GitHub's request limit)
 - `scripts/licenses.ts`: collects the license texts of all bundled packages and runtime dependencies during the build (also holds the Vite plugin that lists the bundled modules)
 - `docs/`: this documentation, `docs/screenshots/` holds the screenshots in the README

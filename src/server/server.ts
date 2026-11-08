@@ -5,7 +5,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { extname, join, normalize, sep } from 'node:path';
 import { applyPlan, type Resolution } from '../core/apply.ts';
 import { backupCard, deleteBackup, isBackupName, listBackups, pruneBackups } from '../core/backup.ts';
-import { findCards, readCard, type RadioCard } from '../core/card.ts';
+import { findCards, MAX_CARD_NAME, readCard, setCardName, type RadioCard } from '../core/card.ts';
+import { checkCard } from '../core/initialize.ts';
 import { diffModels } from '../core/modeldiff.ts';
 import {
   applyCopy,
@@ -43,7 +44,7 @@ import { deleteVersion, localVersions, mainInfo, versionDir } from '../core/pack
 import { isSafeKey, isSafeName, type Paths } from '../core/paths.ts';
 import { isBelowMin, MIN_EDGETX, radioName, radioTypes } from '../core/radios.ts';
 import { applyRestore, planRestore } from '../core/restore.ts';
-import { ensureSelection } from '../core/selection.ts';
+import { ensureSelection, selectionFromCard } from '../core/selection.ts';
 import {
   findLocalRepos,
   forgetBackups,
@@ -52,7 +53,6 @@ import {
   rememberRadio,
   saveSettings,
   setBackupNote,
-  soundsOf,
   voiceLanguage,
   type BackupInfo,
   type Settings,
@@ -86,9 +86,11 @@ import {
   modelsView,
   packageViews,
   planView,
+  restoreOrigin,
   restorePlanView,
   stateView,
   voiceViews,
+  type CardCheckView,
 } from './views.ts';
 
 export interface ServerOptions {
@@ -259,6 +261,8 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
   // models of the backups, read once; model files imported on the models page, until closed or restarted
   const modelCache: ModelCache = new Map();
   const imports = new Map<string, ImportedFile>();
+  // reading each connected card in the background (checkCard), by volume; key: the card state it read
+  const checks = new Map<string, CardCheckView & { key: string }>();
 
   const send = (event: string, data: unknown) => {
     const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -274,28 +278,60 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     });
   const state = async () => {
     const appUpdate = o.appUpdates?.view();
-    return { ...(await stateView(p, s, cards, boards, busy)), ...(appUpdate ? { appUpdate } : {}) };
+    return { ...(await stateView(p, s, cards, boards, busy, checks)), ...(appUpdate ? { appUpdate } : {}) };
   };
   const pushState = async () => send('state', await state());
   const boardOf = (c: RadioCard) => c.board ?? boards.get(c.volume);
-  const ctxOf = (board: string) => ({ board, voices: soundsOf(s.radios[board]) });
 
   // Called for every newly seen card: note it and make sure it has a selection.
   const adopt = async (c: RadioCard) => {
     const board = boardOf(c);
     let changed = rememberRadio(s, c);
-    if (board) changed = (await ensureSelection(p, s, board, c.volume, ctxOf(board))) || changed;
+    if (board) changed = (await ensureSelection(p, s, board)) || changed;
     if (changed) await saveSettings(p, s);
+  };
+
+  // Reads a card once it is connected, and again after the list on it changed (an SD update, a restore).
+  // Backup and flashing go on meanwhile; SD update and restore wait for it.
+  const startCheck = (c: RadioCard) => {
+    const board = boardOf(c);
+    const key = JSON.stringify([board, c.installed?.updated ?? null]);
+    if (!board || checks.get(c.volume)?.key === key) return;
+    const entry: CardCheckView & { key: string } = { key, running: true, pending: new Set(s.sources.map((x) => x.name)) };
+    checks.set(c.volume, entry);
+    void checkCard(p, s, c, board, (name, list) => {
+      entry.pending.delete(name);
+      entry.list = list;
+      void pushState();
+    })
+      .then(async (r) => {
+        if (await selectionFromCard(p, s, board, c, r.list)) await saveSettings(p, s);
+        for (const x of cards) if (x.volume === c.volume) x.cardId = r.cardId; // known at once, not only after the next read
+        entry.states = r.states;
+        entry.key = JSON.stringify([board, r.list.updated]); // its own writing is no reason to read again
+      })
+      .catch((e: unknown) => console.error(`Reading ${c.volume}:`, errorInfo(e).message)) // tried again when connected again
+      .finally(() => {
+        entry.running = false;
+        void poll(true);
+      });
+  };
+  const checkingAt = (volume: string) => {
+    if (checks.get(volume)?.running ?? true) throw new HttpError(409, 'cardChecking');
   };
 
   let lastKey = '';
   const poll = oneAtATime(async (force) => {
     const now = await findCards(await listVolumes());
-    const key = JSON.stringify(now.map((c) => [c.volume, c.board, c.firmware, c.language, c.sdcardVersion, c.installed?.updated]));
+    const key = JSON.stringify(now.map((c) => [c.volume, c.board, c.firmware, c.language, c.sdcardVersion, c.installed?.updated, c.cardId, c.cardName]));
     if (key === lastKey && !force) return;
     lastKey = key;
     cards = now;
-    for (const c of cards) await adopt(c);
+    for (const v of checks.keys()) if (!cards.some((c) => c.volume === v)) checks.delete(v);
+    for (const c of cards) {
+      await adopt(c);
+      startCheck(c);
+    }
     await pushState();
   });
 
@@ -420,7 +456,10 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       if (!(await radioTypes(p, s)).some((r) => r.board === board)) throw new HttpError(400, 'unknownRadioType', { board });
       boards.set(volume, board);
       const c = cards.find((x) => x.volume === volume);
-      if (c) await adopt(c);
+      if (c) {
+        await adopt(c);
+        startCheck(c);
+      }
       await pushState();
     },
     'POST /api/radio/selection': async (req) => {
@@ -434,7 +473,6 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       const save = async () => {
         if (on !== undefined && src.kind !== 'sdcard') choice.on = on;
         if (origin) choice.origin = origin;
-        r.newSources = r.newSources?.filter((n) => n !== source);
         await saveSettings(p, s);
       };
       // Switching to main fetches the newest commit first when it isn't downloaded yet.
@@ -447,6 +485,13 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       }
       await save();
       await pushState();
+    },
+    'POST /api/radio/name': async (req) => {
+      const { volume, name } = await body<{ volume: string; name: string }>(req);
+      if (typeof name !== 'string' || name.trim().length > MAX_CARD_NAME) throw new HttpError(400, 'invalidRequest', { what: 'name' });
+      const [c] = await cardAt(volume);
+      await setCardName(c.volume, name);
+      await poll(true);
     },
     'POST /api/radio/sounds': async (req) => {
       const { board, sounds } = await body<{ board: string; sounds: string[] }>(req);
@@ -481,6 +526,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     'POST /api/update/plan': async (req) => {
       const { volume } = await body<{ volume: string }>(req);
       const [c, board] = await cardAt(volume);
+      checkingAt(volume);
       const setup = await prepareUpdate(p, s, c, board);
       if (setup.selectionChanged) await saveSettings(p, s);
       return planView(p, volume, board, c, setup);
@@ -488,6 +534,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     'POST /api/update/run': async (req) => {
       const { volume, resolutions } = await body<{ volume: string; resolutions: Record<string, Resolution> }>(req);
       const [c, board] = await cardAt(volume);
+      checkingAt(volume);
       if (c.firmware && isBelowMin(c.firmware)) throw new HttpError(400, 'firmwareTooOld', { version: c.firmware, min: MIN_EDGETX });
       return op('update', async (signal): Promise<UpdateResultView> => {
         const setup = await prepareUpdate(p, s, c, board);
@@ -509,11 +556,14 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     'POST /api/restore/plan': async (req) => {
       const { volume, board, name } = await body<{ volume: string; board: string; name: string }>(req);
       const c = await restoreCardAt(volume, board);
-      return restorePlanView(p, c, board, name, await planRestore(c.volume, p, board, name));
+      return await restorePlanView(p, c, board, name, await planRestore(c.volume, p, board, name));
     },
     'POST /api/restore/run': async (req) => {
-      const { volume, board, name, backupFirst } = await body<{ volume: string; board: string; name: string; backupFirst: boolean }>(req);
+      const { volume, board, name, backupFirst, otherCard } = await body<{ volume: string; board: string; name: string; backupFirst: boolean; otherCard?: boolean }>(req);
       const c = await restoreCardAt(volume, board);
+      checkingAt(volume);
+      if (!isBackupName(name)) throw new HttpError(400, 'invalidRequest', { what: 'backup' });
+      if (!otherCard && (await restoreOrigin(p, c, board, name)) === 'other') throw new HttpError(400, 'backupFromOtherCard');
       return op('restore', async (): Promise<RestoreResultView> => {
         const plan = await planRestore(c.volume, p, board, name);
         const b = backupFirst ? await runBackup(c, board, { reason: 'restore', restoredFrom: name }, name) : undefined;
@@ -659,7 +709,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       const { name, tag } = await body<{ name: string; tag: string }>(req);
       await deleteVersion(p, s, name, tag);
     },
-    'GET /api/backups': () => backupViews(p, s),
+    'GET /api/backups': () => backupViews(p, s, cards.map((c) => ({ board: boardOf(c), cardId: c.cardId, cardName: c.cardName }))),
     'POST /api/backups/keep': async (req) => {
       const { board, name, keep } = await body<{ board: string; name: string; keep: boolean }>(req);
       if (typeof board !== 'string' || !isSafeKey(board) || !isBackupName(name)) throw new HttpError(400, 'invalidRequest', { what: 'backup' });

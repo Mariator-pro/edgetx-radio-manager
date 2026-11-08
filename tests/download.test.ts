@@ -73,13 +73,11 @@ describe('wantedFiles', () => {
 });
 
 describe('rememberRadio', () => {
-  it('takes the sound languages from the card once and keeps chosen voices', () => {
+  it('notes language and firmware, and leaves the sounds to the reading of the card', () => {
     const s = settingsWith({});
-    expect(rememberRadio(s, { volume: '/v', board: 'tx15', language: 'en', soundLanguages: ['de', 'en'] })).toBe(true);
-    expect(s.radios.tx15).toEqual({ language: 'en', sounds: ['de', 'en'] });
-    s.radios.tx15!.sounds = ['de', 'en_gb-ryan'];
-    expect(rememberRadio(s, { volume: '/v', board: 'tx15', language: 'en', soundLanguages: ['de', 'en', 'fr'] })).toBe(false);
-    expect(s.radios.tx15!.sounds).toEqual(['de', 'en_gb-ryan']);
+    expect(rememberRadio(s, { volume: '/v', board: 'tx15', language: 'en', firmware: '2.12.5', soundLanguages: ['de', 'en'] })).toBe(true);
+    expect(s.radios.tx15).toEqual({ language: 'en', firmware: '2.12.5' });
+    expect(rememberRadio(s, { volume: '/v', board: 'tx15', language: 'en', firmware: '2.12.5', soundLanguages: ['de', 'en', 'fr'] })).toBe(false);
   });
 
   it('changes no other object for a card whose board is a name every object has', () => {

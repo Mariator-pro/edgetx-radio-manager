@@ -91,7 +91,7 @@ export function Sidebar(props: {
               >
                 <span className="size-2 shrink-0 rounded-full bg-green-400" aria-hidden="true" />
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="font-semibold">{r.name}</span>
+                  <span className="font-semibold">{r.label}</span>
                   <span className="truncate font-mono text-xs text-zinc-400">{r.board ?? t.typeUnknown}</span>
                 </span>
                 {r.updates.length > 0 && (

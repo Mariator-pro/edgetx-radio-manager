@@ -52,6 +52,17 @@ describe('planRestore', () => {
     expect(plan.items).toContainEqual({ path: 'SCRIPTS/TOOLS/tool.lua', action: 'replace' });
   });
 
+  it('leaves the card its own id and name, from whichever card the backup is', async () => {
+    const { card, p, name } = await setup();
+    const backup = join(p.backups, 'tx16s', name);
+    await writeTree(backup, { '.radio-manager/radio.json': '{"id":"other-card-1"}' });
+    await writeTree(card, { '.radio-manager/radio.json': '{"id":"this-card-1"}' });
+    const plan = await planRestore(card, p, 'tx16s', name);
+    expect(plan.items.map((i) => i.path)).not.toContain('.radio-manager/radio.json');
+    await applyRestore(card, plan);
+    expect(await readFile(join(card, '.radio-manager/radio.json'), 'utf8')).toBe('{"id":"this-card-1"}');
+  });
+
   it('refuses names that are no backup', async () => {
     const { card, p } = await setup();
     await expect(planRestore(card, p, 'tx16s', '../x')).rejects.toMatchObject({ code: 'invalidRequest' });

@@ -193,7 +193,7 @@ export function loadContent(p: Paths, source: Source, origin: Origin, ctx: Radio
 }
 
 // Card paths and checksums of downloaded versions, and checksums of card files by size and change time,
-// so detecting versions on every state update doesn't read packages and card again.
+// so comparing on every state update doesn't read packages and card again.
 const versionShas = new Map<string, { version: string; shas: Map<string, string> } | undefined>();
 const cardShas = new Map<string, string>();
 
@@ -244,28 +244,6 @@ async function onCardCount(volume: string, shas: Map<string, string>): Promise<{
     if (onDisk === sha) same++;
   }
   return { present, same };
-}
-
-export interface Detected {
-  onCard: boolean; // most files of some downloaded version are on the card
-  version?: string; // the version whose files are all there unchanged
-  origin?: Origin;
-  files?: Map<string, string>; // its card paths and checksums
-}
-
-// A project the tool didn't put on the card (copied by hand): the downloaded version whose files are all
-// there unchanged, the chosen origin tried first.
-export async function detectVersion(p: Paths, source: Source, volume: string, prefer: Origin): Promise<Detected> {
-  const list = (await candidates(p, source)).sort((a, b) => Number(b.origin === prefer) - Number(a.origin === prefer)); // stable: newest release first
-  let onCard = false;
-  for (const c of list) {
-    const v = await shasOf(p, source, c);
-    if (!v || v.shas.size === 0) continue;
-    const { present, same } = await onCardCount(volume, v.shas);
-    if (same === v.shas.size) return { onCard: true, version: v.version, origin: c.origin, files: v.shas };
-    if (present * 2 > v.shas.size) onCard = true;
-  }
-  return { onCard };
 }
 
 // True when the card already holds exactly the chosen version of a project: all its files unchanged, and no

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { findCards, installedVersion, parseRadioYml, readCard } from '../src/core/card.ts';
+import { cardLabel, ensureCardId, findCards, parseRadioYml, readCard, readIdentity, setCardName } from '../src/core/card.ts';
 import { isBelowMin, parseRadioTypes, radioName } from '../src/core/radios.ts';
 import { parseMounts } from '../src/platform/volumes.ts';
 import { SDCARD_JSON, tempDir, writeTree } from './helpers.ts';
@@ -91,10 +91,29 @@ describe('readCard', () => {
     await writeTree(root, { 'RADIO/radio.yml': 'board: tx16smk3\n', 'MODELS/x': '', 'edgetx.sdcard.version': '2.12.1\n' });
     const card = (await readCard(root))!;
     expect(card.sdcardVersion).toBe('2.12.1');
-    expect(installedVersion(card, 'edgetx-sdcard', 'sdcard')).toBe('v2.12.1');
-    expect(installedVersion(card, 'lipo-nanny', 'project')).toBeUndefined();
-    card.installed = { tool: 1, updated: '', packages: { 'edgetx-sdcard': { version: 'v2.12.3', origin: 'release' } }, files: {} };
-    expect(installedVersion(card, 'edgetx-sdcard', 'sdcard')).toBe('v2.12.3');
+  });
+
+  it('gives the card an id once and keeps it', async () => {
+    const root = await tempDir();
+    const id = await ensureCardId(root);
+    expect(id).toMatch(/^[\w-]{8,64}$/);
+    expect(await ensureCardId(root)).toBe(id);
+    expect(JSON.parse(await readFile(join(root, '.radio-manager', 'radio.json'), 'utf8'))).toEqual({ id });
+  });
+
+  it('keeps the id when the card gets a name, and calls a radio by name, else by type', async () => {
+    const root = await tempDir();
+    const id = await ensureCardId(root);
+    await setCardName(root, '  TX15\u0007 Wing  ');
+    expect(await readIdentity(root)).toEqual({ cardId: id, cardName: 'TX15 Wing' });
+    expect(await ensureCardId(root)).toBe(id);
+    expect((await readIdentity(root)).cardName).toBe('TX15 Wing');
+    await setCardName(root, '');
+    expect(await readIdentity(root)).toEqual({ cardId: id });
+
+    expect(cardLabel('RadioMaster TX15', { cardId: '3f9a1234-x', cardName: 'Wing' }, true)).toBe('Wing');
+    expect(cardLabel('RadioMaster TX15', { cardId: '3f9a1234-x' }, false)).toBe('RadioMaster TX15');
+    expect(cardLabel('RadioMaster TX15', { cardId: '3f9a1234-x' }, true)).toBe('RadioMaster TX15 · 3f9a');
   });
 
   it('finds the sound languages EdgeTX put on the card', async () => {

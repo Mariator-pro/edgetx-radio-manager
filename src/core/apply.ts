@@ -1,6 +1,6 @@
-import { mkdir, readdir, rename, rm, rmdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { LIST_FILE, type InstalledList, type ListedFile } from './card.ts';
+import { writeList, type InstalledList, type ListedFile } from './card.ts';
 import type { PackageContent } from './content.ts';
 import { AppError } from './errors.ts';
 import { isCardPath } from './paths.ts';
@@ -58,10 +58,14 @@ export async function applyPlan(
   const outside = plan.find((i) => !isCardPath(i.path));
   if (outside) throw new AppError('invalidRequest', { what: `path ${outside.path}` });
   const todo = plan.filter((i) => i.action !== 'unchanged');
+  const kept = new Set<string>();
   for (const [n, item] of todo.entries()) {
     if (signal?.aborted) throw new AppError('cancelled');
     const go = item.action !== 'conflict' || resolutions.get(item.path) === 'apply';
-    if (!go) result.kept++;
+    if (!go) {
+      result.kept++;
+      kept.add(item.path);
+    }
     else if (item.wanted) {
       await makeParent(root, item.path);
       await writeFile(join(root, item.path), item.wanted.data);
@@ -75,15 +79,19 @@ export async function applyPlan(
     }
     onProgress({ path: item.path, done: n + 1, total: todo.length });
   }
-  await writeList(root, plan, contents, held);
+  await writeList(root, await listAfter(root, plan, contents, held, kept));
   return result;
 }
 
-// Records every package file, kept conflicts included, so a changed file stays a conflict next time.
-async function writeList(root: string, plan: PlanItem[], contents: PackageContent[], held: ApplyInput['held']): Promise<void> {
+// Records every package file, kept conflicts included, so a changed file stays a conflict next time; with what is
+// on the card now, so the next check needn't read it again.
+async function listAfter(root: string, plan: PlanItem[], contents: PackageContent[], held: ApplyInput['held'], kept: Set<string>): Promise<InstalledList> {
   const files: Record<string, ListedFile> = { ...held?.files };
   for (const item of plan) {
-    if (item.wanted) files[item.path] = { sha256: item.wanted.sha, from: item.wanted.from, written: item.wanted.written };
+    if (!item.wanted) continue;
+    const st = await stat(join(root, item.path)).catch(() => undefined);
+    const seen = st?.isFile() ? { size: st.size, mtime: st.mtimeMs, same: !kept.has(item.path) } : undefined;
+    files[item.path] = { sha256: item.wanted.sha, from: item.wanted.from, written: item.wanted.written, size: item.wanted.data.length, ...(seen ? { seen } : {}) };
   }
   const list: InstalledList = {
     tool: 1,
@@ -94,8 +102,5 @@ async function writeList(root: string, plan: PlanItem[], contents: PackageConten
     },
     files,
   };
-  const path = join(root, LIST_FILE);
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(`${path}.tmp`, `${JSON.stringify(list, null, 1)}\n`);
-  await rename(`${path}.tmp`, path);
+  return list;
 }

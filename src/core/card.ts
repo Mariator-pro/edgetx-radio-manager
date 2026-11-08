@@ -1,14 +1,28 @@
-import { readdir, readFile, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { parse } from 'yaml';
 import { isCardPath, isSafeKey, printable } from './paths.ts';
 
 export const LIST_FILE = join('.radio-manager', 'installed.json');
+export const ID_FILE = join('.radio-manager', 'radio.json');
+export const ID_PATH = '.radio-manager/radio.json'; // as card paths are written in lists and plans
+export const MAX_CARD_NAME = 40;
+
+// Which SD card this is: its id, and the name given to it in the app.
+export interface CardIdentity {
+  cardId?: string;
+  cardName?: string;
+}
 
 export interface ListedFile {
   sha256: string;
   from: string[]; // every package that delivers this path
   written: string; // the package whose version is on the card
+  size?: number; // of the package's file
+  // the card's file when last checked: by size and change time the app sees it unchanged without reading it again;
+  // same: it was the package's file then. None: missing on the card, or not checked yet.
+  seen?: { size: number; mtime: number; same: boolean };
 }
 
 export interface InstalledList {
@@ -32,7 +46,7 @@ function isList(v: unknown): v is InstalledList {
   );
 }
 
-export interface RadioCard {
+export interface RadioCard extends CardIdentity {
   volume: string;
   board?: string;
   firmware?: string;
@@ -86,6 +100,7 @@ export async function readCard(volume: string): Promise<RadioCard | undefined> {
   const langs: string[] = [];
   for (const d of sounds) if (d.isDirectory() && (await isDir(join(volume, 'SOUNDS', d.name, 'SYSTEM')))) langs.push(d.name);
   if (langs.length > 0) card.soundLanguages = langs.sort();
+  Object.assign(card, await readIdentity(volume));
   const sd = (await readText(join(volume, 'edgetx.sdcard.version')))?.trim();
   if (sd) card.sdcardVersion = sd;
   const list = await readText(join(volume, LIST_FILE));
@@ -100,12 +115,52 @@ export async function readCard(volume: string): Promise<RadioCard | undefined> {
   return card;
 }
 
-// Installed version of a package: from the tool's list; SD content also from edgetx.sdcard.version
-// on cards the tool hasn't updated yet.
-export function installedVersion(card: RadioCard, name: string, kind: string): string | undefined {
-  const listed = card.installed?.packages[name]?.version;
-  if (listed || kind !== 'sdcard' || !card.sdcardVersion) return listed;
-  return card.sdcardVersion.startsWith('v') ? card.sdcardVersion : `v${card.sdcardVersion}`;
+// Writes the list in one go: a card pulled out midway keeps the old one.
+export async function writeList(root: string, list: InstalledList): Promise<void> {
+  const path = join(root, LIST_FILE);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(`${path}.tmp`, `${JSON.stringify(list, null, 1)}\n`);
+  await rename(`${path}.tmp`, path);
+}
+
+const cleanName = (name: string) => printable(name).trim().slice(0, MAX_CARD_NAME);
+
+// Id and name of a card or of a backup folder; none when it has no radio.json yet or an unreadable one.
+export async function readIdentity(root: string): Promise<CardIdentity> {
+  try {
+    const o = JSON.parse(await readFile(join(root, ID_FILE), 'utf8')) as { id?: unknown; name?: unknown };
+    const name = typeof o.name === 'string' ? cleanName(o.name) : '';
+    return { ...(typeof o.id === 'string' && /^[\w-]{8,64}$/.test(o.id) ? { cardId: o.id } : {}), ...(name ? { cardName: name } : {}) };
+  } catch {
+    return {};
+  }
+}
+
+async function writeIdentity(root: string, id: string, name?: string): Promise<void> {
+  const path = join(root, ID_FILE);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify({ id, ...(name ? { name } : {}) }, null, 1)}\n`);
+}
+
+// The card's own id, written once; it tells two radios of the same type apart.
+export async function ensureCardId(root: string): Promise<string> {
+  const have = await readIdentity(root);
+  if (have.cardId) return have.cardId;
+  const id = randomUUID();
+  await writeIdentity(root, id, have.cardName);
+  return id;
+}
+
+// Gives the card a name, or takes it away with an empty one.
+export async function setCardName(root: string, name: string): Promise<void> {
+  await writeIdentity(root, await ensureCardId(root), cleanName(name) || undefined);
+}
+
+// How the app calls a radio: its name; without one its type, with the start of its id when the app knows more SD
+// cards of that type.
+export function cardLabel(type: string, card: CardIdentity, severalOfType: boolean): string {
+  if (card.cardName) return card.cardName;
+  return severalOfType && card.cardId ? `${type} · ${card.cardId.slice(0, 4)}` : type;
 }
 
 export async function findCards(volumes: string[]): Promise<RadioCard[]> {

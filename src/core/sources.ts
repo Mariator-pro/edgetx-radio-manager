@@ -79,7 +79,6 @@ export function removeSource(s: Settings, name: string): boolean {
   s.sources = s.sources.filter((x) => x.name !== name || x.kind !== 'project');
   for (const r of Object.values(s.radios)) {
     if (r.sources) delete r.sources[name];
-    if (r.newSources) r.newSources = r.newSources.filter((n) => n !== name);
   }
   return s.sources.length < before;
 }
