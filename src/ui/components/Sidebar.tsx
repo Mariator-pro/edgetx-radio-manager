@@ -155,7 +155,7 @@ export function Sidebar(props: {
               <Select.Value />
               <Select.Indicator />
             </Select.Trigger>
-            <Select.Popover className="dark text-foreground">
+            <Select.Popover className="field-list dark text-foreground">
               <ListBox>
                 {LANGUAGES.map((l) => (
                   <ListBox.Item key={l.id} id={l.id} textValue={l.name}>

@@ -174,6 +174,7 @@ export function FlashFlow({ board, name, progress, onBack }: { board: string; na
           ) : (
             <div className="flex flex-wrap items-end gap-6">
               <Select
+                variant="secondary"
                 className="min-w-96"
                 selectedKey={tag ?? null}
                 isDisabled={phase === 'running' || busy}
@@ -184,7 +185,7 @@ export function FlashFlow({ board, name, progress, onBack }: { board: string; na
                   <Select.Value />
                   <Select.Indicator />
                 </Select.Trigger>
-                <Select.Popover placement="bottom start">
+                <Select.Popover className="field-list" placement="bottom start">
                   <ListBox>
                     {versions.map((v) => (
                       <ListBox.Item key={v} id={v} textValue={label(v)}>

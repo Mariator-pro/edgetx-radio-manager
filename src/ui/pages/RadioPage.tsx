@@ -188,6 +188,7 @@ function SoundsRow({ radio, run }: { radio: RadioView; run: Run }) {
                 <span className="text-sm font-medium">{name(lang)}</span>
                 {options.length > 1 && (
                   <Select
+                    variant="secondary"
                     className="w-36"
                     selectedKey={id}
                     aria-label={t.voiceFor(name(lang))}
@@ -197,7 +198,7 @@ function SoundsRow({ radio, run }: { radio: RadioView; run: Run }) {
                       <Select.Value />
                       <Select.Indicator />
                     </Select.Trigger>
-                    <Select.Popover>
+                    <Select.Popover className="field-list">
                       <ListBox>
                         {options.map((v) => (
                           <ListBox.Item key={v.id} id={v.id} textValue={v.label}>
@@ -215,6 +216,7 @@ function SoundsRow({ radio, run }: { radio: RadioView; run: Run }) {
           })}
           {addable.length > 0 && (
             <Select
+              variant="secondary"
               className="w-48"
               selectedKey={null}
               placeholder={t.addLanguage}
@@ -225,7 +227,7 @@ function SoundsRow({ radio, run }: { radio: RadioView; run: Run }) {
                 <Select.Value />
                 <Select.Indicator />
               </Select.Trigger>
-              <Select.Popover>
+              <Select.Popover className="field-list">
                 <ListBox>
                   {addable.map((l) => (
                     <ListBox.Item key={l} id={l} textValue={name(l)}>
@@ -319,13 +321,13 @@ function ChooseBoard({ radio, run }: { radio: RadioView; run: Run }) {
         <Card.Description>{t.noRadioYml}</Card.Description>
       </Card.Header>
       <Card.Content className="flex flex-wrap items-end gap-3">
-        <Select className="min-w-56" selectedKey={board ?? null} onSelectionChange={(k) => setBoard(k === null ? undefined : String(k))}>
+        <Select variant="secondary" className="min-w-56" selectedKey={board ?? null} onSelectionChange={(k) => setBoard(k === null ? undefined : String(k))}>
           <Label>{t.radioType}</Label>
           <Select.Trigger>
             <Select.Value />
             <Select.Indicator />
           </Select.Trigger>
-          <Select.Popover>
+          <Select.Popover className="field-list">
             <ListBox>
               {(boards ?? []).map((b) => (
                 <ListBox.Item key={b.board} id={b.board} textValue={b.name}>

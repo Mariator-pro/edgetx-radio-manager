@@ -180,6 +180,7 @@ export function ModelsPage({
         <div className="flex flex-wrap items-end gap-2">
           {view.sources.length > 0 && (
             <Select
+              variant="secondary"
               aria-label={t.modelsOf}
               className="w-56"
               selectedKey={view.source}
@@ -197,7 +198,7 @@ export function ModelsPage({
                 <Select.Value />
                 <Select.Indicator />
               </Select.Trigger>
-              <Select.Popover>
+              <Select.Popover className="field-list">
                 <ListBox>
                   {view.sources.map((b) => (
                     <ListBox.Item key={b.key} id={b.key} textValue={b.radio}>

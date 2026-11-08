@@ -16,3 +16,17 @@ body {
   background: var(--color-background);
   color: var(--color-foreground);
 }
+
+/* Lists that open from a grey field (the language in the sidebar) in that field's colour; their rows get a
+   lighter hover, which HeroUI's grey would hide. */
+.field-list {
+  background-color: var(--default);
+}
+.field-list .list-box-item:hover,
+.field-list .list-box-item[data-hovered='true'],
+.field-list .list-box-item[data-focus-visible='true'],
+.field-list .menu-item:hover,
+.field-list .menu-item[data-hovered='true'],
+.field-list .menu-item[data-focus-visible='true'] {
+  background-color: color-mix(in oklab, var(--default), var(--foreground) 8%);
+}
