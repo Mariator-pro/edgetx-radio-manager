@@ -89,7 +89,7 @@ export function ModelsFlow({ request, radio, progress, onBack }: { request: Mode
             {radio.board} · EdgeTX {radio.firmware}
           </span>
         </div>
-        <Button variant="ghost" size="sm" isDisabled={phase === 'running'} onPress={onBack}>
+        <Button variant="outline" size="sm" isDisabled={phase === 'running'} onPress={onBack}>
           {t.backToModels}
         </Button>
       </div>
@@ -211,7 +211,7 @@ export function ModelsFlow({ request, radio, progress, onBack }: { request: Mode
               <Button variant="outline" onPress={onBack}>
                 {t.back}
               </Button>
-              <Button isDisabled={(plan.confirm && !anyway) || planned !== modes} onPress={start}>
+              <Button variant={copying ? 'primary' : 'danger'} isDisabled={(plan.confirm && !anyway) || planned !== modes} onPress={start}>
                 {copying ? t.copyModels : t.deleteModels}
               </Button>
             </div>

@@ -70,7 +70,7 @@ export function RestoreFlow({ radio, name, progress, onBack }: { radio: RadioVie
             {radio.board} · EdgeTX {radio.firmware}
           </span>
         </div>
-        <Button variant="ghost" size="sm" isDisabled={phase === 'running'} onPress={onBack}>
+        <Button variant="outline" size="sm" isDisabled={phase === 'running'} onPress={onBack}>
           {t.backToBackups}
         </Button>
       </div>

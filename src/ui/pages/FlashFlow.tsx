@@ -114,7 +114,7 @@ export function FlashFlow({ board, name, progress, onBack }: { board: string; na
           <span className="text-sm text-muted">{t.flashFirmware}</span>
           <h1 className="m-0 text-3xl font-bold tracking-tight">{name}</h1>
         </div>
-        <Button variant="ghost" isDisabled={phase === 'running'} onPress={onBack}>
+        <Button variant="outline" size="sm" isDisabled={phase === 'running'} onPress={onBack}>
           {t.back}
         </Button>
       </div>
@@ -145,7 +145,7 @@ export function FlashFlow({ board, name, progress, onBack }: { board: string; na
                     {file.version ? t.fileFor(file.version, name) : t.fileUnknown} · {bytes(file.size)}
                   </span>
                 </span>
-                <Button variant="ghost" isDisabled={phase === 'running'} onPress={() => setFile(undefined)}>
+                <Button variant="outline" isDisabled={phase === 'running'} onPress={() => setFile(undefined)}>
                   {t.useDownloaded}
                 </Button>
               </div>
@@ -304,7 +304,7 @@ export function FlashFlow({ board, name, progress, onBack }: { board: string; na
 
           <div className="flex gap-2">
             {phase === 'running' ? (
-              <Button variant="outline" isDisabled={writing} onPress={() => void post('/api/cancel')}>
+              <Button variant="tertiary" isDisabled={writing} onPress={() => void post('/api/cancel')}>
                 {t.cancel}
               </Button>
             ) : (

@@ -5,6 +5,7 @@ import { get, post } from '../api.ts';
 import { backupLabel, bytes } from '../format.ts';
 import type { Texts } from '../texts.ts';
 import { usePrefs } from '../usePrefs.ts';
+import { type Ask, Confirm } from '../components/Confirm.tsx';
 
 type Run = (fn: () => Promise<unknown>) => void;
 
@@ -53,6 +54,7 @@ export function BackupsPage({
   const { t } = usePrefs();
   const [backups, setBackups] = useState<BackupView[]>();
   const [editing, setEditing] = useState<{ board: string; name: string; text: string }>();
+  const [ask, setAsk] = useState<Ask>();
   const volume = selected?.volume ?? '';
   const load = useCallback(() => get<BackupView[]>(`/api/backups?volume=${encodeURIComponent(volume)}`).then(setBackups, () => {}), [volume]);
   useEffect(() => {
@@ -132,7 +134,7 @@ export function BackupsPage({
                         </Button>
                         <Button
                           size="sm"
-                          variant="outline"
+                          variant="ghost"
                           isDisabled={!target || !!busy}
                           aria-describedby={target ? undefined : `needs-${b.board}`}
                           onPress={() => target && onRestore(target, i.name)}
@@ -141,16 +143,20 @@ export function BackupsPage({
                         </Button>
                         <Button
                           size="sm"
-                          variant="ghost"
+                          variant="danger-soft"
                           isDisabled={i.kept}
-                          onPress={() => {
-                            if (confirm(t.deleteBackup(backupLabel(i.name), b.radio))) {
-                              run(async () => {
-                                await post('/api/backups/delete', { board: b.board, name: i.name });
-                                await load();
-                              });
-                            }
-                          }}
+                          onPress={() =>
+                            setAsk({
+                              title: t.deleteBackup(backupLabel(i.name), b.radio),
+                              text: t.deleteBackupText,
+                              confirm: t.delete,
+                              then: () =>
+                                run(async () => {
+                                  await post('/api/backups/delete', { board: b.board, name: i.name });
+                                  await load();
+                                }),
+                            })
+                          }
                         >
                           {t.delete}
                         </Button>
@@ -189,7 +195,7 @@ export function BackupsPage({
                           <Button size="sm" type="submit">
                             {t.save}
                           </Button>
-                          <Button size="sm" variant="ghost" onPress={() => setEditing(undefined)}>
+                          <Button size="sm" variant="tertiary" onPress={() => setEditing(undefined)}>
                             {t.cancel}
                           </Button>
                         </form>
@@ -204,6 +210,7 @@ export function BackupsPage({
           </Card>
         );
       })}
+      {ask && <Confirm ask={ask} onClose={() => setAsk(undefined)} />}
     </div>
   );
 }

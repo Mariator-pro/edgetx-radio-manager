@@ -4,12 +4,14 @@ import type { PackageView } from '../../server/api.ts';
 import { get, post } from '../api.ts';
 import { bytes, date } from '../format.ts';
 import { usePrefs } from '../usePrefs.ts';
+import { type Ask, Confirm } from '../components/Confirm.tsx';
 
 type Run = (fn: () => Promise<unknown>) => void;
 
 export function PackagesPage({ run, refreshKey }: { run: Run; refreshKey: unknown }) {
   const { t } = usePrefs();
   const [packages, setPackages] = useState<PackageView[]>();
+  const [ask, setAsk] = useState<Ask>();
   const load = useCallback(() => get<PackageView[]>('/api/packages').then(setPackages, () => {}), []);
   useEffect(() => {
     void load();
@@ -46,14 +48,20 @@ export function PackagesPage({ run, refreshKey }: { run: Run; refreshKey: unknow
                     </span>
                     <Button
                       size="sm"
-                      variant="ghost"
+                      variant="danger-soft"
                       isDisabled={v.installedOn.length > 0}
-                      onPress={() => {
-                        if (confirm(t.deletePackage(p.name, v.tag))) run(async () => {
-                          await post('/api/packages/delete', { name: p.name, tag: v.tag });
-                          await load();
-                        });
-                      }}
+                      onPress={() =>
+                        setAsk({
+                          title: t.deletePackage(p.name, v.tag),
+                          text: t.deletePackageText,
+                          confirm: t.delete,
+                          then: () =>
+                            run(async () => {
+                              await post('/api/packages/delete', { name: p.name, tag: v.tag });
+                              await load();
+                            }),
+                        })
+                      }
                     >
                       {t.delete}
                     </Button>
@@ -64,6 +72,7 @@ export function PackagesPage({ run, refreshKey }: { run: Run; refreshKey: unknow
           </Card.Content>
         </Card>
       ))}
+      {ask && <Confirm ask={ask} onClose={() => setAsk(undefined)} />}
     </div>
   );
 }

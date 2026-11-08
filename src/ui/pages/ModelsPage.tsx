@@ -351,14 +351,14 @@ export function ModelsPage({
                               <div className="flex flex-wrap items-center gap-2 text-sm">
                                 <span className="text-muted">{t.compareWith}</span>
                                 {cardDiffers(e, i) && (
-                                  <Button size="sm" variant="outline" onPress={() => compare(e, i, 'card')}>
+                                  <Button size="sm" variant="ghost" onPress={() => compare(e, i, 'card')}>
                                     {t.theCard}
                                   </Button>
                                 )}
                                 {e.versions.map(
                                   (y, j) =>
                                     j !== i && (
-                                      <Button key={y.backup} size="sm" variant="outline" onPress={() => compare(e, i, j)}>
+                                      <Button key={y.backup} size="sm" variant="ghost" onPress={() => compare(e, i, j)}>
                                         {backupLabel(y.backup)}
                                       </Button>
                                     ),
@@ -398,10 +398,10 @@ export function ModelsPage({
         <div className="sticky bottom-0 -mx-7 -mb-7 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background/95 px-7 py-4 backdrop-blur">
           <span className="text-sm text-muted">{t.selectedCount(count)}</span>
           <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" isDisabled={!canExport} onPress={exportAll}>
+            <Button variant="outline" isDisabled={!canExport} onPress={exportAll}>
               {t.exportModels}
             </Button>
-            <Button variant="outline" isDisabled={!canDelete || !!state.busy} onPress={remove}>
+            <Button variant="danger-soft" isDisabled={!canDelete || !!state.busy} onPress={remove}>
               {t.deleteFromCard}
             </Button>
             <Button isDisabled={!canCopy || !!state.busy} onPress={copy}>

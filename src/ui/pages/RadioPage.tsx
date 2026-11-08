@@ -287,7 +287,7 @@ function RadioName({ radio, run }: { radio: RadioView; run: Run }) {
           <Input placeholder={t.namePlaceholder} maxLength={40} autoFocus />
         </TextField>
         <Button type="submit">{t.save}</Button>
-        <Button variant="ghost" onPress={() => setEditing(undefined)}>
+        <Button variant="tertiary" onPress={() => setEditing(undefined)}>
           {t.cancel}
         </Button>
       </div>

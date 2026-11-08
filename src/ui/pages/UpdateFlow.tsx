@@ -115,7 +115,7 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
             {radio.board} · EdgeTX {radio.firmware} · {radio.sounds.join(', ')}
           </span>
         </div>
-        <Button variant="ghost" size="sm" isDisabled={phase === 'running'} onPress={onBack}>
+        <Button variant="outline" size="sm" isDisabled={phase === 'running'} onPress={onBack}>
           {t.changeSources}
         </Button>
       </div>
@@ -273,7 +273,7 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
           <code className="truncate font-mono text-xs text-muted">{finishing ? '' : progress?.text}</code>
           <div>
             <Button
-              variant="outline"
+              variant="tertiary"
               isDisabled={cancelling || finishing}
               onPress={() => {
                 setCancelling(true);

@@ -1,5 +1,6 @@
 import { Button, Card, Chip, Input, Label, TextField } from '@heroui/react';
 import { useState } from 'react';
+import { type Ask, Confirm } from '../components/Confirm.tsx';
 import type { SourceCheckView, StateView } from '../../server/api.ts';
 import { errorText, post } from '../api.ts';
 import { date } from '../format.ts';
@@ -76,7 +77,7 @@ function AddSource({ state, run, volume }: { state: StateView; run: Run; volume?
               >
                 {t.add}
               </Button>
-              <Button variant="outline" onPress={() => setCheck(undefined)}>
+              <Button variant="tertiary" onPress={() => setCheck(undefined)}>
                 {t.cancel}
               </Button>
             </div>
@@ -148,6 +149,7 @@ function LocalRepos({ state }: { state: StateView }) {
 
 export function SourcesPage({ state, run, volume }: { state: StateView; run: Run; volume?: string }) {
   const { t } = usePrefs();
+  const [ask, setAsk] = useState<Ask>();
   return (
     <div className="flex flex-col gap-6">
       <h1 className="m-0 text-3xl font-bold tracking-tight">{t.sources}</h1>
@@ -187,13 +189,16 @@ export function SourcesPage({ state, run, volume }: { state: StateView; run: Run
                     {s.kind === 'project' && (
                       <Button
                         size="sm"
-                        variant="ghost"
+                        variant="danger-soft"
                         isDisabled={!!state.busy}
-                        onPress={() => {
-                          if (confirm(t.removeConfirm(s.name))) {
-                            run(() => post('/api/sources/remove', { name: s.name }));
-                          }
-                        }}
+                        onPress={() =>
+                          setAsk({
+                            title: t.removeConfirm(s.name),
+                            text: t.removeConfirmText,
+                            confirm: t.remove,
+                            then: () => run(() => post('/api/sources/remove', { name: s.name })),
+                          })
+                        }
                       >
                         {t.remove}
                       </Button>
@@ -207,6 +212,7 @@ export function SourcesPage({ state, run, volume }: { state: StateView; run: Run
       </Card>
       <LocalRepos key={state.localRepos ?? ''} state={state} />
       <AddSource state={state} run={run} volume={volume} />
+      {ask && <Confirm ask={ask} onClose={() => setAsk(undefined)} />}
     </div>
   );
 }

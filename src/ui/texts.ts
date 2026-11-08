@@ -195,7 +195,8 @@ const en = {
   colLocal: 'Local checkout',
   none: 'none',
   remove: 'Remove',
-  removeConfirm: (n: string) => `Remove ${n} from the sources? Its downloaded versions stay.`,
+  removeConfirm: (n: string) => `Remove ${n} from the sources?`,
+  removeConfirmText: 'Its downloaded versions stay. You can add the source again at any time.',
   localRepos: 'Local checkouts',
   localReposText:
     'Choose the folder that holds the Git checkouts of your projects, each in a folder named like its repo. For the projects in it, you can choose “Local” on a radio to try out changes before a version is out.',
@@ -209,6 +210,7 @@ const en = {
   onRadio: (b: string) => `on ${b}`,
   delete: 'Delete',
   deletePackage: (n: string, t: string) => `Delete ${n} ${t}?`,
+  deletePackageText: 'The app deletes the downloaded files of this version from this computer.',
 
   backupsText: (k: number) => `The app keeps the last ${k} backups of each radio and deletes older ones on its own. It never deletes backups marked “Keep”.`,
   openFolder: 'Open folder',
@@ -217,6 +219,7 @@ const en = {
   keep: 'Keep',
   show: 'Show',
   deleteBackup: (l: string, r: string) => `Delete the backup of the ${r} from ${l}?`,
+  deleteBackupText: 'You can’t restore it afterwards.',
   restore: 'Restore',
   restoreNeedsRadio: (r: string) => `connect the ${r} to restore its backups`,
   restoreChooseRadio: 'choose the radio in the sidebar to restore a backup onto it',

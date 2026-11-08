@@ -202,7 +202,8 @@ export const de: Texts = {
   colLocal: 'Lokales Repo',
   none: 'keiner',
   remove: 'Entfernen',
-  removeConfirm: (n) => `${n} aus den Quellen entfernen? Die heruntergeladenen Versionen bleiben erhalten.`,
+  removeConfirm: (n) => `${n} aus den Quellen entfernen?`,
+  removeConfirmText: 'Die heruntergeladenen Versionen bleiben erhalten. Du kannst die Quelle jederzeit wieder hinzufügen.',
   localRepos: 'Lokale Repos',
   localReposText:
     'Wähle den Ordner mit den Git-Repos deiner Projekte, jedes in einem Ordner mit dem Namen seines Repos. Für die Projekte darin kannst du bei einem Sender „Lokal“ wählen und Änderungen ausprobieren, bevor eine Version erscheint.',
@@ -216,6 +217,7 @@ export const de: Texts = {
   onRadio: (b) => `auf ${b}`,
   delete: 'Löschen',
   deletePackage: (n, t) => `${n} ${t} löschen?`,
+  deletePackageText: 'Die App löscht die heruntergeladenen Dateien dieser Version von diesem Rechner.',
 
   backupsText: (k) => `Die App behält von jedem Sender die letzten ${k} Backups und löscht ältere selbst. Mit „Behalten“ markierte Backups löscht sie nie.`,
   openFolder: 'Ordner öffnen',
@@ -224,6 +226,7 @@ export const de: Texts = {
   keep: 'Behalten',
   show: 'Anzeigen',
   deleteBackup: (l, r) => `Backup von ${r} vom ${l} löschen?`,
+  deleteBackupText: 'Danach kannst du es nicht mehr wiederherstellen.',
   restore: 'Wiederherstellen',
   restoreNeedsRadio: (r) => `Schließe den ${r} an, um seine Backups wiederherzustellen`,
   restoreChooseRadio: 'Wähle in der Seitenleiste den Sender, auf dem ein Backup wiederhergestellt werden soll',
