@@ -7,9 +7,9 @@ import { de } from './texts/de.ts';
 const en = {
   locale: 'en-US',
   nav: 'Navigation',
-  connected: 'Connected',
+  radioHeading: 'Radio',
   typeUnknown: 'type unknown',
-  noRadio: 'No radio connected. Connect it with a USB cable and choose “USB Storage” on the radio.',
+  noRadio: 'Connect the radio by USB and choose “USB Storage”.',
   overview: 'Overview',
   sources: 'Sources',
   packages: 'Packages',

@@ -3,9 +3,9 @@ import type { Texts } from '../texts.ts';
 export const de: Texts = {
   locale: 'de-DE',
   nav: 'Navigation',
-  connected: 'Verbunden',
+  radioHeading: 'Sender',
   typeUnknown: 'Typ unbekannt',
-  noRadio: 'Kein Sender verbunden. Schließe ihn per USB-Kabel an und wähle am Sender „USB-Speicher“.',
+  noRadio: 'Schließe den Sender per USB an und wähle „USB-Speicher“.',
   overview: 'Übersicht',
   sources: 'Quellen',
   packages: 'Pakete',

@@ -3,6 +3,7 @@ import type { ProgressEvent, StateView } from '../../server/api.ts';
 import { dateTime } from '../format.ts';
 import { LANGUAGES, type Lang } from '../texts.ts';
 import { usePrefs, type Theme } from '../usePrefs.ts';
+import { ConnectedRadios } from './ConnectedRadios.tsx';
 import { BackupsIcon, ModelsIcon, MoonIcon, PackagesIcon, RadioIcon, RefreshIcon, SettingsIcon, SourcesIcon, SunIcon } from './icons.tsx';
 
 export type Page = 'radio' | 'update' | 'flash' | 'sources' | 'packages' | 'backups' | 'restore' | 'models' | 'modelsFlow' | 'settings';
@@ -77,37 +78,37 @@ export function Sidebar(props: {
       )}
 
       <div className="flex flex-col gap-1.5">
-        <span className="px-2 text-[11px] font-medium tracking-wider text-zinc-400 uppercase">{t.connected}</span>
-        {state?.radios.length ? (
-          state.radios.map((r) => {
-            const active = (page === 'radio' || page === 'update') && volume === r.volume;
-            return (
-              <button
-                key={r.volume}
-                type="button"
-                onClick={() => onNavigate('radio', r.volume)}
-                aria-current={active ? 'page' : undefined}
-                className={`${item} ${active ? 'bg-zinc-800 text-white' : 'hover:bg-zinc-800/60'}`}
-              >
-                <span className="size-2 shrink-0 rounded-full bg-green-400" aria-hidden="true" />
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="font-semibold">{r.label}</span>
-                  <span className="truncate font-mono text-xs text-zinc-400">{r.board ?? t.typeUnknown}</span>
-                </span>
-                {r.updates.length > 0 && (
-                  <>
-                    <span className="rounded-full bg-amber-400 px-1.5 text-[11px] font-semibold text-zinc-900" aria-hidden="true">
-                      {r.updates.length}
-                    </span>
-                    <span className="sr-only">{t.updatesReady(r.updates.length)}</span>
-                  </>
-                )}
-              </button>
-            );
-          })
-        ) : (
-          <p className="m-0 px-2 text-sm text-zinc-400">{t.noRadio}</p>
-        )}
+        <span className="px-2 text-[11px] font-medium tracking-wider text-zinc-400 uppercase">{t.radioHeading}</span>
+        <ConnectedRadios radios={state?.radios} text={t.noRadio}>
+          {(radios) =>
+            radios.map((r) => {
+              const active = (page === 'radio' || page === 'update') && volume === r.volume;
+              return (
+                <button
+                  key={r.volume}
+                  type="button"
+                  onClick={() => onNavigate('radio', r.volume)}
+                  aria-current={active ? 'page' : undefined}
+                  className={`${item} ${active ? 'bg-zinc-800 text-white' : 'hover:bg-zinc-800/60'}`}
+                >
+                  <span className="size-2 shrink-0 rounded-full bg-green-400" aria-hidden="true" />
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="font-semibold">{r.label}</span>
+                    <span className="truncate font-mono text-xs text-zinc-400">{r.board ?? t.typeUnknown}</span>
+                  </span>
+                  {r.updates.length > 0 && (
+                    <>
+                      <span className="rounded-full bg-amber-400 px-1.5 text-[11px] font-semibold text-zinc-900" aria-hidden="true">
+                        {r.updates.length}
+                      </span>
+                      <span className="sr-only">{t.updatesReady(r.updates.length)}</span>
+                    </>
+                  )}
+                </button>
+              );
+            })
+          }
+        </ConnectedRadios>
       </div>
 
       <div className="flex flex-col gap-0.5">
