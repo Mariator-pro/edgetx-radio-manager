@@ -51,8 +51,10 @@ export function Sidebar(props: {
         <span className="flex size-[30px] items-center justify-center rounded-lg bg-accent text-white">
           <RadioIcon size={16} />
         </span>
-        <span className="font-semibold text-white">Radio Manager</span>
-        <span className="text-xs text-zinc-400">v{__APP_VERSION__}</span>
+        <span className="flex flex-col">
+          <span className="font-semibold whitespace-nowrap text-white">Radio Manager</span>
+          <span className="text-xs text-zinc-400">v{__APP_VERSION__}</span>
+        </span>
       </div>
 
       {appUpdate && (
