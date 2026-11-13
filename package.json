@@ -3,7 +3,7 @@
   "productName": "EdgeTX Radio Manager",
   "desktopName": "edgetx-radio-manager.desktop",
   "private": true,
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Backup, package download and SD card update for EdgeTX radios",
   "author": "Mariator-pro",
   "license": "MIT",
