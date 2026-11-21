@@ -100,8 +100,14 @@ export async function backupCard(
       const rel = relative(volume, f.path);
       const target = join(partial, rel);
       await mkdir(dirname(target), { recursive: true });
-      await copyFile(f.path, target);
-      await utimes(target, f.atime, f.mtime);
+      try {
+        await copyFile(f.path, target);
+        await utimes(target, f.atime, f.mtime);
+      } catch (e) {
+        // gone since it was listed (the app's own list is written through a temporary file), while the card is
+        // still there: it is no longer on the card, so not in the backup either
+        if ((e as NodeJS.ErrnoException).code !== 'ENOENT' || !(await stat(join(volume, 'RADIO')).catch(() => undefined))) throw e;
+      }
       bytesDone += f.size;
       onProgress({ file: rel, done: i + 1, total: files.length, bytesDone, bytesTotal });
     }

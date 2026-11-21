@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { readdirSync, rmSync } from 'node:fs';
 import { mkdir, readFile, readdir, stat, utimes } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -54,6 +54,23 @@ describe('backupCard', () => {
     const abort = new AbortController();
     await expect(backupCard(card, 'tx15', p, when, () => abort.abort(), abort.signal)).rejects.toMatchObject({ code: 'cancelled' });
     expect(await listBackups(p, 'tx15')).toEqual([]);
+  });
+
+  it('leaves out a file gone since it was listed, but not a card pulled', async () => {
+    const card = await tempDir();
+    const p = paths(await tempDir());
+    await writeTree(card, { 'RADIO/radio.yml': 'board: tx15\n', 'MODELS/a.yml': 'a', 'MODELS/b.yml': 'b', 'MODELS/c.yml': 'c' });
+    // like the app's list written through a temporary file while the card is backed up
+    const b = await backupCard(card, 'tx15', p, when, (pr) => {
+      if (pr.file.endsWith('a.yml')) rmSync(join(card, 'MODELS/b.yml'));
+    });
+    expect((await readdir(join(b.dir, 'MODELS'))).sort()).toEqual(['a.yml', 'c.yml']);
+    await writeTree(card, { 'MODELS/b.yml': 'b' });
+    await expect(
+      backupCard(card, 'tx15', p, new Date(2026, 9, 21, 15, 0), (pr) => {
+        if (pr.file.endsWith('a.yml')) rmSync(card, { recursive: true });
+      }),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('shows a backup only once complete, and drops one cut short', async () => {

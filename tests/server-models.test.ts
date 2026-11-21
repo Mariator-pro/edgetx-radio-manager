@@ -10,6 +10,7 @@ import {
   type ModelsPlanView,
   type ModelsResultView,
   type ModelsView,
+  type StateView,
 } from '../src/server/api.ts';
 import { startServer } from '../src/server/server.ts';
 import { tempDir, writeTree } from './helpers.ts';
@@ -23,8 +24,12 @@ let p = paths('');
 const call = (path: string, init: RequestInit & { headers?: Record<string, string> } = {}) =>
   fetch(url + path, { ...init, headers: { ...init.headers, [TOKEN_HEADER]: token } });
 const get = async <T>(path: string) => (await call(path)).json() as Promise<T>;
-const post = async <T>(path: string, body: unknown) =>
-  (await call(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json() as Promise<T>;
+// a refused request fails here with the server's answer, not later with a result that isn't one
+const post = async <T>(path: string, body: unknown) => {
+  const res = await call(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`);
+  return res.json() as Promise<T>;
+};
 
 const RADIO = 'semver: 2.12.5\nboard: tx15\nttsLanguage: "en"\ninternalModule: TYPE_CROSSFIRE\nswitchConfig:\n   SA:\n      type: 3POS\n';
 const model = (name: string, weight: number, bitmap = '') =>
@@ -39,6 +44,8 @@ beforeAll(async () => {
   url = s.url;
   token = s.token;
   close = s.close;
+  // the models of a card are known by its id, which the app takes once it has read the card
+  for (let i = 0; i < 500 && !(await get<StateView>('/api/state')).radios.every((r) => !r.checking); i++) await new Promise((r) => setTimeout(r, 10));
 });
 
 afterAll(() => {
