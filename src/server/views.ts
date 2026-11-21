@@ -153,7 +153,7 @@ export async function radioView(
     sounds: soundsOf(r),
     sources: radioSources,
     updates,
-    checking: !!check?.running,
+    checking: reading,
     lastBackup: backups[0],
     backups: backups.length,
   };
