@@ -23,6 +23,7 @@
     "src",
     "tests",
     "scripts",
+    "tools",
     "vite.config.ts",
     "vitest.config.ts"
   ],

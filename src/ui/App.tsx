@@ -202,6 +202,7 @@ export function App() {
           <RadioPage
             radio={radio}
             busy={state.busy}
+            progress={progress}
             keep={state.backupsToKeep}
             run={run}
             onPlan={() => {

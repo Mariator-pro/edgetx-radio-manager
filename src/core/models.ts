@@ -8,7 +8,6 @@ import { listBackups } from './backup.ts';
 import { cardGone } from './card.ts';
 import { AppError } from './errors.ts';
 import { isSafeName, printable, type Paths } from './paths.ts';
-import type { RadioType } from './radios.ts';
 import { readZipBuffer } from './zip.ts';
 
 // EdgeTX reads only MODELS/model<digits>.yml; anything else in MODELS/ is not a model to it.
@@ -303,7 +302,6 @@ export interface CopyItem {
   missing: { path: string; pkg?: string }[]; // files the model uses that the card lacks; not copied
   controls: string[]; // switches, pots and sliders the model uses that the radio doesn't have
   module?: { model: string; radio?: string };
-  screen?: { model: string; radio: string };
   newer?: { model: string; radio: string };
   receiver?: { id: number; models: string[] };
 }
@@ -346,7 +344,6 @@ export function controlsUsed(m: ModelFile, names?: string[]): string[] {
   return [...used].sort();
 }
 
-const screenOf = (types: RadioType[], board?: string) => types.find((t) => t.board === board)?.sdPackage.replace(/^c/, '');
 
 // "2.12.5" above "2.12.2"; parts that are missing count as 0.
 export function versionAbove(a: string, b: string): boolean {
@@ -466,7 +463,7 @@ const nextFree = (taken: Set<string>) => {
   for (let n = 1; ; n++) if (!taken.has(`model${n}.yml`)) return `model${n}.yml`;
 };
 
-export async function planCopy(card: CardState, requests: CopyRequest[], types: RadioType[] = []): Promise<CopyItem[]> {
+export async function planCopy(card: CardState, requests: CopyRequest[]): Promise<CopyItem[]> {
   const taken = new Set(card.models.map((m) => m.file.toLowerCase()));
   const replaced = new Set<string>();
   const items: CopyItem[] = [];
@@ -502,9 +499,6 @@ export async function planCopy(card: CardState, requests: CopyRequest[], types: 
     }
     const [internal] = modulesOf(m);
     if (internal?.type && internal.type !== hw.internalModule) item.module = { model: internal.type, ...(hw.internalModule ? { radio: hw.internalModule } : {}) };
-    const from = screenOf(types, r.origin.board);
-    const to = screenOf(types, hw.board);
-    if (from && to && from !== to) item.screen = { model: from, radio: to };
     if (m.semver && hw.firmware && versionAbove(m.semver, hw.firmware)) item.newer = { model: m.semver, radio: hw.firmware };
     const mods = modulesOf(m);
     for (const [i, mod] of mods.entries()) {
@@ -521,7 +515,7 @@ export async function planCopy(card: CardState, requests: CopyRequest[], types: 
 }
 
 // Whether the user has to confirm: the model uses hardware the radio may not have.
-export const doesntFit = (i: CopyItem) => i.controls.length > 0 || !!i.module || !!i.screen;
+export const doesntFit = (i: CopyItem) => i.controls.length > 0 || !!i.module;
 
 export interface ModelsResult {
   written: number;

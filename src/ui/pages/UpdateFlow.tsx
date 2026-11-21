@@ -36,9 +36,10 @@ function Conflict({ f, value, onChange }: { f: PlanFileView; value: Resolution; 
       </div>
       <code className="font-mono text-[13px]">{f.path}</code>
       <p className="m-0 text-sm text-warning-soft-foreground">
-        {t.reasons[f.reason!]} {t.from(f.pkg)}
+        {t.reasons[f.reason!](f.pkg)}
       </p>
       <RadioGroup
+        variant="secondary"
         aria-label={t.whatToDo(f.path)}
         value={value}
         onChange={(v) => onChange(v as Resolution)}
@@ -240,10 +241,7 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
             </section>
           )}
 
-          <div className="sticky bottom-0 -mx-7 -mb-7 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background/95 px-7 py-4 backdrop-blur">
-            <span className="text-sm text-muted">
-              {t.nextBackup} <code className="font-mono text-foreground">{plan.backupDir}</code>
-            </span>
+          <div className="sticky bottom-0 -mx-7 -mb-7 flex flex-wrap items-center justify-end gap-3 border-t border-border bg-background/95 px-7 py-4 backdrop-blur">
             <div className="flex gap-2">
               <Button variant="outline" onPress={onBack}>
                 {t.back}

@@ -37,9 +37,13 @@ export type KnownCatalog = Record<string, KnownSource>;
 
 export const SOUND_ZIP = /^edgetx-sdcard-sounds-(.+)-\d[\d.]*\.zip$/;
 
-// EdgeTX packages older than the app supports aren't compared with.
+// Oldest EdgeTX SD content and sounds the app recognizes on a card: one version below what it updates, so a
+// card from before the first update shows its real version.
+export const KNOWN_MIN = '2.11';
+
+// EdgeTX packages older than that aren't compared with.
 export function tooOld(source: Source, tag: string): boolean {
-  return (source.kind === 'sdcard' || source.kind === 'sounds') && isBelowMin(tag.replace(/^v/, ''));
+  return (source.kind === 'sdcard' || source.kind === 'sounds') && isBelowMin(tag.replace(/^v/, ''), KNOWN_MIN);
 }
 
 // The files of one downloaded version, by variant.

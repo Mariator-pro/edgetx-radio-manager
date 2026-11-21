@@ -27,6 +27,7 @@ export interface RadioSourceView {
   fixed: boolean; // SD content: always on
   installed?: string;
   checking?: boolean; // the app is still reading the card for this package
+  reading?: boolean; // the app is still reading the card: on and origin show the card, can't be changed yet
   missing?: string[]; // files of the installed version not on the card
   changed?: string[]; // files of the installed version changed on the card
   available?: string;
@@ -113,7 +114,6 @@ export interface PlanView {
   conflicts: PlanFileView[];
   missing: string[];
   luac: number; // stale .luac files that go away with written or deleted .lua files
-  backupDir: string; // where the backup before the update goes, home folder shortened to "~" outside Windows
 }
 
 export interface UpdateResultView {
@@ -134,7 +134,6 @@ export interface RestorePlanView {
   files: { path: string; action: RestoreAction }[];
   backupFirmware?: string; // EdgeTX version when the backup was made
   cardFirmware?: string;
-  backupDir: string; // where the backup before the restore goes
   origin: 'same' | 'other' | 'unknown'; // the backup is from this SD card, another one, or from before cards had an id
 }
 
@@ -203,7 +202,6 @@ export interface CopyItemView {
   missing: { path: string; pkg?: string }[];
   controls: string[];
   module?: { model: string; radio?: string };
-  screen?: { model: string; radio: string };
   newer?: { model: string; radio: string };
   receiver?: { id: number; models: string[] };
 }
@@ -221,7 +219,6 @@ export interface ModelsPlanView {
   copy: CopyItemView[];
   delete: DeleteItemView[];
   confirm: boolean; // some models don't fully fit the radio: "Copy anyway" first
-  backupDir: string;
 }
 
 export interface ModelsResultView {
@@ -338,7 +335,7 @@ export const FLASH_STEPS: Record<'uf2' | 'dfu', string[]> = {
     'Connect the USB cable. The radio shows up as a drive, and the app writes the firmware to it.',
   ],
   dfu: [
-    'Turn off the radio.',
+    'Unplug the USB cable, then turn off the radio. While it is connected, it stays on.',
     'Connect the USB cable while the radio stays off. It starts in DFU mode, and the screen stays dark.',
     'The app writes the firmware over USB, then the radio restarts.',
   ],

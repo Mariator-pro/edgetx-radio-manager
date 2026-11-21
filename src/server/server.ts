@@ -44,7 +44,8 @@ import {
 import { deleteVersion, localVersions, mainInfo, versionDir } from '../core/packages.ts';
 import { isSafeKey, isSafeName, type Paths } from '../core/paths.ts';
 import { isBelowMin, MIN_EDGETX, radioName, radioTypes } from '../core/radios.ts';
-import { applyRestore, planRestore } from '../core/restore.ts';
+import { applyRestore, planRestore, type RestorePlan } from '../core/restore.ts';
+import { cardChangedSince, cardSnapshot, type CardSnapshot } from '../core/snapshot.ts';
 import { ensureSelection, selectionFromCard } from '../core/selection.ts';
 import {
   findLocalRepos,
@@ -61,7 +62,7 @@ import {
   type Settings,
 } from '../core/settings.ts';
 import { addSource, checkSource, removeSource } from '../core/sources.ts';
-import { prepareUpdate } from '../core/update.ts';
+import { prepareUpdate, type UpdateSetup } from '../core/update.ts';
 import { listVolumes } from '../platform/volumes.ts';
 import {
   TOKEN_HASH,
@@ -267,6 +268,15 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
   const imports = new Map<string, ImportedFile>();
   // reading each connected card in the background (checkCard), by volume; key: the card state it read
   const checks = new Map<string, CardCheckView & { key: string }>();
+  // The plans as last shown, by card, with the card as it was then: confirming does exactly that plan.
+  const plans = new Map<string, { what: string; at: CardSnapshot; restore?: RestorePlan; update?: UpdateSetup; models?: Awaited<ReturnType<typeof modelsPlan>> }>();
+  // the plan shown for this request, while the card hasn't changed since
+  const shownPlan = async (volume: string, what: string) => {
+    const shown = plans.get(volume);
+    if (!shown || shown.what !== what) throw new HttpError(409, 'planGone');
+    if (await cardChangedSince(volume, shown.at)) throw new AppError('cardChangedSincePlan');
+    return shown;
+  };
 
   const send = (event: string, data: unknown) => {
     const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -433,10 +443,13 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     const card = await readCardState(c.volume);
     const requests: CopyRequest[] = [];
     for (const r of copy) requests.push({ ...(await resolveModel(r.ref)), ...(r.mode ? { mode: r.mode } : {}) });
-    const items = await planCopy(card, requests, await radioTypes(p, s));
+    const items = await planCopy(card, requests);
     const deletes = await planDelete(card, del);
     return { c, board, items, deletes, refs: copy.map((r) => r.ref) };
   };
+
+  // what a models plan was made for: the models, their versions and how each is copied
+  const modelsWhat = ({ copy = [], delete: del = [] }: ModelsBody) => JSON.stringify(['models', copy.map((r) => [r.ref, r.mode ?? null]), del]);
 
   const firmwareView = async (board: string): Promise<FirmwareView> => {
     const all = await localVersions(p, 'edgetx-firmware', !!s.firmwarePrereleases);
@@ -544,17 +557,19 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       const { volume } = await body<{ volume: string }>(req);
       const [c, board] = await cardAt(volume);
       checkingAt(volume);
+      const at = await cardSnapshot(c.volume);
       const setup = await prepareUpdate(p, s, c, board);
       if (setup.selectionChanged) await saveSettings(p, s);
-      return planView(p, volume, board, c, setup);
+      plans.set(volume, { what: 'update', at, update: setup });
+      return planView(volume, board, c, setup);
     },
     'POST /api/update/run': async (req) => {
       const { volume, resolutions } = await body<{ volume: string; resolutions: Record<string, Resolution> }>(req);
       const [c, board] = await cardAt(volume);
       checkingAt(volume);
       if (c.firmware && isBelowMin(c.firmware)) throw new HttpError(400, 'firmwareTooOld', { version: c.firmware, min: MIN_EDGETX });
+      const setup = (await shownPlan(volume, 'update')).update!;
       return op('update', async (signal): Promise<UpdateResultView> => {
-        const setup = await prepareUpdate(p, s, c, board);
         // cancelled: during the backup the card is untouched; while writing, the backup holds the state before
         // cancelled or the card pulled: the message names the backup that holds the state before
         const cancelled = (backup?: string) => (e: unknown) => {
@@ -576,7 +591,10 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     'POST /api/restore/plan': async (req) => {
       const { volume, board, name } = await body<{ volume: string; board: string; name: string }>(req);
       const c = await restoreCardAt(volume, board);
-      return await restorePlanView(p, c, board, name, await planRestore(c.volume, p, board, name));
+      const at = await cardSnapshot(c.volume);
+      const plan = await planRestore(c.volume, p, board, name);
+      plans.set(volume, { what: JSON.stringify(['restore', board, name]), at, restore: plan });
+      return await restorePlanView(p, c, board, name, plan);
     },
     'POST /api/restore/run': async (req) => {
       const { volume, board, name, backupFirst, otherCard } = await body<{ volume: string; board: string; name: string; backupFirst: boolean; otherCard?: boolean }>(req);
@@ -584,8 +602,8 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       checkingAt(volume);
       if (!isBackupName(name)) throw new HttpError(400, 'invalidRequest', { what: 'backup' });
       if (!otherCard && (await restoreOrigin(p, c, board, name)) === 'other') throw new HttpError(400, 'backupFromOtherCard');
+      const plan = (await shownPlan(volume, JSON.stringify(['restore', board, name]))).restore!;
       return op('restore', async (): Promise<RestoreResultView> => {
-        const plan = await planRestore(c.volume, p, board, name);
         const b = backupFirst ? await runBackup(c, board, { reason: 'restore', restoredFrom: name }, name) : undefined;
         const r = await applyRestore(c.volume, plan, (pr) =>
           progress({ op: 'restore', step: 'write', text: pr.path, done: pr.done, total: pr.total }),
@@ -629,12 +647,16 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       imports.delete(id);
     },
     'POST /api/models/plan': async (req) => {
-      const { c, board, items, deletes, refs } = await modelsPlan(await body<ModelsBody>(req));
-      return modelsPlanView(p, c.volume, board, items.map((i, n) => copyItemView(i, refs[n]!)), deletes, items.some(doesntFit));
+      const b = await body<ModelsBody>(req);
+      const at = await cardSnapshot((await cardAt(b.volume))[0].volume);
+      const planned = await modelsPlan(b);
+      plans.set(b.volume, { what: modelsWhat(b), at, models: planned });
+      const { c, board, items, deletes, refs } = planned;
+      return modelsPlanView(c.volume, board, items.map((i, n) => copyItemView(i, refs[n]!)), deletes, items.some(doesntFit));
     },
     'POST /api/models/run': async (req) => {
       const b = await body<ModelsBody & { backupFirst: boolean; force?: boolean }>(req);
-      const { c, board, items, deletes } = await modelsPlan(b);
+      const { c, board, items, deletes } = (await shownPlan(b.volume, modelsWhat(b))).models!;
       const misfits = items.filter(doesntFit);
       if (misfits.length > 0 && !b.force) throw new HttpError(400, 'modelsDontFit', { names: misfits.map((i) => i.name).join(', ') });
       return op('models', async (): Promise<ModelsResultView> => {

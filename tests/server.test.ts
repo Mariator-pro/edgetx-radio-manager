@@ -90,6 +90,11 @@ describe('server', () => {
     expect(wrong.status).toBe(400);
     expect(((await wrong.json()) as { code: string }).code).toBe('wrongRadioForBackup');
 
+    // "Restore" does the plan that was shown, so there has to be one
+    const noPlan = await call('/api/restore/run', { method: 'POST', body: JSON.stringify({ volume: card, board: 'tx16smk3', name: lastBackup, backupFirst: false }) });
+    expect(noPlan.status).toBe(409);
+    expect(((await noPlan.json()) as { code: string }).code).toBe('planGone');
+
     const plan = await post<RestorePlanView>('/api/restore/plan', { volume: card, board: 'tx16smk3', name: lastBackup });
     // the card got its list when the app first read it, before the update
     expect(plan.counts).toEqual({ add: 0, replace: 1, delete: 1 });
@@ -422,6 +427,7 @@ describe('two radios of the same type', () => {
       expect(await plan('2026-10-01_1200')).toBe('unknown');
       const refused = await req('/api/restore/run', { volume: radio, board: 'tx16smk3', name: made, backupFirst: false });
       expect(((await refused.json()) as { code: string }).code).toBe('backupFromOtherCard');
+      expect(await plan(made)).toBe('other'); // the plan shown last is the one that runs
       expect((await req('/api/restore/run', { volume: radio, board: 'tx16smk3', name: made, backupFirst: false, otherCard: true })).status).toBe(200);
       expect(JSON.parse(await readFile(join(radio, '.radio-manager', 'radio.json'), 'utf8'))).toMatchObject({ name: 'Mk3 Wing' });
     } finally {

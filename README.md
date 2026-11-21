@@ -1,4 +1,4 @@
-# EdgeTX Radio Manager
+# EdgeTX Radio Manager _(edgetx-radio-manager)_
 
 ![EdgeTX Radio Manager: firmware, SD card, models and backups in one place](docs/banner.png)
 
@@ -8,7 +8,17 @@ Desktop app for macOS, Windows and Linux, in English and German (English by defa
 
 ![The radio page: firmware, SD card and backup status of a connected RadioMaster TX15](docs/screenshots/radio.png)
 
-## What it does
+## 📚 Table of Contents
+
+- [What it does](#-what-it-does)
+- [Install](#-install)
+- [Usage](#-usage)
+- [Where packages come from](#-where-packages-come-from)
+- [Your data](#-your-data)
+- [More documentation](#-more-documentation)
+- [License](#-license)
+
+## 🎯 What it does
 
 - **Detects your radio** as soon as it is connected in "USB Storage" mode: radio type, language, firmware and what is installed on the SD card.
 - **Downloads updates** from GitHub: EdgeTX firmware, the EdgeTX SD card content, sounds, the ExpressLRS Lua script and any Lua project you add.
@@ -19,7 +29,7 @@ Desktop app for macOS, Windows and Linux, in English and German (English by defa
 
 Every radio that EdgeTX supports works: radio types and SD card content come straight from the EdgeTX release.
 
-## Install
+## 📥 Install
 
 Download the app from the [Releases](https://github.com/Mariator-pro/edgetx-radio-manager/releases) page:
 
@@ -40,7 +50,7 @@ On start the app looks for a newer release and shows it at the top left:
 
 - **Windows (installed) and Linux**: "Update" downloads the new version, installs it in place and starts it again. Your data and settings stay.
 - **Windows (portable)**: "Download" opens the release page; unzip the new version and delete the old folder.
-- **macOS**: "Download" opens the release page. Install the new version like the first one; the app replaces the old one in Applications. macOS accepts an in-place update only for apps signed with an Apple certificate, which this one is not.
+- **macOS**: "Download" opens the release page. Install the new version like the first one, including "Open Anyway" in System Settings (macOS asks again for every new version); the app replaces the old one in Applications. macOS accepts an in-place update only for apps signed with an Apple certificate, which this one is not.
 
 ### Only for radios that flash over DFU
 
@@ -55,7 +65,7 @@ Radios with a UF2 bootloader (for example RadioMaster TX15 and TX16S Mk III) get
   sudo udevadm control --reload-rules
   ```
 
-## Using it
+## ✨ Usage
 
 ### 1. Connect the radio
 
@@ -63,7 +73,7 @@ Switch the radio on, plug in the USB cable and choose "USB Storage" on the radio
 
 The first time, the app reads the SD card: for every package it finds the version on the card, also when another tool put it there, and marks it "+ custom" when files of that version are missing or changed. Click "+ custom" to see which. If you have two radios of the same type, "Rename" next to the radio's name gives each its own name; the app stores it on the SD card. Until reading is done (about a minute per sound language over USB), the SD update and restoring a backup wait; backups and flashing work meanwhile.
 
-Below them are the sources on this radio. Each time you connect it, they show what its SD card holds: the packages on it are switched on, with the sound languages and voices on the card. An empty SD card starts with the sounds of the radio's voice language. Switch on more sources, add languages or pick another voice, and the next SD update puts them on the card; switching a source off removes it. Choices not yet written to the card are gone when you connect the radio again. For your own projects you also pick where they come from (see [Where packages come from](#where-packages-come-from)).
+Below them are the sources on this radio. Each time you connect it, they show what its SD card holds: the packages on it are switched on, with the sound languages and voices on the card. An empty SD card starts with the sounds of the radio's voice language. Switch on more sources, add languages or pick another voice, and the next SD update puts them on the card; switching a source off removes it. Choices not yet written to the card are gone when you connect the radio again. For your own projects you also pick where they come from (see [Where packages come from](#-where-packages-come-from)).
 
 ### 2. Check for updates
 
@@ -75,9 +85,9 @@ Below them are the sources on this radio. Each time you connect it, they show wh
 
 ![The update plan with counts of new, replaced and deleted files and one conflict](docs/screenshots/update.png)
 
-Files that you changed on the SD card, or that did not come from a package, show up as **conflicts**. You decide per file whether to keep it or overwrite it. If you don't choose, it stays as it is. Models, settings and files you copied yourself are never touched.
+Files that you changed on the SD card, or that did not come from a package, show up as **conflicts**. You decide per file whether to keep it or overwrite it. If you don't choose, it stays as it is. An older released version of a package file is no conflict, it is replaced like any update. Models, settings and files you copied yourself are never touched.
 
-"Back up and update" first copies the whole SD card into a backup, then writes the changes.
+"Back up and update" first copies the whole SD card into a backup, then writes exactly the changes the plan showed. If the SD card changed in the meantime, the app writes nothing and asks you to open the plan again. The same goes for restoring a backup and for copying or deleting models.
 
 ### 4. Flash firmware
 
@@ -104,7 +114,7 @@ The "Backups" page lists the backups per radio type. Each backup shows which rad
 
 "Restore" brings the SD card back to exactly the state of that backup: changed and missing files come back, files added since then are deleted. It works only while a radio of the same type is connected. A backup from another SD card, for example of your second radio of that type or from before you replaced the card, goes back only after "Restore anyway"; the SD card always keeps its own name. Before anything is written, the app shows the plan with every file, and points out when the backup was made with a different EdgeTX version than the one on the radio. "Back up the SD card first" is on by default, so a restore can be undone as well.
 
-![The backups page with backups of two radios](docs/screenshots/backups.png)
+![The backups page with backups of three radios](docs/screenshots/backups.png)
 
 The "Packages" page lists every downloaded version. Nothing there is deleted automatically, and versions installed on a radio cannot be deleted.
 
@@ -112,11 +122,11 @@ The "Packages" page lists every downloaded version. Nothing there is deleted aut
 
 The "Models" page lists the models in the backups of a radio; with two radios of the same type, each has its own entry in the list at the top. Each model shows its picture, labels, EdgeTX version and whether the radio chosen in the sidebar has it: "on the SD card", "on the SD card, changed" or "not on the SD card". Open a model to see its earlier versions (each different state in the backups is one version) and pick the one you want. "Compare" lists what differs between two versions, or between a version and the model on the SD card, grouped like the radio's model menus. Models that are on the SD card but in no backup yet show up as "only on the SD card".
 
-![The models page with the models of a RadioMaster TX15, one of them opened to its two versions](docs/screenshots/models.png)
+![The models page with the models of a RadioMaster TX15, one of them opened to its versions](docs/screenshots/models.png)
 
 Tick one or more models, then:
 
-- **Copy to** puts them onto the connected radio. Only these models change; all other models and the radio settings stay as they are. A model with the same name on the SD card is replaced (you can switch to "Add as new model" instead), any other model is added under the next free number. The model picture and its checklist come along. The plan shows what does not come along (Lua scripts, voice files and widgets the model uses but the SD card lacks, with the package to switch on), and what does not fit when the model comes from another radio type: switches, pots or sliders the radio does not have, another internal module or another screen size. Such models are copied unchanged only after choosing "Copy anyway"; adjust them on the radio.
+- **Copy to** puts them onto the connected radio. Only these models change; all other models and the radio settings stay as they are. A model with the same name on the SD card is replaced (you can switch to "Add as new model" instead), any other model is added under the next free number. The model picture and its checklist come along. The plan shows what does not come along (Lua scripts, voice files and widgets the model uses but the SD card lacks, with the package to switch on), and what does not fit when the model comes from another radio type: switches, pots or sliders the radio does not have, or another internal module. Such models are copied unchanged only after choosing "Copy anyway"; adjust them on the radio.
 - **Delete from SD card** moves them to `MODELS/DELETED/` on the SD card, like the radio does, so you can get them back.
 - **Export** saves each model as `<model name>.yml`.
 
@@ -126,9 +136,9 @@ To bring models onto a new SD card, put the card into the radio once (or create 
 
 ### 8. Settings
 
-The Settings page shows the [data folder](#your-data-on-the-computer) with "Open folder", and under "About" the version, a link to the app's MIT license and its source code, and "Show licenses" with the licenses of all open source packages inside the app.
+The Settings page shows the [data folder](#-your-data) with "Open folder", and under "About" the version, a link to the app's MIT license and its source code, and "Show licenses" with the licenses of all open source packages inside the app.
 
-## Where packages come from
+## 📦 Where packages come from
 
 For every radio the app stores which sources go on the SD card and where they come from:
 
@@ -148,7 +158,7 @@ What is installed is recorded in `.radio-manager/installed.json` on the SD card,
 - Git is installed and in the `PATH`, because the app runs `git` to read the files and the state of the checkout. The git inside GitHub Desktop is not enough, other apps can't find it.
 - Only files that git tracks go on the SD card, with their changes in the folder whether committed or not. A new file goes on the card once you add it with `git add`.
 
-## Your data on the computer
+## 💾 Your data
 
 Settings, downloads and backups live where apps keep their data on each system ("Open folder" on the Settings page shows it):
 
@@ -166,7 +176,7 @@ EdgeTX Radio Manager/
 
 On macOS the desktop app keeps its window data (language, theme) in the same folder, on Windows next to it in `%APPDATA%\EdgeTX Radio Manager\`, on Linux in `~/.config/EdgeTX Radio Manager/`.
 
-## More documentation
+## 📖 More documentation
 
 You do not need any of this to use the app. It is for those who want to go further:
 
@@ -174,6 +184,6 @@ You do not need any of this to use the app. It is for those who want to go furth
 - [Command line](docs/command-line.md): most functions of the app as commands, e.g. for scripts
 - [Development](docs/development.md): running from source, building the app, making a release and how it works inside
 
-## License
+## 📄 License
 
 Released under the [MIT License](LICENSE). The app bundles open source packages under their own licenses, listed under Settings, About, "Show licenses" and in `THIRD_PARTY_LICENSES.txt` in the app's resources folder. Electron's own license files (`LICENSE.electron.txt`, `LICENSES.chromium.html`) are in the same folder on macOS and in the app folder on Windows and Linux.

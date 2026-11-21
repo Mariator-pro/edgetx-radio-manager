@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, readFile, rm, stat, utimes } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, rename, rm, stat, utimes } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { isAppleDouble, SYSTEM_DIRS } from './appledouble.ts';
 import { ensureCardId, parseRadioYml, readIdentity } from './card.ts';
@@ -10,6 +10,11 @@ const skip = (name: string) => SYSTEM_DIRS.has(name) || isAppleDouble(name);
 
 const BACKUP_NAME = /^\d{4}-\d{2}-\d{2}_\d{4}(_\d+)?$/;
 export const isBackupName = (name: string) => BACKUP_NAME.test(name);
+
+// A backup is written under this name and gets its own only when complete, so one cut short (the app quit, the
+// card pulled) never shows up as a backup.
+const PARTIAL = /^\..+\.partial$/;
+const partialName = (name: string) => `.${name}.partial`;
 
 export interface BackupProgress {
   file: string;
@@ -78,25 +83,33 @@ export async function backupCard(
   const cardId = await ensureCardId(volume);
   const base = join(p.backups, board);
   await mkdir(base, { recursive: true });
+  // left over from a backup cut short
+  for (const e of await readdir(base, { withFileTypes: true })) {
+    if (e.isDirectory() && PARTIAL.test(e.name)) await rm(join(base, e.name), { recursive: true, force: true });
+  }
   const name = await freeName(base, backupName(now));
   const dir = join(base, name);
+  const partial = join(base, partialName(name));
   const files = await listFiles(volume);
   const bytesTotal = files.reduce((n, f) => n + f.size, 0);
   let bytesDone = 0;
-  await mkdir(dir);
-  for (const [i, f] of files.entries()) {
-    // a cancelled backup is incomplete, so it is not kept
-    if (signal?.aborted) {
-      await rm(dir, { recursive: true, force: true });
-      throw new AppError('cancelled');
+  await mkdir(partial);
+  try {
+    for (const [i, f] of files.entries()) {
+      if (signal?.aborted) throw new AppError('cancelled');
+      const rel = relative(volume, f.path);
+      const target = join(partial, rel);
+      await mkdir(dirname(target), { recursive: true });
+      await copyFile(f.path, target);
+      await utimes(target, f.atime, f.mtime);
+      bytesDone += f.size;
+      onProgress({ file: rel, done: i + 1, total: files.length, bytesDone, bytesTotal });
     }
-    const rel = relative(volume, f.path);
-    const target = join(dir, rel);
-    await mkdir(dirname(target), { recursive: true });
-    await copyFile(f.path, target);
-    await utimes(target, f.atime, f.mtime);
-    bytesDone += f.size;
-    onProgress({ file: rel, done: i + 1, total: files.length, bytesDone, bytesTotal });
+    await rename(partial, dir);
+  } catch (e) {
+    // incomplete, so not kept
+    await rm(partial, { recursive: true, force: true });
+    throw e;
   }
   return { dir, name, files: files.length, bytes: bytesTotal, cardId };
 }

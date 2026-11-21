@@ -1,6 +1,7 @@
 import type { InstalledList, RadioCard } from './card.ts';
 import { loadContent, type PackageContent } from './content.ts';
 import { AppError } from './errors.ts';
+import { knownVersions } from './known.ts';
 import type { Paths } from './paths.ts';
 import { makePlan, mergePackages, type PlanItem, type Wanted } from './plan.ts';
 import { ensureSelection, updateSources } from './selection.ts';
@@ -21,6 +22,17 @@ function holdMissing(list: InstalledList, wanted: Map<string, Wanted>, missing: 
   for (const [name, entry] of Object.entries(list.packages)) if (missing.has(name)) held.packages[name] = entry;
   for (const [path, f] of Object.entries(list.files)) if (!wanted.has(path) && f.from.some((n) => missing.has(n))) held.files[path] = f;
   return held;
+}
+
+// Per path the content of every version the app knows of any package, and of the ones about to be written.
+async function releasedFiles(p: Paths, s: Settings, contents: PackageContent[]): Promise<Map<string, Set<string>>> {
+  const out = new Map<string, Set<string>>();
+  const add = (path: string, sha: string) => (out.get(path) ?? out.set(path, new Set()).get(path)!).add(sha);
+  for (const src of updateSources(s)) {
+    for (const v of await knownVersions(p, src)) for (const files of v.variants.values()) for (const [path, f] of files) add(path, f.sha);
+  }
+  for (const c of contents) for (const [path, f] of c.files) add(path, f.sha);
+  return out;
 }
 
 // Everything an SD update of this card would do, without touching the card. The card must have been checked
@@ -48,7 +60,7 @@ export async function prepareUpdate(p: Paths, s: Settings, card: RadioCard, boar
   const wanted = mergePackages(contents);
   const held = holdMissing(list, wanted, unavailable);
   const planned = { ...list, files: Object.fromEntries(Object.entries(list.files).filter(([path]) => !held.files[path])) };
-  const plan = await makePlan(card.volume, wanted, planned);
+  const plan = await makePlan(card.volume, wanted, planned, await releasedFiles(p, s, contents));
   // Switched off means removed; switched on but not available leaves the card's version alone.
   const changes: PackageChange[] = [];
   for (const src of updateSources(s)) {

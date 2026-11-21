@@ -207,9 +207,9 @@ async function runBackup(p: Paths, s: Settings, card: RadioCard, board: string, 
 }
 
 const REASONS = {
-  modified: 'changed on the SD card since the last update',
+  modified: 'matches no known version of its package, you may have changed it',
   unknown: 'a file from somewhere else is already there',
-  'removed-modified': 'no package has it any more, but it changed on the SD card',
+  'removed-modified': 'no package has it any more, and it matches no known version',
 };
 
 // Asks per conflict; Enter keeps the card's file.
@@ -439,7 +439,6 @@ function printCopy(items: CopyItem[], from: (i: CopyItem) => string): void {
     for (const f of i.missing) console.log(`  Not copied, missing on the SD card: ${f.path}${f.pkg ? ` (turn on ${f.pkg} for this radio)` : ''}`);
     if (i.controls.length) console.log(`  Not on this radio: ${i.controls.join(', ')}`);
     if (i.module) console.log(`  Internal module: the model uses ${i.module.model}, the radio has ${i.module.radio ?? 'none'}`);
-    if (i.screen) console.log(`  Screen: made for ${i.screen.model}, the radio has ${i.screen.radio}`);
     if (i.newer) console.log(`  Saved with EdgeTX ${i.newer.model}, the radio runs ${i.newer.radio}`);
     if (i.receiver) console.log(`  Receiver number ${i.receiver.id} is also used by ${i.receiver.models.join(', ')}`);
   }
@@ -488,7 +487,7 @@ async function modelsCopy(p: Paths, s: Settings, names: string[], o: ModelOpts):
     requests.push(r);
     sources.set(r, `${from.board} ${backup}`);
   }
-  const items = await planCopy(state, requests, await radioTypes(p, s));
+  const items = await planCopy(state, requests);
   console.log(`${radioName(await radioTypes(p, s), board)} at ${card.volume}`);
   printCopy(items, (i) => sources.get(requests[items.indexOf(i)]!)!);
   await runModels(p, s, card, board, items, [], o);
@@ -510,7 +509,6 @@ async function modelsImport(p: Paths, s: Settings, file: string | undefined, nam
   const items = await planCopy(
     await readCardState(card.volume),
     chosen.map((model) => ({ model, origin: f.origin, ...(o.add ? { mode: 'add' as const } : {}) })),
-    await radioTypes(p, s),
   );
   console.log(`${radioName(await radioTypes(p, s), board)} at ${card.volume}`);
   printCopy(items, () => basename(file));

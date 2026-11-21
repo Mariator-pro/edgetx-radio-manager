@@ -92,6 +92,10 @@ export async function loadSettings(p: Paths): Promise<Settings> {
     if (r.voice && !r.sounds) r.sounds = [r.voice];
     delete r.voice;
   }
+  // one entry per SD card: an entry by radio type alone (from before cards had ids) goes once a card of the type has its own
+  for (const key of Object.keys(s.radios)) {
+    if (!key.includes('/') && Object.keys(s.radios).some((k) => k.startsWith(`${key}/`))) delete s.radios[key];
+  }
   // default sources added in a later version reach existing settings once
   const known = new Set(saved.knownDefaults ?? s.sources.map((x) => x.name));
   for (const d of DEFAULT_SOURCES) {
@@ -143,9 +147,14 @@ export function forgetBackups(s: Settings, board: string, names: string[]): void
 export const radioKey = (board: string, cardId?: string) => (cardId ? `${board}/${cardId}` : board);
 export const boardOfKey = (key: string) => key.split('/')[0]!;
 
-// The settings of one SD card, made when missing.
+// The settings of one SD card, made when missing. A card that just got its id takes over the entry it had without one.
 export function radioOf(s: Settings, board: string, cardId?: string): RadioSettings {
-  return (s.radios[radioKey(board, cardId)] ??= {});
+  const key = radioKey(board, cardId);
+  if (!s.radios[key] && cardId && s.radios[board]) {
+    s.radios[key] = s.radios[board];
+    delete s.radios[board];
+  }
+  return (s.radios[key] ??= {});
 }
 
 // The firmware last seen on a radio of this type.

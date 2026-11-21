@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { backupCard } from '../src/core/backup.ts';
 import { paths } from '../src/core/paths.ts';
 import { applyRestore, planRestore } from '../src/core/restore.ts';
+import { cardChangedSince, cardSnapshot } from '../src/core/snapshot.ts';
 import { tempDir, writeTree } from './helpers.ts';
 
 const when = new Date(2026, 9, 21, 14, 30);
@@ -41,6 +42,21 @@ describe('planRestore', () => {
     expect(by('delete')).toEqual(['NEW.txt', 'WIDGETS/New/img/a.png', 'WIDGETS/New/main.lua']);
     expect(plan.unchanged).toBe(1);
     expect(plan.firmware).toBe('2.12.3');
+  });
+
+  it('tells whether the card changed since the plan, without reading the files', async () => {
+    const { card } = await setup();
+    const plan = await cardSnapshot(card);
+    expect(await cardChangedSince(card, plan)).toBe(false);
+    // the card's own id doesn't count, the app may write it meanwhile
+    await writeTree(card, { '.radio-manager/radio.json': '{"id":"this-card-1"}' });
+    expect(await cardChangedSince(card, plan)).toBe(false);
+    await writeTree(card, { 'MODELS/model02.yml': 'name: new\n' });
+    expect(await cardChangedSince(card, plan)).toBe(true);
+    await rm(join(card, 'MODELS/model02.yml'));
+    expect(await cardChangedSince(card, plan)).toBe(false);
+    await writeTree(card, { 'MODELS/model00.yml': 'name: edited on the radio\n' });
+    expect(await cardChangedSince(card, plan)).toBe(true);
   });
 
   it('compares small files by content when size and time match', async () => {

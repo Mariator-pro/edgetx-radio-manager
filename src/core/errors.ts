@@ -23,6 +23,8 @@ export const ERRORS = {
   backupNotFound: (p: { name: string }) => `Can’t find the backup ${p.name}.`,
   wrongRadioForBackup: (p: { connected: string; board: string }) => `The connected radio is a ${p.connected}, but the backup is from a ${p.board}.`,
   backupFromOtherCard: () => 'This backup is from another SD card. Confirm that you want to restore it anyway.',
+  planGone: () => 'The app no longer has this plan, for example after a restart. Go back and open the plan again.',
+  cardChangedSincePlan: () => 'The SD card has changed since the plan, so the app wrote nothing. Go back and open the plan again to see what it would do now.',
   restoreInterrupted: () => 'The SD card was disconnected during the restore. Connect it again and restore the backup once more.',
   updateInterrupted: (p: { backup?: string }) =>
     `The SD card was disconnected during the SD update. The files written until then stay on the SD card${p.backup ? `, the backup ${p.backup} holds the state before` : ''}. Connect it again and start the SD update once more.`,

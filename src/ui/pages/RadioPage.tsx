@@ -1,6 +1,6 @@
 import { Alert, Button, Card, Chip, CloseButton, Input, Label, ListBox, Select, Spinner, Switch, TextField, ToggleButton, ToggleButtonGroup } from '@heroui/react';
 import { Fragment, type ReactNode, useEffect, useState } from 'react';
-import type { RadioSourceView, RadioView, VoiceView } from '../../server/api.ts';
+import type { ProgressEvent, RadioSourceView, RadioView, VoiceView } from '../../server/api.ts';
 import { get, post } from '../api.ts';
 import { ArrowIcon, BackupsIcon, CheckIcon } from '../components/icons.tsx';
 import { backupLabel, isNewer, languageName } from '../format.ts';
@@ -97,7 +97,7 @@ function SourceRow({ radio, s, run }: { radio: RadioView; s: RadioSourceView; ru
         {s.kind === 'project' && origins.length > 1 ? (
           <ToggleButtonGroup
             aria-label={t.originOf(s.name)}
-            isDisabled={!s.on}
+            isDisabled={!s.on || s.reading}
             selectionMode="single"
             disallowEmptySelection
             selectedKeys={new Set([s.origin])}
@@ -123,13 +123,15 @@ function SourceRow({ radio, s, run }: { radio: RadioView; s: RadioSourceView; ru
       </td>
       <td className="px-5 py-2.5">
         <div className="flex justify-end">
-          <Switch aria-label={t.onThisRadio(s.name)} isSelected={s.on} isDisabled={s.fixed || s.checking} onChange={(on) => set({ on })}>
-            <Switch.Content>
-              <Switch.Control>
-                <Switch.Thumb />
-              </Switch.Control>
-            </Switch.Content>
-          </Switch>
+          {!s.checking && (
+            <Switch aria-label={t.onThisRadio(s.name)} isSelected={s.on} isDisabled={s.fixed || s.reading} onChange={(on) => set({ on })}>
+              <Switch.Content>
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
+              </Switch.Content>
+            </Switch>
+          )}
         </div>
       </td>
     </tr>
@@ -349,13 +351,16 @@ function ChooseBoard({ radio, run }: { radio: RadioView; run: Run }) {
 export function RadioPage(props: {
   radio: RadioView;
   busy?: string;
+  progress?: ProgressEvent;
   keep: number;
   run: Run;
   onPlan: () => void;
   onFlash: () => void;
   onSources: () => void;
 }) {
-  const { radio, busy, keep, run, onPlan, onFlash, onSources } = props;
+  const { radio, busy, progress, keep, run, onPlan, onFlash, onSources } = props;
+  // "Back up now" fills up as the backup goes
+  const backupPct = busy === 'backup' && progress?.op === 'backup' && progress.total ? Math.round(((progress.done ?? 0) / progress.total) * 100) : undefined;
   const { t } = usePrefs();
   const n = radio.updates.length;
   const newer = !!radio.firmwareAvailable && (!radio.firmware || isNewer(radio.firmwareAvailable, radio.firmware));
@@ -461,8 +466,17 @@ export function RadioPage(props: {
                 done={!!radio.lastBackup}
                 title={t.backup}
                 action={
-                  <Button variant="outline" isDisabled={!!busy} onPress={() => run(() => post('/api/backup', { volume: radio.volume }))}>
-                    {busy === 'backup' ? t.backingUp : t.backUpNow}
+                  <Button
+                    variant="outline"
+                    className={`relative overflow-hidden ${busy === 'backup' ? 'opacity-100' : ''}`}
+                    isPending={busy === 'backup'}
+                    isDisabled={!!busy && busy !== 'backup'}
+                    onPress={() => run(() => post('/api/backup', { volume: radio.volume }))}
+                  >
+                    {busy === 'backup' && (
+                      <span aria-hidden className="absolute inset-y-0 left-0 bg-accent-soft transition-[width] duration-300" style={{ width: `${backupPct ?? 0}%` }} />
+                    )}
+                    <span className="relative">{busy === 'backup' ? t.backingUpPct(backupPct ?? 0) : t.backUpNow}</span>
                   </Button>
                 }
               >

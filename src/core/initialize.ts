@@ -67,16 +67,19 @@ async function score(volume: string, files: Map<string, KnownFile>): Promise<{ p
 
 // Most unchanged files wins, then fewest files missing or changed (an older version the card holds exactly beats a
 // newer one with one more file), then the earlier candidate (the chosen origin, then the newest). A candidate counts
-// only when more than half of its files are on the card.
+// only when more than half of its own files are on the card: files another package also has (a project bundling
+// another's core) don't count there, unless the candidate has no others.
 type Rank = { same: number; off: number };
 const better = (a: Rank, b: Rank | undefined) => !b || a.same > b.same || (a.same === b.same && a.off < b.off);
 
-async function best(volume: string, candidates: Candidate[]): Promise<Candidate | undefined> {
+async function best(volume: string, candidates: Candidate[], shared: Set<string> = new Set()): Promise<Candidate | undefined> {
   let top: (Rank & { c: Candidate }) | undefined;
   for (const c of candidates) {
     if (c.files.size === 0) continue;
-    const { present, same } = await score(volume, c.files);
-    if (present * 2 <= c.files.size) continue;
+    const own = new Map([...c.files].filter(([path]) => !shared.has(path)));
+    const counted = own.size > 0 ? own : c.files;
+    if ((await score(volume, counted)).present * 2 <= counted.size) continue;
+    const { same } = await score(volume, c.files);
     const rank = { same, off: c.files.size - same };
     if (better(rank, top)) top = { ...rank, c };
   }
@@ -119,7 +122,24 @@ async function detectSounds(p: Paths, source: Source, card: RadioCard): Promise<
   return top?.c;
 }
 
-async function detect(p: Paths, source: Source, card: RadioCard, board: string, prefer: Origin): Promise<Candidate | undefined> {
+// Paths that more than one project has, in any of its versions.
+async function sharedPaths(p: Paths, projects: Source[]): Promise<Set<string>> {
+  const seen = new Map<string, number>();
+  for (const src of projects) {
+    const paths = new Set((await projectCandidates(p, src, 'release')).flatMap((c) => [...c.files.keys()]));
+    for (const path of paths) seen.set(path, (seen.get(path) ?? 0) + 1);
+  }
+  return new Set([...seen].filter(([, n]) => n > 1).map(([path]) => path));
+}
+
+async function detect(
+  p: Paths,
+  source: Source,
+  card: RadioCard,
+  board: string,
+  prefer: Origin,
+  shared: () => Promise<Set<string>>,
+): Promise<Candidate | undefined> {
   switch (source.kind) {
     case 'sounds':
       return detectSounds(p, source, card);
@@ -132,7 +152,7 @@ async function detect(p: Paths, source: Source, card: RadioCard, board: string, 
       return best(card.volume, candidates);
     }
     case 'project':
-      return best(card.volume, await projectCandidates(p, source, prefer));
+      return best(card.volume, await projectCandidates(p, source, prefer), await shared());
     case 'firmware':
       return undefined;
   }
@@ -155,11 +175,17 @@ export async function checkCard(
   let changed = !card.installed;
   const sources = updateSources(s).sort((a, b) => ORDER[a.kind] - ORDER[b.kind]);
   const choices = s.radios[radioKey(board, card.cardId)]?.sources ?? {};
+  let shared: Promise<Set<string>> | undefined;
+  const sharedOnce = () => (shared ??= sharedPaths(p, sources.filter((x) => x.kind === 'project')));
   for (const src of sources) {
     if (signal?.aborted) throw new AppError('cancelled');
+    if (src.kind === 'project' && list.packages[src.name] && (await ownFilesGone(card.volume, list, src.name))) {
+      dropPackage(list, src.name);
+      changed = true;
+    }
     // a package the list doesn't know: put there another way, or never on this card
     if (!list.packages[src.name]) {
-      const found = await detect(p, src, card, board, choices[src.name]?.origin ?? 'release');
+      const found = await detect(p, src, card, board, choices[src.name]?.origin ?? 'release', sharedOnce);
       if (found) {
         list.packages[src.name] = { version: found.version, origin: found.origin, ...(found.voices ? { voices: found.voices } : {}) };
         for (const [path, f] of found.files) {
@@ -179,6 +205,26 @@ export async function checkCard(
   if (changed) await writeList(card.volume, list);
   const cardId = await ensureCardId(card.volume);
   return { cardId, list, states: packageStates(list), written: changed };
+}
+
+// A listed project sharing files with another package, none of its own files (listed for no other package) on
+// the card: taken for installed because the other one bundles its core.
+async function ownFilesGone(volume: string, list: InstalledList, name: string): Promise<boolean> {
+  const files = Object.entries(list.files).filter(([, f]) => f.from.includes(name));
+  const own = files.filter(([, f]) => f.from.length === 1);
+  if (own.length === 0 || own.length === files.length) return false;
+  for (const [path] of own) if (await cardFile(volume, path)) return false;
+  return true;
+}
+
+function dropPackage(list: InstalledList, name: string): void {
+  delete list.packages[name];
+  for (const [path, f] of Object.entries(list.files)) {
+    if (!f.from.includes(name)) continue;
+    f.from = f.from.filter((x) => x !== name);
+    if (f.from.length === 0) delete list.files[path];
+    else if (f.written === name) f.written = f.from[0]!;
+  }
 }
 
 // Brings one listed file's last check up to date; true when it changed.

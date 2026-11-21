@@ -45,7 +45,7 @@ function AddSource({ state, run, volume }: { state: StateView; run: Run; volume?
         >
           <TextField className="min-w-64 flex-1" value={repo} onChange={setRepo} isRequired>
             <Label>{t.githubRepo}</Label>
-            <Input placeholder={t.repoPlaceholder} />
+            <Input variant="secondary" placeholder={t.repoPlaceholder} />
           </TextField>
           <Button type="submit" isDisabled={!repo.includes('/') || !!state.busy}>
             {checking ? t.checkingRepo : t.check}
@@ -120,7 +120,7 @@ function LocalRepos({ state }: { state: StateView }) {
         >
           <TextField className="min-w-64 flex-1" value={dir} onChange={setDir}>
             <Label>{t.folder}</Label>
-            <Input placeholder={t.folderPlaceholder} className="font-mono" />
+            <Input variant="secondary" placeholder={t.folderPlaceholder} className="font-mono" />
           </TextField>
           {state.pickFolder && (
             <Button variant="outline" isDisabled={!!state.busy} onPress={() => void save('/api/sources/local-repos/pick')}>

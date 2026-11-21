@@ -1,6 +1,5 @@
 import { readdir, stat } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { join, sep } from 'node:path';
+import { join } from 'node:path';
 import { backupFirmware, cardBackups, listBackups } from '../core/backup.ts';
 import { cardLabel, ID_FILE, readIdentity, type CardIdentity, type InstalledList, type RadioCard } from '../core/card.ts';
 import { localVersion, sameOnCard, voicesChanged } from '../core/content.ts';
@@ -90,9 +89,14 @@ export async function radioView(
   const r = board ? s.radios[radioKey(board, card.cardId)] : undefined;
   const sel = r?.sources ?? {};
   const read: RadioCard = { ...card, installed: check?.list ?? card.installed };
+  const reading = check?.running ?? !!board; // a card with a type is read right after it shows up
   const radioSources: RadioSourceView[] = await Promise.all(updateSources(s).map(async (src) => {
     const view = sources.find((x) => x.name === src.name);
-    const choice = sel[src.name] ?? { on: false, origin: 'release' as const };
+    // while the card is read, what is on it so far: the selection follows the card once reading is done
+    const onCard = reading ? read.installed?.packages[src.name] : undefined;
+    const choice = reading
+      ? { on: src.kind === 'sdcard' || !!onCard, origin: onCard?.origin ?? sel[src.name]?.origin ?? ('release' as const) }
+      : (sel[src.name] ?? { on: false, origin: 'release' as const });
     const checking = !!check?.running && check.pending.has(src.name);
     const listed = checking ? undefined : read.installed?.packages[src.name]?.version;
     const state = listed ? check?.states?.find((x) => x.name === src.name) : undefined;
@@ -110,6 +114,7 @@ export async function radioView(
       fixed: src.kind === 'sdcard',
       installed: same ? available : listed,
       ...(checking ? { checking } : {}),
+      ...(reading ? { reading } : {}),
       ...(state?.missing.length ? { missing: state.missing } : {}),
       ...(state?.changed.length ? { changed: state.changed } : {}),
       available,
@@ -122,7 +127,7 @@ export async function radioView(
   }));
   // switched on with a newer version, other voices or files missing; switched off and on the card
   const updates = radioSources
-    .filter((x) => !x.checking && ((x.on && ((x.available && x.available !== x.installed) || x.voicesChanged || x.missing)) || (!x.on && x.installed)))
+    .filter((x) => !x.reading && ((x.on && ((x.available && x.available !== x.installed) || x.voicesChanged || x.missing)) || (!x.on && x.installed)))
     .map((x) => x.name);
   // this card's backups: its own and those from before cards had an id
   const backups: string[] = [];
@@ -173,13 +178,7 @@ function fileView(item: PlanItem): PlanFileView {
   return { path: item.path, action: item.action, pkg: item.pkg, reason: item.reason, others: others.length > 0 ? others : undefined };
 }
 
-// "/Users/me/Library/…" -> "~/Library/…"; Windows paths stay as they are, "~" means nothing there.
-function shortHome(path: string): string {
-  const home = homedir();
-  return process.platform !== 'win32' && path.startsWith(home + sep) ? `~${path.slice(home.length)}` : path;
-}
-
-export async function planView(p: Paths, volume: string, board: string, card: RadioCard, setup: UpdateSetup): Promise<PlanView> {
+export async function planView(volume: string, board: string, card: RadioCard, setup: UpdateSetup): Promise<PlanView> {
   const changed = setup.plan.filter((i) => i.action !== 'unchanged');
   const names = [...new Set(changed.map((i) => i.pkg))];
   const groups = names.map((name) => ({
@@ -200,7 +199,6 @@ export async function planView(p: Paths, volume: string, board: string, card: Ra
     conflicts: changed.filter((i) => i.action === 'conflict').map(fileView),
     missing: setup.missing,
     luac,
-    backupDir: shortHome(join(p.backups, board)),
   };
 }
 
@@ -222,7 +220,6 @@ export async function restorePlanView(p: Paths, card: RadioCard, board: string, 
     files: plan.items,
     backupFirmware: plan.firmware,
     cardFirmware: card.firmware,
-    backupDir: shortHome(join(p.backups, board)),
   };
 }
 
@@ -356,8 +353,8 @@ export function copyItemView(i: CopyItem, ref: ModelRef): CopyItemView {
   };
 }
 
-export function modelsPlanView(p: Paths, volume: string, board: string, copy: CopyItemView[], del: DeleteItem[], confirm: boolean): ModelsPlanView {
-  return { volume, board, copy, delete: del, confirm, backupDir: shortHome(join(p.backups, board)) };
+export function modelsPlanView(volume: string, board: string, copy: CopyItemView[], del: DeleteItem[], confirm: boolean): ModelsPlanView {
+  return { volume, board, copy, delete: del, confirm };
 }
 
 const SOUND_ZIP = /^edgetx-sdcard-sounds-(.+)-\d[\d.]*\.zip$/;

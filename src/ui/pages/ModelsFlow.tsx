@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { CopyItemView, ModelsPlanView, ModelsResultView, ProgressEvent, RadioView } from '../../server/api.ts';
 import { errorText, post } from '../api.ts';
 import { Stepper } from '../components/Stepper.tsx';
-import { backupLabel } from '../format.ts';
+import { backupLabel, listText } from '../format.ts';
 import type { Texts } from '../texts.ts';
 import { usePrefs } from '../usePrefs.ts';
 import type { ModelsRequest } from './ModelsPage.tsx';
@@ -13,12 +13,12 @@ type Phase = 'loading' | 'plan' | 'running' | 'done' | 'error';
 // Everything about one model the user should know before it is written.
 function notes(t: Texts, i: CopyItemView): { text: string; warn: boolean }[] {
   const out: { text: string; warn: boolean }[] = [];
-  if (i.image) out.push({ text: i.image.action === 'add' ? t.fileNew(i.image.path) : t.fileReplaced(i.image.path), warn: false });
-  if (i.checklist) out.push({ text: i.checklist.action === 'add' ? t.fileNew(i.checklist.path) : t.fileReplaced(i.checklist.path), warn: false });
-  for (const f of i.missing) out.push({ text: `${t.notCopied(f.path)}${f.pkg ? `, ${t.turnOnPackage(f.pkg)}` : ''}`, warn: false });
-  if (i.controls.length > 0) out.push({ text: t.notOnRadio(i.controls.join(', ')), warn: true });
-  if (i.module) out.push({ text: t.otherModule(i.module.model, i.module.radio ?? t.noModule), warn: true });
-  if (i.screen) out.push({ text: t.otherScreen(i.screen.model, i.screen.radio), warn: true });
+  const base = (p: string) => p.slice(p.lastIndexOf('/') + 1);
+  if (i.image) out.push({ text: (i.image.action === 'add' ? t.imageNew : t.imageReplaced)(base(i.image.path)), warn: false });
+  if (i.checklist) out.push({ text: (i.checklist.action === 'add' ? t.checklistNew : t.checklistReplaced)(base(i.checklist.path)), warn: false });
+  for (const f of i.missing) out.push({ text: f.pkg ? t.missingFromSource(f.path, f.pkg) : t.missingFile(f.path), warn: false });
+  if (i.controls.length > 0) out.push({ text: t.notOnRadio(listText(i.controls, t.and)), warn: true });
+  if (i.module) out.push({ text: t.otherModule(i.module.model, i.module.radio), warn: true });
   if (i.newer) out.push({ text: t.newerModel(i.newer.model, i.newer.radio), warn: false });
   if (i.receiver) out.push({ text: t.receiverUsed(i.receiver.id, i.receiver.models.join(', ')), warn: false });
   return out;
@@ -203,9 +203,6 @@ export function ModelsFlow({ request, radio, progress, onBack }: { request: Mode
                   <Label>{t.backUpFirst}</Label>
                 </Checkbox.Content>
               </Checkbox>
-              <span className="text-sm text-muted">
-                {t.nextBackup} <code className="font-mono text-foreground">{plan.backupDir}</code>
-              </span>
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onPress={onBack}>

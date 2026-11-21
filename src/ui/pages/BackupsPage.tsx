@@ -190,7 +190,7 @@ export function BackupsPage({
                               if (e.key === 'Escape') setEditing(undefined);
                             }}
                           >
-                            <Input placeholder={t.notePlaceholder} maxLength={MAX_NOTE} autoFocus />
+                            <Input variant="secondary" placeholder={t.notePlaceholder} maxLength={MAX_NOTE} autoFocus />
                           </TextField>
                           <Button size="sm" type="submit">
                             {t.save}

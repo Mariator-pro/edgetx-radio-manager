@@ -1,5 +1,5 @@
 // Writes src/core/known-files.ts: the checksums of every file of every version of the built-in packages (EdgeTX SD
-// content and sounds from 2.12 on, the projects and the ELRS script), so the app can tell which version a card holds.
+// content and sounds from 2.11 on, the projects and the ELRS script), so the app can tell which version a card holds.
 // Run it before every release: node scripts/known-files.ts [download folder]
 // Versions already in known-files.ts are taken from there; only new versions, or files added to an old one (a new
 // voice), are downloaded. GITHUB_TOKEN, when set, raises GitHub's limit of 60 requests an hour.

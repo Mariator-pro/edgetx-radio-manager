@@ -4,7 +4,7 @@ import { dateTime } from '../format.ts';
 import { LANGUAGES, type Lang } from '../texts.ts';
 import { usePrefs, type Theme } from '../usePrefs.ts';
 import { ConnectedRadios } from './ConnectedRadios.tsx';
-import { BackupsIcon, ModelsIcon, MoonIcon, PackagesIcon, RadioIcon, RefreshIcon, SettingsIcon, SourcesIcon, SunIcon } from './icons.tsx';
+import { BackupsIcon, ModelsIcon, MoonIcon, PackagesIcon, RefreshIcon, SettingsIcon, SourcesIcon, SunIcon } from './icons.tsx';
 
 export type Page = 'radio' | 'update' | 'flash' | 'sources' | 'packages' | 'backups' | 'restore' | 'models' | 'modelsFlow' | 'settings';
 
@@ -48,9 +48,7 @@ export function Sidebar(props: {
       className="dark flex flex-[1_1_240px] flex-col gap-6 bg-zinc-900 px-3.5 py-5 text-zinc-200 md:sticky md:top-0 md:h-screen md:flex-[0_0_240px] md:self-start md:overflow-y-auto"
     >
       <div className="flex items-center gap-2.5 px-2">
-        <span className="flex size-[30px] items-center justify-center rounded-lg bg-accent text-white">
-          <RadioIcon size={16} />
-        </span>
+        <img src="/favicon.svg" alt="" className="size-[30px] shrink-0" />
         <span className="flex flex-col">
           <span className="font-semibold whitespace-nowrap text-white">Radio Manager</span>
           <span className="text-xs text-zinc-400">v{__APP_VERSION__}</span>

@@ -13,8 +13,8 @@ export interface Wanted {
 
 export type Action = 'add' | 'replace' | 'unchanged' | 'delete' | 'conflict';
 
-// modified: a package file changed on the card; unknown: a file no package delivered
-// sits where a package file goes; removed-modified: a file to delete was changed on the card.
+// modified: a package file on the card matches no known version of it; unknown: a file no package delivered
+// sits where a package file goes; removed-modified: a file to delete matches no known version.
 export type ConflictReason = 'modified' | 'unknown' | 'removed-modified';
 
 export interface PlanItem {
@@ -53,8 +53,16 @@ async function cardSha(root: string, path: string): Promise<string | undefined> 
   return data && sha256(data);
 }
 
-export async function makePlan(root: string, wanted: Map<string, Wanted>, list?: InstalledList): Promise<PlanItem[]> {
+// released: per path the content of every known version of the packages, so an older version on the card is
+// replaced like any update instead of being asked about.
+export async function makePlan(
+  root: string,
+  wanted: Map<string, Wanted>,
+  list?: InstalledList,
+  released: Map<string, Set<string>> = new Map(),
+): Promise<PlanItem[]> {
   const listed = list?.files ?? {};
+  const isKnown = (path: string, sha: string) => listed[path]?.sha256 === sha || !!released.get(path)?.has(sha);
   const plan: PlanItem[] = [];
   for (const [path, w] of wanted) {
     const onCard = await cardSha(root, path);
@@ -63,7 +71,7 @@ export async function makePlan(root: string, wanted: Map<string, Wanted>, list?:
     let reason: ConflictReason | undefined;
     if (onCard === undefined) action = 'add';
     else if (onCard === w.sha) action = 'unchanged';
-    else if (known && onCard === known.sha256) action = 'replace';
+    else if (isKnown(path, onCard)) action = 'replace';
     else reason = known ? 'modified' : 'unknown';
     plan.push({ path, action, pkg: w.written, reason, wanted: w });
   }
@@ -71,7 +79,7 @@ export async function makePlan(root: string, wanted: Map<string, Wanted>, list?:
     if (wanted.has(path)) continue;
     const onCard = await cardSha(root, path);
     if (onCard === undefined) continue;
-    if (onCard === known.sha256) plan.push({ path, action: 'delete', pkg: known.written });
+    if (isKnown(path, onCard)) plan.push({ path, action: 'delete', pkg: known.written });
     else plan.push({ path, action: 'conflict', pkg: known.written, reason: 'removed-modified' });
   }
   return plan.sort((a, b) => a.path.localeCompare(b.path));

@@ -12,6 +12,7 @@ import { ensureSelection, selectionFromCard } from '../src/core/selection.ts';
 import { defaultSettings, findLocalRepos, radioOf, type Settings } from '../src/core/settings.ts';
 import { prepareUpdate } from '../src/core/update.ts';
 import { checkCard } from '../src/core/initialize.ts';
+import { radioView } from '../src/server/views.ts';
 import { knownVersions, packKnown, setShippedCatalog } from '../src/core/known.ts';
 import { makeZip, SDCARD_JSON, tempDir, writeTree } from './helpers.ts';
 
@@ -437,6 +438,27 @@ describe('projects copied by hand', () => {
     const changed = (await checked(p, s, await newCard({ 'SCRIPTS/TOOLS/elrs.lua': 'my own' }))).card;
     expect((await prepareUpdate(p, s, changed, 'tx16smk3')).plan).toMatchObject([{ path: 'SCRIPTS/TOOLS/elrs.lua', action: 'conflict', reason: 'removed-modified' }]);
   });
+
+  it('replaces an older known version like any update, and asks only about content no version has', async () => {
+    const p = paths(await tempDir());
+    await writeRelease(p, 'link-sentinel', 'v2.0.0', '2026-06-13T00:00:00Z', { 'l.zip': { 'src/WIDGETS/SNTNL/main.lua': 'v2' } });
+    await writeRelease(p, 'link-sentinel', 'v3.0.0', '2026-10-01T00:00:00Z', { 'l.zip': { 'src/WIDGETS/SNTNL/main.lua': 'v3' } });
+    // the list names v3, kept from a first update that found the old file, as the card had no list then
+    const list = {
+      tool: 1,
+      updated: '2026-10-23T00:00:00Z',
+      packages: { 'link-sentinel': { version: 'v3.0.0', origin: 'release' } },
+      files: { 'WIDGETS/SNTNL/main.lua': { sha256: sha256(Buffer.from('v3')), from: ['link-sentinel'], written: 'link-sentinel' } },
+    };
+    const plan = async (content: string) => {
+      const s: Settings = defaultSettings();
+      s.radios.tx16smk3 = { language: 'en', sources: { 'link-sentinel': { on: true, origin: 'release' } } };
+      const { card } = await checked(p, s, await newCard({ 'WIDGETS/SNTNL/main.lua': content, '.radio-manager/installed.json': JSON.stringify(list) }));
+      return (await prepareUpdate(p, s, card, 'tx16smk3')).plan;
+    };
+    expect(await plan('v2')).toMatchObject([{ path: 'WIDGETS/SNTNL/main.lua', action: 'replace' }]);
+    expect(await plan('mine')).toMatchObject([{ path: 'WIDGETS/SNTNL/main.lua', action: 'conflict', reason: 'modified' }]);
+  });
 });
 
 describe('new sources', () => {
@@ -534,6 +556,64 @@ describe('reading the SD card', () => {
     ]);
     // half of its files or fewer: not on the card
     expect(nanny(await checked(p, s, await newCard({ 'WIDGETS/LIPONY/ui.lua': 'ui' })))).toEqual([undefined, undefined]);
+  });
+
+  it('counts only its own files for a project whose core another project bundles', async () => {
+    const p = paths(await tempDir());
+    const core = { 'src/SCRIPTS/LIPONY/core.lua': 'core', 'src/SCRIPTS/LIPONY/lang/en.lua': 'en', 'src/SCRIPTS/LIPONY/icon.png': 'png' };
+    await writeRelease(p, 'lipo-nanny', 'v2.2.0', '2026-09-01T00:00:00Z', { 'l.zip': { ...core, 'src/WIDGETS/LIPONY/main.lua': 'widget' } });
+    await writeRelease(p, 'flight-wingman', 'v1.2.0', '2026-09-01T00:00:00Z', { 'w.zip': { ...core, 'src/WIDGETS/WINGMAN/main.lua': 'wingman' } });
+    const s = defaultSettings();
+    const onCard = { 'SCRIPTS/LIPONY/core.lua': 'core', 'SCRIPTS/LIPONY/lang/en.lua': 'en', 'SCRIPTS/LIPONY/icon.png': 'png', 'WIDGETS/WINGMAN/main.lua': 'wingman' };
+    const only = await checked(p, s, await newCard(onCard));
+    expect(Object.keys(only.card.installed!.packages)).toEqual(['flight-wingman']);
+    expect(only.states).toEqual([{ name: 'flight-wingman', missing: [], changed: [] }]);
+    // with its widget it is on the card too
+    const both = await checked(p, s, await newCard({ ...onCard, 'WIDGETS/LIPONY/main.lua': 'widget' }));
+    expect(Object.keys(both.card.installed!.packages).sort()).toEqual(['flight-wingman', 'lipo-nanny']);
+  });
+
+  it('shows what is on the card while reading it, with the switches locked', async () => {
+    const p = paths(await tempDir());
+    const s = defaultSettings();
+    s.radios.tx16smk3 = { language: 'en', sources: {} }; // a new card: nothing chosen yet
+    const list = {
+      tool: 1,
+      updated: '2026-10-23T00:00:00Z',
+      packages: { 'lipo-nanny': { version: 'v2.0.0', origin: 'release' } },
+      files: { 'WIDGETS/LIPONY/main.lua': { sha256: '', from: ['lipo-nanny'], written: 'lipo-nanny' } },
+    };
+    const card = (await readCard(await newCard({ 'WIDGETS/LIPONY/main.lua': 'w', '.radio-manager/installed.json': JSON.stringify(list) })))!;
+    const view = await radioView(p, s, card, 'tx16smk3', [], [], { running: true, pending: new Set(['edgetx-sounds']) });
+    const row = (name: string) => view.sources.find((x) => x.name === name)!;
+    expect(row('lipo-nanny')).toMatchObject({ on: true, installed: 'v2.0.0', reading: true });
+    expect(row('link-sentinel')).toMatchObject({ on: false, reading: true });
+    expect(row('edgetx-sounds')).toMatchObject({ checking: true, reading: true });
+    expect(view.updates).toEqual([]);
+    // shown before reading has started: the same
+    expect((await radioView(p, s, card, 'tx16smk3', [], [])).sources.find((x) => x.name === 'lipo-nanny')).toMatchObject({ on: true, reading: true });
+  });
+
+  it('drops a listed project whose own files are gone while another package brings its core', async () => {
+    const p = paths(await tempDir());
+    const s = defaultSettings();
+    const file = (text: string, from: string[]) => ({ sha256: sha256(Buffer.from(text)), from, written: from[0] });
+    const list = {
+      tool: 1,
+      updated: '2026-11-21T00:00:00Z',
+      packages: { 'flight-wingman': { version: 'v1.2.0', origin: 'release' }, 'lipo-nanny': { version: 'v2.2.0', origin: 'release' } },
+      files: {
+        'SCRIPTS/LIPONY/core.lua': file('core', ['flight-wingman', 'lipo-nanny']),
+        'WIDGETS/WINGMAN/main.lua': file('wingman', ['flight-wingman']),
+        'WIDGETS/LIPONY/main.lua': file('widget', ['lipo-nanny']),
+      },
+    };
+    const root = await newCard({ 'SCRIPTS/LIPONY/core.lua': 'core', 'WIDGETS/WINGMAN/main.lua': 'wingman', '.radio-manager/installed.json': JSON.stringify(list) });
+    const { card, states } = await checked(p, s, root);
+    expect(Object.keys(card.installed!.packages)).toEqual(['flight-wingman']);
+    expect(card.installed!.files['SCRIPTS/LIPONY/core.lua']).toMatchObject({ from: ['flight-wingman'], written: 'flight-wingman' });
+    expect(card.installed!.files['WIDGETS/LIPONY/main.lua']).toBeUndefined();
+    expect(states).toEqual([{ name: 'flight-wingman', missing: [], changed: [] }]);
   });
 
   it('finds version and voice of the sounds, an exact older version before a newer one with one more file', async () => {

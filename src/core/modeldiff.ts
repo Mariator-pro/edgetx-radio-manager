@@ -113,8 +113,11 @@ function walk(a: unknown, b: unknown, path: string[], out: DiffEntry[]): void {
 function summary(v: unknown): string {
   if (isLeaf(v)) return text(v);
   if (isObject(v)) {
-    const name = v.name ?? v.label ?? v.func ?? v.LayoutId;
-    return name !== undefined && name !== '' ? String(name) : '…';
+    // input names are { val }; an input or mix line without a name tells its source and weight
+    const name = [v.name, v.label, v.val, v.func, v.LayoutId].find((x) => x !== undefined && x !== '');
+    if (name !== undefined) return String(name);
+    if (v.srcRaw !== undefined) return `${text(v.srcRaw)}${v.weight !== undefined ? `, weight ${text(v.weight)}` : ''}`;
+    return '…';
   }
   return '…';
 }

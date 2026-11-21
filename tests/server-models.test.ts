@@ -107,6 +107,19 @@ describe('models page', () => {
     expect(b!.items.find((i) => i.name === r.backup)).toMatchObject({ reason: 'models', models: ['Copter'] });
   });
 
+  it('does exactly the plan shown, and nothing once the card has changed since', async () => {
+    const ref = { board: 'tx15', backup, file: 'model1.yml' };
+    const run = (copy: unknown) => call('/api/models/run', { method: 'POST', body: JSON.stringify({ volume: card, copy, backupFirst: false }) });
+    await post('/api/models/plan', { volume: card, copy: [{ ref }] });
+    // another request than the plan shown
+    const other = await run([{ ref, mode: 'add' }]);
+    expect(((await other.json()) as { code: string }).code).toBe('planGone');
+    await writeTree(card, { 'MODELS/model9.yml': 'header:\n   name: "New"\n' });
+    const changed = await run([{ ref }]);
+    expect(((await changed.json()) as { code: string }).code).toBe('cardChangedSincePlan');
+    await rm(join(card, 'MODELS/model9.yml'));
+  });
+
   it('imports a model file and asks for confirmation when it does not fit', async () => {
     const odd = model('Odd', 5).replace('SA0', 'SG2');
     const imp = (await (await call('/api/models/import?name=Odd.yml', { method: 'POST', body: odd })).json()) as ImportView;

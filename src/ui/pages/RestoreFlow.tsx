@@ -178,15 +178,7 @@ export function RestoreFlow({ radio, name, progress, onBack }: { radio: RadioVie
                   <Label>{t.backUpFirst}</Label>
                 </Checkbox.Content>
               </Checkbox>
-              <span className="text-sm text-muted">
-                {backupFirst ? (
-                  <>
-                    {t.nextBackup} <code className="font-mono text-foreground">{plan.backupDir}</code>
-                  </>
-                ) : (
-                  t.noBackupWarning
-                )}
-              </span>
+              {!backupFirst && <span className="text-sm text-muted">{t.noBackupWarning}</span>}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onPress={onBack}>

@@ -98,6 +98,25 @@ describe('rememberRadio', () => {
     expect((await loadSettings(p)).radios.tx16s).toEqual({ language: 'en', sounds: ['en_gb-ryan'] });
   });
 
+  it('keeps one entry per SD card: the entry by type goes once a card of the type has its own', async () => {
+    const p = paths(await tempDir());
+    await mkdir(p.root, { recursive: true });
+    const radios = {
+      tx16smk3: { installed: { 'flight-wingman': 'v1.1.0' } },
+      'tx16smk3/aaaaaaaa': { installed: { 'flight-wingman': 'local 7a70cba' } },
+      pocket: { installed: { 'elrs-lua': '4.1.0' } },
+    };
+    await writeFile(p.settings, JSON.stringify({ radios }));
+    const s = await loadSettings(p);
+    expect(Object.keys(s.radios).sort()).toEqual(['pocket', 'tx16smk3/aaaaaaaa']);
+    // the card without an id gets one: its entry moves, no second one is made
+    rememberRadio(s, { volume: '/v', board: 'pocket', cardId: 'bbbbbbbb', firmware: '2.12.5' });
+    expect(s.radios).toEqual({
+      'tx16smk3/aaaaaaaa': radios['tx16smk3/aaaaaaaa'],
+      'pocket/bbbbbbbb': { installed: { 'elrs-lua': '4.1.0' }, firmware: '2.12.5' },
+    });
+  });
+
   it('adds a new default source to existing settings once', async () => {
     const p = paths(await tempDir());
     await mkdir(p.root, { recursive: true });

@@ -316,6 +316,7 @@ export function ModelsPage({
                     </div>
                     {expanded && (
                       <RadioGroup
+                        variant="secondary"
                         id={`versions-${key}`}
                         aria-label={t.versionsOf(e.name)}
                         value={String(chosen[key] ?? 0)}

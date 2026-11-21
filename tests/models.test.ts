@@ -218,12 +218,13 @@ describe('copying models', () => {
   }
 
   it('replaces the model of the same name, brings image and checklist, and names what does not fit', async () => {
-    const { p, types, b, tx15 } = await setup();
+    const { p, b, tx15 } = await setup();
     const origin = await backupOrigin(p, 'tx16smk3', b.name);
     const m = (await readCardState(join(p.backups, 'tx16smk3', b.name))).models[0]!;
     const card = await readCardState(tx15);
-    const [item] = await planCopy(card, [{ model: m, origin }], types);
-    expect(item).toMatchObject({ mode: 'replace', canReplace: true, target: 'model2.yml', controls: ['SG', 'SL1'], screen: { model: '800x480', radio: '480x320' } });
+    const [item] = await planCopy(card, [{ model: m, origin }]);
+    expect(item).toMatchObject({ mode: 'replace', canReplace: true, target: 'model2.yml', controls: ['SG', 'SL1'] });
+    expect(item).not.toHaveProperty('screen');
     expect(item!.image).toMatchObject({ path: 'IMAGES/mc.png', action: 'replace' });
     expect(item!.checklist).toMatchObject({ path: 'MODELS/Master Copter.txt', action: 'add' });
     expect(item!.missing).toEqual([
@@ -244,12 +245,12 @@ describe('copying models', () => {
   });
 
   it('adds under the smallest free number when asked, or when no model has the name', async () => {
-    const { p, types, b, tx15 } = await setup();
+    const { p, b, tx15 } = await setup();
     const origin = await backupOrigin(p, 'tx16smk3', b.name);
     const m = (await readCardState(join(p.backups, 'tx16smk3', b.name))).models[0]!;
     await rm(join(tx15, 'MODELS/model1.yml'));
     const card = await readCardState(tx15);
-    const items = await planCopy(card, [{ model: m, origin, mode: 'add' }, { model: { ...m, name: 'Other' }, origin }], types);
+    const items = await planCopy(card, [{ model: m, origin, mode: 'add' }, { model: { ...m, name: 'Other' }, origin }]);
     expect(items.map((i) => [i.mode, i.target])).toEqual([
       ['add', 'model1.yml'],
       ['add', 'model3.yml'],
@@ -257,16 +258,16 @@ describe('copying models', () => {
   });
 
   it('with two models of that name on the card, replaces the one with the source file name', async () => {
-    const { p, types, b, tx15 } = await setup();
+    const { p, b, tx15 } = await setup();
     await writeTree(tx15, { 'MODELS/model1.yml': model('Master Copter') });
     const origin = await backupOrigin(p, 'tx16smk3', b.name);
     const m = (await readCardState(join(p.backups, 'tx16smk3', b.name))).models[0]!;
-    const [first] = await planCopy(await readCardState(tx15), [{ model: m, origin }], types);
+    const [first] = await planCopy(await readCardState(tx15), [{ model: m, origin }]);
     expect(first!.target).toBe('model1.yml');
-    const [other] = await planCopy(await readCardState(tx15), [{ model: { ...m, file: 'model9.yml' }, origin }], types);
+    const [other] = await planCopy(await readCardState(tx15), [{ model: { ...m, file: 'model9.yml' }, origin }]);
     expect(other!.target).toBe('model1.yml');
     await writeTree(tx15, { 'MODELS/model1.yml': model('Glider') });
-    const [onlyTwo] = await planCopy(await readCardState(tx15), [{ model: m, origin }], types);
+    const [onlyTwo] = await planCopy(await readCardState(tx15), [{ model: m, origin }]);
     expect(onlyTwo!.target).toBe('model2.yml');
   });
 
@@ -364,5 +365,14 @@ describe('differences', () => {
       },
     ]);
     expect(diffModels(a, a)).toEqual([]);
+  });
+
+  it('names an added input by its name, an unnamed line by source and weight', () => {
+    const line = { mode: 3, srcRaw: 'Thr', weight: 100, chn: 18, name: '' };
+    const diff = diffModels({ expoData: [], inputNames: { 0: { val: 'Ail' } } }, { expoData: [line], inputNames: { 0: { val: 'Ail' }, 18: { val: 'test' } } });
+    expect(diff.flatMap((g) => g.entries)).toEqual([
+      { path: 'Input 19, line 1', to: 'Thr, weight 100' },
+      { path: 'Input 19', to: 'test' },
+    ]);
   });
 });

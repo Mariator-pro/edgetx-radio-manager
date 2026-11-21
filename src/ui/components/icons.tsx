@@ -20,15 +20,6 @@ function Svg({ size = 18, className, children }: IconProps & { children: React.R
   );
 }
 
-export const RadioIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <rect x="3" y="8" width="18" height="12" rx="2.5" />
-    <path d="M7 8V3" />
-    <circle cx="8" cy="14" r="1.5" />
-    <circle cx="16" cy="14" r="1.5" />
-  </Svg>
-);
-
 export const SourcesIcon = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="6" cy="6" r="2.5" />

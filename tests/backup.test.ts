@@ -1,7 +1,8 @@
+import { readdirSync } from 'node:fs';
 import { mkdir, readFile, readdir, stat, utimes } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { backupCard, backupName, cardBackups, listBackups, pruneBackups } from '../src/core/backup.ts';
+import { backupCard, backupName, cardBackups, isBackupName, listBackups, pruneBackups } from '../src/core/backup.ts';
 import { paths } from '../src/core/paths.ts';
 import { tempDir, writeTree } from './helpers.ts';
 
@@ -53,6 +54,28 @@ describe('backupCard', () => {
     const abort = new AbortController();
     await expect(backupCard(card, 'tx15', p, when, () => abort.abort(), abort.signal)).rejects.toMatchObject({ code: 'cancelled' });
     expect(await listBackups(p, 'tx15')).toEqual([]);
+  });
+
+  it('shows a backup only once complete, and drops one cut short', async () => {
+    const card = await tempDir();
+    const p = paths(await tempDir());
+    await writeTree(card, { 'RADIO/a': '1', 'MODELS/b': '2' });
+    const listed: string[][] = [];
+    await expect(
+      backupCard(card, 'tx15', p, when, () => {
+        throw new Error('card gone');
+      }),
+    ).rejects.toThrow('card gone');
+    expect(await readdir(join(p.backups, 'tx15'))).toEqual([]);
+    // the app quit while backing up: its folder is still there, but no backup
+    await mkdir(join(p.backups, 'tx15', '.2026-10-21_1400.partial', 'RADIO'), { recursive: true });
+    expect(await listBackups(p, 'tx15')).toEqual([]);
+    const b = await backupCard(card, 'tx15', p, when, () => {
+      listed.push(readdirSync(join(p.backups, 'tx15')).filter(isBackupName));
+    });
+    expect(listed.length).toBeGreaterThan(0);
+    expect(listed.flat()).toEqual([]);
+    expect(await readdir(join(p.backups, 'tx15'))).toEqual([b.name]);
   });
 });
 

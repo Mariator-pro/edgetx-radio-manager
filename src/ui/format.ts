@@ -60,3 +60,8 @@ export function isNewer(a: string, b: string): boolean {
   for (let i = 0; i < 4; i++) if (x[i] !== y[i]) return x[i]! > y[i]!;
   return false;
 }
+
+// "SG, SH and SL1"
+export function listText(items: string[], and: string): string {
+  return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} ${and} ${items[items.length - 1]}`;
+}
