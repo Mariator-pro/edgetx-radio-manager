@@ -60,7 +60,9 @@ describe('models page', () => {
     backup = await post<string>('/api/backup', { volume: card });
     await writeTree(card, { 'MODELS/model1.yml': model('Copter', 80), 'MODELS/model2.yml': model('New', 1) });
     const v = await get<ModelsView>(`/api/models?volume=${encodeURIComponent(card)}`);
-    expect(v.sources).toEqual([{ key: expect.stringMatching(/^tx15\/[\w-]+$/), board: 'tx15', card: expect.any(String), radio: 'tx15' }]);
+    expect(v.sources).toEqual([
+      { key: expect.stringMatching(/^tx15\/[\w-]+$/), board: 'tx15', type: 'tx15', cardId: expect.any(String), idShort: expect.any(String), volume: card },
+    ]);
     expect(v.source).toBe(v.sources[0]!.key); // the chosen radio's own backups
     expect(v.entries).toEqual([
       { name: 'Copter', versions: [{ file: 'model1.yml', backup, since: backup, semver: '2.12.5', bitmap: 'c.png', labels: [] }], card: 'changed' },
@@ -73,7 +75,7 @@ describe('models page', () => {
     await writeTree(other, { 'RADIO/radio.yml': RADIO, 'MODELS/model1.yml': model('Glider', 50), '.radio-manager/radio.json': '{"id":"other-card-1","name":"Wing"}' });
     try {
       const own = await get<ModelsView>(`/api/models?volume=${encodeURIComponent(card)}`);
-      expect(own.sources.map((x) => x.radio).sort()).toEqual(['Wing', 'tx15']);
+      expect(own.sources.map((x) => x.name ?? x.type)).toEqual(['tx15', 'Wing']); // the connected card first
       expect(own.entries.map((e) => e.name)).toEqual(['Copter']); // the other card's Glider is not mixed in
       const theirs = await get<ModelsView>(`/api/models?source=tx15%2Fother-card-1&volume=${encodeURIComponent(card)}`);
       expect(theirs).toMatchObject({ source: 'tx15/other-card-1', radio: 'Wing' });

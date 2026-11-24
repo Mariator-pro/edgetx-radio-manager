@@ -41,6 +41,7 @@ import {
   type FirmwareFileCheck,
   type FlashOptions,
 } from '../core/firmware.ts';
+import { forgetRadio, labelOfKey } from '../core/known-radios.ts';
 import { deleteVersion, localVersions, mainInfo, versionDir } from '../core/packages.ts';
 import { isSafeKey, isSafeName, type Paths } from '../core/paths.ts';
 import { isBelowMin, MIN_EDGETX, radioName, radioTypes } from '../core/radios.ts';
@@ -53,6 +54,7 @@ import {
   lastFirmware,
   loadSettings,
   MAX_NOTE,
+  markSeen,
   radioKey,
   rememberRadio,
   saveSettings,
@@ -90,6 +92,7 @@ import {
   modelsView,
   packageViews,
   planView,
+  radiosView,
   restoreOrigin,
   restorePlanView,
   stateView,
@@ -97,7 +100,7 @@ import {
   type CardCheckView,
 } from './views.ts';
 
-export interface ServerOptions {
+interface ServerOptions {
   paths: Paths;
   port: number;
   staticDir?: string; // built interface; without it only /api is served (Vite serves the page)
@@ -239,7 +242,7 @@ function openFolder(dir: string): void {
   execFile(cmd, [dir], () => {});
 }
 
-export interface RunningServer {
+interface RunningServer {
   url: string;
   token: string;
   open: string; // the address to open the interface at, with the key behind # (never sent to the server)
@@ -301,6 +304,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
   };
   const pushState = async () => send('state', await state());
   const boardOf = (c: RadioCard) => c.board ?? boards.get(c.volume);
+  const connectedCards = () => cards.map((c) => ({ volume: c.volume, board: boardOf(c), cardId: c.cardId, cardName: c.cardName, cardPilot: c.cardPilot }));
   // The settings of the radio connected at this drive.
   const radioAt = (volume: unknown) => {
     const c = cards.find((x) => x.volume === volume);
@@ -351,6 +355,13 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     const key = JSON.stringify(now.map((c) => [c.volume, c.board, c.firmware, c.language, c.sdcardVersion, c.installed?.updated, c.cardId, c.cardName]));
     if (key === lastKey && !force) return;
     lastKey = key;
+    // when each radio was last connected: noted as it comes and as it goes
+    const ident = (c: RadioCard) => `${c.volume}|${c.cardId ?? ''}`;
+    const at = new Date();
+    const came = now.filter((c) => !cards.some((x) => ident(x) === ident(c)));
+    const went = cards.filter((c) => !now.some((x) => ident(x) === ident(c)));
+    for (const c of [...came, ...went]) markSeen(s, { ...c, board: boardOf(c) }, at);
+    if (came.length + went.length > 0) await saveSettings(p, s);
     cards = now;
     for (const v of checks.keys()) if (!cards.some((c) => c.volume === v)) checks.delete(v);
     for (const c of cards) {
@@ -516,10 +527,11 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       await pushState();
     },
     'POST /api/radio/name': async (req) => {
-      const { volume, name } = await body<{ volume: string; name: string }>(req);
+      const { volume, name, pilot } = await body<{ volume: string; name: string; pilot?: string }>(req);
       if (typeof name !== 'string' || name.trim().length > MAX_CARD_NAME) throw new HttpError(400, 'invalidRequest', { what: 'name' });
+      if (pilot !== undefined && (typeof pilot !== 'string' || pilot.trim().length > MAX_CARD_NAME)) throw new HttpError(400, 'invalidRequest', { what: 'pilot' });
       const [c] = await cardAt(volume);
-      await setCardName(c.volume, name);
+      await setCardName(c.volume, name, pilot);
       await poll(true);
     },
     'POST /api/radio/sounds': async (req) => {
@@ -615,8 +627,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       const source = q.get('source') || undefined; // checked against the sources found in the backups
       const volume = q.get('volume');
       const c = volume ? cards.find((x) => x.volume === volume) : undefined;
-      const connected = cards.map((x) => ({ cardId: x.cardId, cardName: x.cardName }));
-      return modelsView(p, s, source, c && { volume: c.volume, board: boardOf(c), cardId: c.cardId }, modelCache, connected);
+      return modelsView(p, s, source, c && { volume: c.volume, board: boardOf(c), cardId: c.cardId }, modelCache, connectedCards());
     },
     'GET /api/models/image': async (_req, q) => {
       const img = await modelImage(p, q.get('board') ?? '', q.get('backup') ?? '', q.get('file') ?? '');
@@ -749,15 +760,21 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     'GET /api/packages': () => packageViews(p, s),
     'POST /api/packages/delete': async (req) => {
       const { name, tag } = await body<{ name: string; tag: string }>(req);
-      await deleteVersion(p, s, name, tag);
+      const types = await radioTypes(p, s);
+      await deleteVersion(p, s, name, tag, (k) => labelOfKey(s, types, k));
     },
-    'GET /api/backups': (_req, q) =>
-      backupViews(
-        p,
-        s,
-        cards.map((c) => ({ board: boardOf(c), volume: c.volume, cardId: c.cardId, cardName: c.cardName })),
-        q.get('volume') ?? undefined,
-      ),
+    'GET /api/backups': () => backupViews(p, s, connectedCards()),
+    'GET /api/radios': () => radiosView(p, s, connectedCards()),
+    'POST /api/radios/forget': async (req) => {
+      const { key, backups } = await body<{ key: string; backups?: boolean }>(req);
+      if (typeof key !== 'string') throw new HttpError(400, 'invalidRequest', { what: 'radio' });
+      if (cards.some((c) => { const b = boardOf(c); return b && radioKey(b, c.cardId) === key; })) throw new HttpError(409, 'radioConnected');
+      const [board] = key.split('/');
+      const gone = await forgetRadio(p, s, key, backups === true);
+      if (board) dropBackups(board, gone);
+      await saveSettings(p, s);
+      await pushState();
+    },
     'POST /api/backups/keep': async (req) => {
       const { board, name, keep } = await body<{ board: string; name: string; keep: boolean }>(req);
       if (typeof board !== 'string' || !isSafeKey(board) || !isBackupName(name)) throw new HttpError(400, 'invalidRequest', { what: 'backup' });

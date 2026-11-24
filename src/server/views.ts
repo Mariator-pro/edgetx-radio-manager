@@ -1,7 +1,8 @@
 import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { backupFirmware, cardBackups, listBackups } from '../core/backup.ts';
-import { cardLabel, ID_FILE, readIdentity, type CardIdentity, type InstalledList, type RadioCard } from '../core/card.ts';
+import { cardLabel, shortId, type InstalledList, type RadioCard } from '../core/card.ts';
+import { backupBoards, backupIdentity, backupsWithoutId, knownRadios, labelOfKey, type ConnectedCard, type KnownRadio } from '../core/known-radios.ts';
 import { localVersion, sameOnCard, voicesChanged } from '../core/content.ts';
 import type { PackageState } from '../core/initialize.ts';
 import { folderSize, installedOn, localVersions, mainInfo, mainVersion, versionDir } from '../core/packages.ts';
@@ -14,7 +15,10 @@ import { radioKey, soundsOf, voiceLanguage, type Settings } from '../core/settin
 import type { RestorePlan } from '../core/restore.ts';
 import type { UpdateSetup } from '../core/update.ts';
 import type {
+  BackupItemView,
   BackupView,
+  KnownRadioView,
+  RadioChoiceView,
   CardModelView,
   CopyItemView,
   ModelRef,
@@ -31,7 +35,7 @@ import type {
   VoiceView,
 } from './api.ts';
 
-export async function sourceViews(p: Paths, s: Settings): Promise<SourceView[]> {
+async function sourceViews(p: Paths, s: Settings): Promise<SourceView[]> {
   return Promise.all(
     s.sources.map(async (src) => {
       const [newest] = await localVersions(p, src.name);
@@ -55,26 +59,6 @@ export interface CardCheckView {
   pending: Set<string>;
   list?: InstalledList;
   states?: PackageState[];
-}
-
-// Id and name of the card a backup is from, read again only when its radio.json changes.
-const identities = new Map<string, CardIdentity>();
-async function backupIdentity(p: Paths, board: string, name: string): Promise<CardIdentity> {
-  const dir = join(p.backups, board, name);
-  const key = `${dir}|${(await stat(join(dir, ID_FILE)).catch(() => undefined))?.mtimeMs ?? 'none'}`;
-  if (!identities.has(key)) identities.set(key, await readIdentity(dir));
-  return identities.get(key)!;
-}
-
-// The SD cards the app knows of a radio type, from its backups and the connected cards: id -> name.
-async function knownCards(p: Paths, board: string, connected: CardIdentity[] = []): Promise<Map<string, string | undefined>> {
-  const known = new Map<string, string | undefined>();
-  for (const name of await listBackups(p, board)) {
-    const id = await backupIdentity(p, board, name);
-    if (id.cardId) known.set(id.cardId, id.cardName);
-  }
-  for (const c of connected) if (c.cardId) known.set(c.cardId, c.cardName);
-  return known;
 }
 
 export async function radioView(
@@ -145,6 +129,7 @@ export async function radioView(
     name: type,
     label: cardLabel(type, card),
     ...(card.cardName ? { cardName: card.cardName } : {}),
+    ...(card.cardPilot ? { cardPilot: card.cardPilot } : {}),
     firmware: card.firmware,
     firmwareAvailable: fw,
     firmwareNames: Object.fromEntries(fwVersions.filter((v) => v.name).map((v) => [v.tag.replace(/^v/, ''), v.name!])),
@@ -224,6 +209,7 @@ export async function restorePlanView(p: Paths, card: RadioCard, board: string, 
 }
 
 export async function packageViews(p: Paths, s: Settings): Promise<PackageView[]> {
+  const types = await radioTypes(p, s);
   return Promise.all(
     s.sources.map(async (src) => ({
       name: src.name,
@@ -233,98 +219,97 @@ export async function packageViews(p: Paths, s: Settings): Promise<PackageView[]
           tag: v.tag,
           published: v.published,
           bytes: await folderSize(versionDir(p, src.name, v.tag)),
-          installedOn: installedOn(s, src.name, v.tag),
+          installedOn: installedOn(s, src.name, v.tag).map((key) => labelOfKey(s, types, key)),
         })),
       ),
     })),
   );
 }
 
-// connected: the cards connected now, by radio type, to mark the backups that are from them.
-// "This SD card" is the radio chosen in the app (volume), else the only connected one of the type.
-export async function backupViews(
-  p: Paths,
-  s: Settings,
-  connected: (CardIdentity & { board?: string; volume?: string })[] = [],
-  volume?: string,
-): Promise<BackupView[]> {
+const choiceOf = (r: KnownRadio): RadioChoiceView => ({
+  key: r.key,
+  board: r.board,
+  type: r.type,
+  ...(r.name ? { name: r.name } : {}),
+  ...(r.cardId ? { cardId: r.cardId, idShort: shortId(r.cardId) } : {}),
+  ...(r.volume ? { volume: r.volume } : {}),
+  ...(r.test ? { test: true } : {}),
+});
+
+// The entries of the "Radio" choice, in the order of the radios page: each SD card with backups or connected now,
+// then per type the backups from before cards had an id. backups: the backup folders each entry shows.
+async function radioChoices(p: Paths, s: Settings, connected: ConnectedCard[]): Promise<(RadioChoiceView & { backups: string[] })[]> {
+  const radios = await knownRadios(p, s, connected);
+  const out = radios.filter((r) => r.cardId && (r.backups.length > 0 || r.volume)).map((r) => ({ ...choiceOf(r), backups: r.backups }));
   const types = await radioTypes(p, s);
-  const boards = (await readdir(p.backups, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory()).map((e) => e.name);
+  for (const board of await backupBoards(p)) {
+    const names = await backupsWithoutId(p, board);
+    if (names.length > 0) out.push({ key: board, board, type: radioName(types, board), unknown: true, backups: names });
+  }
+  return out;
+}
+
+// The radios page: every radio in the settings or connected now; one known only from its backups was forgotten.
+export async function radiosView(p: Paths, s: Settings, connected: ConnectedCard[]): Promise<KnownRadioView[]> {
+  return (await knownRadios(p, s, connected))
+    .filter((r) => r.inSettings || r.volume)
+    .map((r) => ({
+      ...choiceOf(r),
+      ...(r.pilot ? { pilot: r.pilot } : {}),
+      ...(r.seen ? { seen: r.seen } : {}),
+      ...(r.firmware ? { firmware: r.firmware } : {}),
+      packages: Object.entries(r.installed).map(([name, version]) => ({ name, version })),
+      backups: r.backups.length,
+      kept: r.kept.length,
+    }));
+}
+
+// The backups page: one entry per SD card, in the order of the radios page, each with only its own backups.
+export async function backupViews(p: Paths, s: Settings, connected: ConnectedCard[] = []): Promise<BackupView[]> {
   return Promise.all(
-    boards.sort().map(async (board) => {
-      const kept = s.keptBackups[board] ?? [];
-      const names = await listBackups(p, board);
-      const here = connected.filter((c) => c.board === board);
-      const mine = here.find((c) => c.volume === volume) ?? (here.length === 1 ? here[0] : undefined);
-      const known = await knownCards(p, board, here);
-      const type = radioName(types, board);
+    (await radioChoices(p, s, connected)).map(async ({ backups, ...choice }) => {
+      const kept = s.keptBackups[choice.board] ?? [];
       const items = await Promise.all(
-        names.map(async (name) => {
-          const id = await backupIdentity(p, board, name);
-          // the name the card has now, else the one it had in the backup
-          const card = id.cardId ? { ...id, cardName: known.get(id.cardId) ?? id.cardName } : undefined;
-          return {
-            name,
-            bytes: await folderSize(join(p.backups, board, name)),
-            kept: kept.includes(name),
-            firmware: await backupFirmware(join(p.backups, board, name)),
-            ...s.backupInfo[board]?.[name],
-            ...(card ? { card: cardLabel(type, card) } : {}),
-            ...(card && mine?.cardId === card.cardId ? { thisCard: true } : {}),
-          };
-        }),
+        backups.map(async (name): Promise<BackupItemView> => ({
+          name,
+          bytes: await folderSize(join(p.backups, choice.board, name)),
+          kept: kept.includes(name),
+          firmware: await backupFirmware(join(p.backups, choice.board, name)),
+          ...s.backupInfo[choice.board]?.[name],
+        })),
       );
-      return { board, radio: radioName(types, board), items };
+      return { ...choice, items };
     }),
   );
 }
 
 const cardModelView = (m: ModelFile): CardModelView => ({ name: m.name, file: m.file, ...(m.semver ? { semver: m.semver } : {}), labels: m.labels });
 
-// Whose backups the models page can show: one entry per SD card with backups (radioKey), or per type while no
-// backup of it has an id yet.
-async function modelSources(p: Paths, s: Settings, connected: CardIdentity[]): Promise<ModelsView['sources']> {
-  const types = await radioTypes(p, s);
-  const dirs = (await readdir(p.backups, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory()).map((e) => e.name);
-  const sources: ModelsView['sources'] = [];
-  for (const board of dirs.sort()) {
-    const names = await listBackups(p, board);
-    if (names.length === 0) continue;
-    const ids = new Set<string>();
-    for (const n of names) {
-      const id = (await backupIdentity(p, board, n)).cardId;
-      if (id) ids.add(id);
-    }
-    const type = radioName(types, board);
-    if (ids.size === 0) sources.push({ key: board, board, radio: type });
-    const known = await knownCards(p, board, connected);
-    for (const id of ids) sources.push({ key: radioKey(board, id), board, card: id, radio: cardLabel(type, { cardId: id, cardName: known.get(id) }) });
-  }
-  return sources;
-}
-
-// The models of an SD card (or of a type) from its backups, compared with the radio chosen in the app (card).
-// Without a source asked for, the chosen radio's own; else the first that has backups.
+// The models of an SD card (or of the backups of a type without an id) from its backups, compared with the radio
+// chosen in the app (card). Without a source asked for, the chosen radio's own; else the first, which is the one
+// connected last.
 export async function modelsView(
   p: Paths,
   s: Settings,
   wanted: string | undefined,
-  card: (CardIdentity & { volume: string; board?: string }) | undefined,
+  card: ConnectedCard | undefined,
   cache: ModelCache,
-  connected: CardIdentity[] = [],
+  connected: ConnectedCard[] = [],
 ): Promise<ModelsView> {
   const types = await radioTypes(p, s);
-  const sources = await modelSources(p, s, connected);
-  const own = card?.board ? [radioKey(card.board, card.cardId), card.board] : [];
-  const source =
-    sources.find((x) => x.key === wanted) ?? (wanted ? undefined : (sources.find((x) => own.includes(x.key)) ?? sources[0]));
+  const choices = await radioChoices(p, s, connected);
+  const sources = choices.map(({ backups: _b, ...c }) => c);
+  const own = card?.board ? radioKey(card.board, card.cardId) : undefined;
+  const source = sources.find((x) => x.key === wanted) ?? (wanted ? undefined : (sources.find((x) => x.key === own) ?? sources[0]));
   const board = source?.board ?? '';
-  const entries = source ? await modelEntries(p, board, cache, source.card ? await cardBackups(p, board, source.card) : undefined) : [];
+  // a card's models come from its own backups and those from before cards had an id
+  const names = source ? (source.cardId ? await cardBackups(p, board, source.cardId) : choices.find((c) => c.key === source.key)!.backups) : [];
+  const entries = source ? await modelEntries(p, board, cache, names) : [];
   const onCard = card ? await readModels(card.volume) : [];
   const view: ModelsView = {
     board,
     source: source?.key ?? '',
-    radio: source?.radio ?? radioName(types, board),
+    radio: source ? (source.name ?? source.type) : radioName(types, board),
     sources,
     entries: entries.map((e) => {
       const { versions, ...rest } = e;

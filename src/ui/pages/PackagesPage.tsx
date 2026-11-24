@@ -1,4 +1,4 @@
-import { Button, Card, Chip, Spinner } from '@heroui/react';
+import { Button, Card, Chip, Spinner, Tooltip } from '@heroui/react';
 import { useCallback, useEffect, useState } from 'react';
 import type { PackageView } from '../../server/api.ts';
 import { get, post } from '../api.ts';
@@ -40,11 +40,23 @@ export function PackagesPage({ run, refreshKey }: { run: Run; refreshKey: unknow
                     <span className="w-28 text-sm text-muted">{date(v.published, t.locale)}</span>
                     <span className="w-20 text-sm text-muted">{bytes(v.bytes)}</span>
                     <span className="flex flex-1 flex-wrap gap-1.5">
-                      {v.installedOn.map((b) => (
-                        <Chip key={b} size="sm" variant="soft" color="accent">
-                          {t.onRadio(b)}
-                        </Chip>
-                      ))}
+                      {v.installedOn.length > 0 && (
+                        <Tooltip delay={200}>
+                          <Tooltip.Trigger aria-label={`${t.onRadios(v.installedOn.length)}: ${v.installedOn.join(', ')}`} tabIndex={0} className="rounded-full">
+                            <Chip size="sm" variant="soft" color="accent">
+                              {t.onRadios(v.installedOn.length)}
+                            </Chip>
+                          </Tooltip.Trigger>
+                          <Tooltip.Content showArrow>
+                            <Tooltip.Arrow />
+                            <ul className="m-0 list-none p-0 text-sm">
+                              {v.installedOn.map((r) => (
+                                <li key={r}>{r}</li>
+                              ))}
+                            </ul>
+                          </Tooltip.Content>
+                        </Tooltip>
+                      )}
                     </span>
                     <Button
                       size="sm"

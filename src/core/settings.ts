@@ -21,12 +21,15 @@ export interface Choice {
   origin: 'release' | 'main' | 'local';
 }
 
-export interface RadioSettings {
+interface RadioSettings {
   language?: string; // from radio.yml, refreshed on every detection
   sounds?: string[]; // sound packs, one per language, e.g. ["de", "en_gb-ryan"]; taken from the card when it is read
   sources?: Record<string, Choice>; // what goes on this radio; taken from the card when it is read
   firmware?: string; // last seen on the card
   installed?: Record<string, string>; // package -> version, last seen on the card
+  name?: string; // the card's name and pilot when last connected; the card's radio.json is where they live
+  pilot?: string;
+  seen?: string; // ISO time the radio was last connected
 }
 
 // A package whose version on the card an update changes; without from it is new, without to removed.
@@ -145,7 +148,7 @@ export function forgetBackups(s: Settings, board: string, names: string[]): void
 // Each SD card keeps its own settings, so two radios of one type don't share a choice; a card without an id yet
 // goes by its type alone.
 export const radioKey = (board: string, cardId?: string) => (cardId ? `${board}/${cardId}` : board);
-export const boardOfKey = (key: string) => key.split('/')[0]!;
+const boardOfKey = (key: string) => key.split('/')[0]!;
 
 // The settings of one SD card, made when missing. A card that just got its id takes over the entry it had without one.
 export function radioOf(s: Settings, board: string, cardId?: string): RadioSettings {
@@ -170,7 +173,20 @@ export function rememberRadio(s: Settings, card: RadioCard): boolean {
   if (card.language) r.language = card.language;
   if (card.firmware) r.firmware = card.firmware;
   if (card.installed) r.installed = Object.fromEntries(Object.entries(card.installed.packages).map(([n, v]) => [n, v.version]));
+  if (card.cardId) {
+    // name and pilot as the card has them now, so the radios page shows them while it isn't connected
+    if (card.cardName) r.name = card.cardName;
+    else delete r.name;
+    if (card.cardPilot) r.pilot = card.cardPilot;
+    else delete r.pilot;
+  }
   return JSON.stringify(r) !== before;
+}
+
+// Notes when a radio was connected: on connecting and again on disconnecting, so a radio left connected for long
+// shows when it was last there. A card without its id yet is noted once it has one.
+export function markSeen(s: Settings, card: RadioCard, at: Date): void {
+  if (card.board && card.cardId) radioOf(s, card.board, card.cardId).seen = at.toISOString();
 }
 
 // Checkouts of the own projects in the folder with the local repos, each in a folder named like its repo

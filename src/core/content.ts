@@ -15,7 +15,7 @@ const run = promisify(execFile);
 
 export type Origin = 'release' | 'main' | 'local';
 
-export interface PkgFile {
+interface PkgFile {
   data: Buffer;
   sha: string;
   time: number; // release or commit date, or the file's change time for a local checkout
@@ -31,7 +31,7 @@ export interface PackageContent {
 }
 
 // Radio-specific choice of zips: SD content by the release's sdcard.json, sound packs by language and voice.
-export interface RadioContext {
+interface RadioContext {
   board?: string;
   voices?: string[];
 }

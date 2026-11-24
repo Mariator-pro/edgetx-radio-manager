@@ -3,7 +3,7 @@ import type { Lang, Texts } from './texts.ts';
 
 export type Theme = 'light' | 'dark';
 
-export interface Prefs {
+interface Prefs {
   t: Texts;
   lang: Lang;
   setLang: (l: Lang) => void;

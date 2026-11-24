@@ -25,6 +25,8 @@ npm run cli -- <command> [options]
 | `models export <model> ...` | Save models from the backups as `<model name>.yml` (`--out <folder>`, `--from`) |
 | `models import <file> [<model> ...]` | Copy models from a `.yml` or `.etx` file onto the SD card |
 | `models diff <model> [<backup> [<backup>]]` | Differences between two versions, without a second backup against the SD card |
+| `radios` | Every radio the app knows: type, name, ID, when it was last connected, number of backups, pilot |
+| `forget <ID>` | Take a radio that isn't connected out of the app, so its package versions can be deleted; the start of the ID is enough (e.g. `forget 5f854692`); `--with-backups` deletes its backups too |
 | `ui` | Open the browser interface (like `npm start`) |
 
 ## Options
@@ -36,5 +38,6 @@ npm run cli -- <command> [options]
 - `--add`: with `models copy` or `models import`, add the models as new ones instead of replacing those of the same name
 - `--from <radio>[/<backup>]`: with `models copy`, `export` or `diff`, take the models from these backups
 - `--out <folder>`: with `models export`, where the files go (default: the current folder)
+- `--with-backups`: with `forget`, delete the radio's backups too
 
 Typical flow: `download`, connect the radio in "USB Storage" mode, `update`.

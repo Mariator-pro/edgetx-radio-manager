@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 // colour); in the default one their empty box or circle has the surface's own colour in dark mode and can't be
 // seen. Read from the source, so it needs no browser; what a helper component puts into a card elsewhere it
 // can't see. The secondary variant on the page itself is fine, so only the other way round counts.
+// A control marked with data-on-map floats over a map that lies on a surface; it keeps the default variant.
 
 const UI = join(import.meta.dirname, '../src/ui');
 const CONTROLS = new Set(['Checkbox', 'RadioGroup', 'Input', 'Select', 'TextArea']);
@@ -30,6 +31,8 @@ function attr(n: Jsx, name: string): string | undefined {
   }
   return undefined;
 }
+const hasAttr = (n: Jsx, name: string) =>
+  opening(n).attributes.properties.some((a) => ts.isJsxAttribute(a) && a.name.getText() === name);
 const isSurface = (n: Jsx) => SURFACE_TAGS.test(tag(n)) || SURFACE_CLASS.test(attr(n, 'className') ?? '');
 
 function hasSurfaceInside(node: ts.Node): boolean {
@@ -53,7 +56,7 @@ function findings(file: string): Finding[] {
   const out: Finding[] = [];
   const walk = (node: ts.Node, ancestors: Jsx[]) => {
     if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
-      if (CONTROLS.has(tag(node))) {
+      if (CONTROLS.has(tag(node)) && !hasAttr(node, 'data-on-map')) {
         const surface = ancestors.some(isSurface) || hasSurfaceInside(node);
         const line = src.getLineAndCharacterOfPosition(node.getStart()).line + 1;
         out.push({ where: `${relative(UI, file)}:${line}`, control: tag(node), surface, variant: attr(node, 'variant') });

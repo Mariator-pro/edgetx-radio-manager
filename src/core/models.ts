@@ -12,13 +12,13 @@ import { readZipBuffer } from './zip.ts';
 
 // EdgeTX reads only MODELS/model<digits>.yml; anything else in MODELS/ is not a model to it.
 const MODEL_FILE = /^model\d+\.yml$/i;
-export const isModelFile = (name: string) => MODEL_FILE.test(name);
+const isModelFile = (name: string) => MODEL_FILE.test(name);
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 const sha256 = (data: Buffer) => createHash('sha256').update(data).digest('hex');
 
-export interface ModelModule {
+interface ModelModule {
   type?: string; // e.g. TYPE_CROSSFIRE, missing when the module is off
   id?: number; // receiver number
 }
@@ -66,7 +66,7 @@ export function parseModel(file: string, data: Buffer): ModelFile {
 }
 
 // Module type and receiver number per module slot (0 internal, 1 external).
-export function modulesOf(m: ModelFile): ModelModule[] {
+function modulesOf(m: ModelFile): ModelModule[] {
   const h = isObject(m.doc.header) ? m.doc.header : {};
   const ids = isObject(h.modelId) ? h.modelId : {};
   const mods = isObject(m.doc.moduleData) ? m.doc.moduleData : {};
@@ -92,7 +92,7 @@ export async function readModels(root: string): Promise<ModelFile[]> {
 const fileNumber = (file: string) => parseInt(file.replace(/\D/g, ''), 10) || 0;
 
 // What a radio has, from its RADIO/radio.yml.
-export interface RadioHardware {
+interface RadioHardware {
   board?: string;
   firmware?: string;
   language?: string; // voice output, the folder under SOUNDS/ for the model's sounds
@@ -121,13 +121,13 @@ export function parseHardware(text: string | undefined): RadioHardware {
   return hw;
 }
 
-export async function readHardware(root: string): Promise<RadioHardware> {
+async function readHardware(root: string): Promise<RadioHardware> {
   return parseHardware(await readFile(join(root, 'RADIO', 'radio.yml'), 'utf8').catch(() => undefined));
 }
 
 // --- Models across backups ---
 
-export interface ModelVersion {
+interface ModelVersion {
   sha: string;
   file: string;
   backup: string; // newest backup with this content
@@ -137,7 +137,7 @@ export interface ModelVersion {
   labels: string[];
 }
 
-export interface ModelEntry {
+interface ModelEntry {
   name: string;
   file?: string; // set when a backup has more than one model of this name
   versions: ModelVersion[]; // newest first
@@ -190,7 +190,7 @@ export async function modelEntries(p: Paths, board: string, cache?: ModelCache, 
   return [...entries.values()].sort((a, b) => a.name.localeCompare(b.name) || str(a.file).localeCompare(str(b.file)));
 }
 
-export type CardStatus = 'same' | 'changed' | 'missing';
+type CardStatus = 'same' | 'changed' | 'missing';
 
 // The card's model of the same name; with several, the one with the same file name first.
 export function sameNamed(card: ModelFile[], name: string, file?: string): ModelFile | undefined {
@@ -225,7 +225,7 @@ export async function backupOrigin(p: Paths, board: string, name: string): Promi
   return folderOrigin(root, board, true);
 }
 
-export async function folderOrigin(root: string, board: string | undefined, isBackup: boolean): Promise<ModelOrigin> {
+async function folderOrigin(root: string, board: string | undefined, isBackup: boolean): Promise<ModelOrigin> {
   const listedText = await readFile(join(root, '.radio-manager', 'installed.json'), 'utf8').catch(() => undefined);
   let listed: ModelOrigin['listed'];
   try {
@@ -346,7 +346,7 @@ export function controlsUsed(m: ModelFile, names?: string[]): string[] {
 
 
 // "2.12.5" above "2.12.2"; parts that are missing count as 0.
-export function versionAbove(a: string, b: string): boolean {
+function versionAbove(a: string, b: string): boolean {
   const x = a.replace(/^v/, '').split(/[.-]/).map((n) => parseInt(n, 10) || 0);
   const y = b.replace(/^v/, '').split(/[.-]/).map((n) => parseInt(n, 10) || 0);
   for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
@@ -448,7 +448,7 @@ async function missingFiles(m: ModelFile, origin: ModelOrigin, card: CardState):
 }
 
 // The checklist EdgeTX shows for a model: MODELS/<name>.txt, with "_" for spaces, or MODELS/<file>.txt.
-export function checklistNames(name: string, file: string): string[] {
+function checklistNames(name: string, file: string): string[] {
   const base = file.replace(/\.yml$/i, '');
   return [...new Set([`${name}.txt`, `${name.replaceAll(' ', '_')}.txt`, ...(base ? [`${base}.txt`] : [])])];
 }
@@ -517,7 +517,7 @@ export async function planCopy(card: CardState, requests: CopyRequest[]): Promis
 // Whether the user has to confirm: the model uses hardware the radio may not have.
 export const doesntFit = (i: CopyItem) => i.controls.length > 0 || !!i.module;
 
-export interface ModelsResult {
+interface ModelsResult {
   written: number;
   moved: number;
 }
@@ -622,7 +622,7 @@ export function exportName(m: ModelFile): string {
 }
 
 // Image types EdgeTX shows, for serving a model's picture.
-export const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.bmp': 'image/bmp', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' };
+const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.bmp': 'image/bmp', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' };
 
 export async function modelImage(p: Paths, board: string, backup: string, file: string): Promise<{ data: Buffer; type: string }> {
   const type = IMAGE_TYPES[extname(file).toLowerCase()];

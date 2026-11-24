@@ -96,7 +96,7 @@ export interface CatalogEntry {
 }
 
 // "v2.13.0-rc1"; EdgeTX's other pre-release, the rolling "nightly", is left out.
-export const isReleaseCandidate = (tag: string) => /-rc\d+$/i.test(tag);
+const isReleaseCandidate = (tag: string) => /-rc\d+$/i.test(tag);
 
 // Firmware releases on GitHub from MIN_EDGETX on, with prereleases also the release candidates, each with the radio types it supports.
 // The types come from the zip's file list, read from GitHub without downloading the zip, and are kept
@@ -127,7 +127,7 @@ export async function firmwareCatalog(p: Paths, source: Source, fetchFn: FetchFn
   return entries.filter((e): e is CatalogEntry => !!e);
 }
 
-export interface Uf2Drive {
+interface Uf2Drive {
   volume: string;
   board?: string;
   bootloader?: string;
@@ -153,7 +153,7 @@ export async function flashUf2(drive: Uf2Drive, board: string, data: Buffer): Pr
   await writeFile(join(drive.volume, 'firmware.uf2'), data);
 }
 
-export interface DfuDevice {
+interface DfuDevice {
   id: string;
   name: string;
 }
@@ -188,17 +188,17 @@ export async function dfuUtilAvailable(dfuUtil = 'dfu-util'): Promise<boolean> {
   );
 }
 
-export async function listDfu(dfuUtil = 'dfu-util'): Promise<DfuDevice[]> {
+async function listDfu(dfuUtil = 'dfu-util'): Promise<DfuDevice[]> {
   return parseDfuList((await run(dfuUtil, ['-l']).catch(() => ({ out: '' }))).out);
 }
 
 // Radios in DFU mode whose internal flash can be written.
-export async function dfuRadios(dfuUtil = 'dfu-util'): Promise<DfuDevice[]> {
+async function dfuRadios(dfuUtil = 'dfu-util'): Promise<DfuDevice[]> {
   return (await listDfu(dfuUtil)).filter((d) => d.name.includes('Internal Flash'));
 }
 
 // Writes the .bin to the start of the internal flash and leaves DFU mode; devices when already listed.
-export async function flashDfu(data: Buffer, onPercent: (pct: number) => void = () => {}, dfuUtil = 'dfu-util', devices?: DfuDevice[]): Promise<void> {
+async function flashDfu(data: Buffer, onPercent: (pct: number) => void = () => {}, dfuUtil = 'dfu-util', devices?: DfuDevice[]): Promise<void> {
   devices ??= await dfuRadios(dfuUtil);
   if (devices.length === 0) throw new AppError('noDfuRadio');
   if (devices.length > 1) throw new AppError('severalDfu');
@@ -237,7 +237,7 @@ export async function waitFor<T>(check: () => Promise<T | undefined>, signal?: A
   }
 }
 
-export interface FlashProgress {
+interface FlashProgress {
   step: 'waiting' | 'writing';
   text: string;
   file: string;

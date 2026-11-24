@@ -45,6 +45,16 @@ export const BackupsIcon = (p: IconProps) => (
   </Svg>
 );
 
+// A radio from the front: antenna, body, two sticks.
+export const RadiosIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 7V3" />
+    <rect x="3" y="7" width="18" height="12" rx="3" />
+    <circle cx="8" cy="13" r="2" />
+    <circle cx="16" cy="13" r="2" />
+  </Svg>
+);
+
 // A quadcopter seen from above.
 export const ModelsIcon = (p: IconProps) => (
   <Svg {...p}>

@@ -9,7 +9,7 @@ import { isSafeName, type Paths } from './paths.ts';
 
 export type RestoreAction = 'add' | 'replace' | 'delete';
 
-export interface RestoreItem {
+interface RestoreItem {
   path: string; // relative to the card, with "/"
   action: RestoreAction;
 }
@@ -22,7 +22,7 @@ export interface RestorePlan {
   firmware?: string; // EdgeTX version in the backup's radio.yml
 }
 
-export interface RestoreResult {
+interface RestoreResult {
   written: number;
   deleted: number;
 }
@@ -33,7 +33,7 @@ const SAME_TIME_MS = 2000;
 // an edited model can keep both.
 const COMPARE_BYTES = 1 << 20;
 
-export function backupDir(p: Paths, board: string, name: string): string {
+function backupDir(p: Paths, board: string, name: string): string {
   if (!isSafeName(board) || !isBackupName(name)) throw new AppError('invalidRequest', { what: 'backup' });
   return join(p.backups, board, name);
 }

@@ -44,6 +44,7 @@ export interface RadioView {
   name: string; // the radio type
   label: string; // how the app calls this radio: its name, else its type (with the start of its id when there are more)
   cardName?: string; // the name given to this SD card
+  cardPilot?: string; // who flies it, kept on the SD card too
   firmware?: string;
   firmwareAvailable?: string;
   firmwareNames: Record<string, string>; // version without "v" -> release title, for the downloaded ones
@@ -99,7 +100,7 @@ export interface PlanFileView {
   others?: string[]; // other packages that deliver the same path
 }
 
-export interface PlanGroupView {
+interface PlanGroupView {
   name: string;
   from?: string;
   to?: string;
@@ -143,7 +144,7 @@ export interface RestoreResultView {
   backup?: string; // the backup made first, unless left out
 }
 
-export interface ModelVersionView {
+interface ModelVersionView {
   file: string;
   backup: string; // newest backup with this content
   since: string; // oldest backup with this content
@@ -171,8 +172,8 @@ export interface ModelsView {
   board: string; // the type of the backups shown
   source: string; // whose backups are shown: an entry of sources
   radio: string; // its name
-  // SD cards with backups (key "<board>/<card id>"), or a type whose backups have no card id yet (key "<board>")
-  sources: { key: string; board: string; card?: string; radio: string }[];
+  // SD cards with backups or connected (key "<board>/<card id>"), and per type the backups without a card id (key "<board>")
+  sources: RadioChoiceView[];
   entries: ModelEntryView[];
   card?: { volume: string; board?: string; radio: string; models: CardModelView[] }; // the connected radio
   onlyOnCard: CardModelView[]; // on the card of this radio type, in no backup
@@ -206,7 +207,7 @@ export interface CopyItemView {
   receiver?: { id: number; models: string[] };
 }
 
-export interface DeleteItemView {
+interface DeleteItemView {
   name: string;
   file: string;
   moves: string[];
@@ -234,11 +235,11 @@ export interface DiffGroupView {
   entries: { path: string; from?: string; to?: string }[];
 }
 
-export interface PackageVersionView {
+interface PackageVersionView {
   tag: string;
   published: string;
   bytes: number;
-  installedOn: string[];
+  installedOn: string[]; // the radios that have it, by the name the app calls them
 }
 
 export interface PackageView {
@@ -263,14 +264,42 @@ export interface BackupItemView {
   restoredFrom?: string; // restore: the backup put back afterwards
   models?: string[]; // models, deleteModels: the models copied or deleted
   note?: string;
-  card?: string; // the radio it is from, as the app calls it; none for backups from before cards had an id
-  thisCard?: boolean; // from the SD card connected now
 }
 
-export interface BackupView {
+// An entry of the "Radio" choice on the backups and models pages: an SD card, or the backups of a type from before
+// cards had an id (unknown).
+export interface RadioChoiceView {
+  key: string; // "<board>/<card id>", or "<board>" for the backups without an id
   board: string;
-  radio: string;
+  type: string; // maker and model
+  name?: string; // the card's name
+  cardId?: string;
+  idShort?: string;
+  volume?: string; // connected at this drive
+  test?: boolean;
+  unknown?: boolean;
+}
+
+export interface BackupView extends RadioChoiceView {
   items: BackupItemView[];
+}
+
+// A radio on the radios page.
+export interface KnownRadioView {
+  key: string;
+  board: string;
+  type: string;
+  name?: string;
+  pilot?: string;
+  cardId?: string;
+  idShort?: string;
+  seen?: string;
+  firmware?: string;
+  packages: { name: string; version: string }[];
+  backups: number;
+  kept: number; // of those, marked to keep
+  volume?: string; // connected at this drive
+  test?: boolean;
 }
 
 export interface VoiceView {

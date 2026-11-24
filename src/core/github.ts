@@ -2,7 +2,7 @@ import { AppError } from './errors.ts';
 
 export type FetchFn = typeof fetch;
 
-export interface Asset {
+interface Asset {
   name: string;
   url: string;
   size: number;

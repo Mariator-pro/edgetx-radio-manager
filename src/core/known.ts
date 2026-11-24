@@ -18,7 +18,7 @@ export interface KnownFile {
 }
 
 // variant -> card path -> file. Variant: the zip of one screen size (SD content), one voice (sounds), "" (projects).
-export type Variants = Map<string, Map<string, KnownFile>>;
+type Variants = Map<string, Map<string, KnownFile>>;
 
 export interface KnownVersion {
   tag: string;
@@ -28,7 +28,7 @@ export interface KnownVersion {
 }
 
 // The stored form, compact: each path once, with every content it had and the versions that had it.
-export interface KnownSource {
+interface KnownSource {
   versions: { tag: string; published: string; boards?: Record<string, string> }[];
   packs: Record<string, Record<string, [sha: string, size: number, versions: number[]][]>>;
 }
@@ -39,7 +39,7 @@ export const SOUND_ZIP = /^edgetx-sdcard-sounds-(.+)-\d[\d.]*\.zip$/;
 
 // Oldest EdgeTX SD content and sounds the app recognizes on a card: one version below what it updates, so a
 // card from before the first update shows its real version.
-export const KNOWN_MIN = '2.11';
+const KNOWN_MIN = '2.11';
 
 // EdgeTX packages older than that aren't compared with.
 export function tooOld(source: Source, tag: string): boolean {
@@ -47,7 +47,7 @@ export function tooOld(source: Source, tag: string): boolean {
 }
 
 // The files of one downloaded version, by variant.
-export async function variantsIn(dir: string, source: Source): Promise<Variants> {
+async function variantsIn(dir: string, source: Source): Promise<Variants> {
   const out: Variants = new Map();
   if (source.file) {
     const data = await readFile(join(dir, source.file.asset)).catch(() => undefined);
@@ -139,7 +139,7 @@ async function storedVersion(p: Paths, source: Source, tag: string): Promise<Kno
 }
 
 // Stores the checksums of a downloaded version, so they stay when the package is deleted.
-export async function rememberVersion(p: Paths, source: Source, tag: string): Promise<KnownVersion | undefined> {
+async function rememberVersion(p: Paths, source: Source, tag: string): Promise<KnownVersion | undefined> {
   if (!isSafeName(source.name) || !isSafeName(tag)) return undefined;
   const info = (await localVersions(p, source.name)).find((v) => v.tag === tag);
   if (!info || tooOld(source, tag)) return undefined;

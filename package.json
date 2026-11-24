@@ -3,7 +3,7 @@
   "productName": "EdgeTX Radio Manager",
   "desktopName": "edgetx-radio-manager.desktop",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Backup, package download and SD card update for EdgeTX radios",
   "author": "Mariator-pro",
   "license": "MIT",
@@ -32,8 +32,8 @@
     "yauzl": "^3.4.0"
   },
   "devDependencies": {
-    "@heroui/react": "3.2.7",
-    "@heroui/styles": "3.2.7",
+    "@heroui/react": "3.2.8",
+    "@heroui/styles": "3.2.8",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",

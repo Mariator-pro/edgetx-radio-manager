@@ -1,4 +1,4 @@
-import { Button, Card, Chip, Input, Spinner, Switch, TextField } from '@heroui/react';
+import { Button, Card, Input, Spinner, Switch, TextField } from '@heroui/react';
 import { useCallback, useEffect, useState } from 'react';
 import type { BackupItemView, BackupView, PackageChangeView, RadioView } from '../../server/api.ts';
 import { get, post } from '../api.ts';
@@ -6,6 +6,8 @@ import { backupLabel, bytes } from '../format.ts';
 import type { Texts } from '../texts.ts';
 import { usePrefs } from '../usePrefs.ts';
 import { type Ask, Confirm } from '../components/Confirm.tsx';
+import { RadioChoice } from '../components/RadioChoice.tsx';
+import { choiceName, preselect } from '../radioChoice.ts';
 
 type Run = (fn: () => Promise<unknown>) => void;
 
@@ -55,37 +57,46 @@ export function BackupsPage({
   const [backups, setBackups] = useState<BackupView[]>();
   const [editing, setEditing] = useState<{ board: string; name: string; text: string }>();
   const [ask, setAsk] = useState<Ask>();
-  const volume = selected?.volume ?? '';
-  const load = useCallback(() => get<BackupView[]>(`/api/backups?volume=${encodeURIComponent(volume)}`).then(setBackups, () => {}), [volume]);
+  // a radio chosen here, and the radio chosen in the sidebar then: another one there shows its own backups again
+  const [chosen, setChosen] = useState<{ key: string; volume?: string }>();
+  const load = useCallback(() => get<BackupView[]>('/api/backups').then(setBackups, () => {}), []);
   useEffect(() => {
     void load();
   }, [load, refreshKey]);
+  const volume = selected?.volume;
 
   if (!backups) return <Spinner />;
+  const own = chosen?.volume === volume ? chosen?.key : undefined;
+  const key = own && backups.some((b) => b.key === own) ? own : preselect(backups, volume);
+  const shown = backups.filter((b) => b.key === key);
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex max-w-3xl flex-col gap-1.5">
           <h1 className="m-0 text-3xl font-bold tracking-tight">{t.backups}</h1>
           <p className="m-0 text-muted">{t.backupsText(keep)}</p>
         </div>
-        <Button variant="outline" onPress={() => run(() => post('/api/backups/open', {}))}>
-          {t.openFolder}
-        </Button>
+        <div className="flex flex-wrap items-end gap-2">
+          {backups.length > 0 && <RadioChoice choices={backups} value={key} onChange={(k) => setChosen({ key: k, volume })} />}
+          <Button variant="outline" onPress={() => run(() => post('/api/backups/open', {}))}>
+            {t.openFolder}
+          </Button>
+        </div>
       </div>
-      {backups.length === 0 && <p className="m-0 text-muted">{t.noBackups}</p>}
-      {backups.map((b) => {
+      {(backups.length === 0 || shown[0]?.items.length === 0) && <p className="m-0 text-muted">{t.noBackups}</p>}
+      {shown.filter((b) => b.items.length > 0).map((b) => {
+        const radio = b.unknown ? b.type : choiceName(t, b); // how the delete question names it
         // A backup goes back only onto a connected radio of its own type: the one chosen, else the only one connected.
         const ofType = radios.filter((r) => r.board === b.board);
         const target = selected?.board === b.board ? selected : ofType.length === 1 ? ofType[0] : undefined;
         return (
-          <Card key={b.board}>
+          <Card key={b.key}>
             <Card.Header>
-              <Card.Title>{b.radio}</Card.Title>
+              <Card.Title>{choiceName(t, b)}</Card.Title>
               <Card.Description>
-                {t.backupCount(b.items.length)}
+                {[b.name || b.unknown ? b.type : undefined, t.backupCount(b.items.length)].filter(Boolean).join(' · ')}
                 {target && ofType.length > 1 && <span> · {t.restoreOnto(target.label)}</span>}
-                {!target && <span id={`needs-${b.board}`}> · {ofType.length > 1 ? t.restoreChooseRadio : t.restoreNeedsRadio(b.radio)}</span>}
+                {!target && <span id={`needs-${b.board}`}> · {ofType.length > 1 ? t.restoreChooseRadio : t.restoreNeedsRadio(b.type)}</span>}
               </Card.Description>
             </Card.Header>
             <Card.Content className="p-0">
@@ -147,7 +158,7 @@ export function BackupsPage({
                           isDisabled={i.kept}
                           onPress={() =>
                             setAsk({
-                              title: t.deleteBackup(backupLabel(i.name), b.radio),
+                              title: t.deleteBackup(backupLabel(i.name), radio),
                               text: t.deleteBackupText,
                               confirm: t.delete,
                               then: () =>
@@ -161,18 +172,7 @@ export function BackupsPage({
                           {t.delete}
                         </Button>
                       </div>
-                      <p className="m-0 text-sm text-muted">
-                        {i.thisCard ? (
-                          <Chip size="sm" variant="soft" color="success">
-                            {t.thisCard}
-                          </Chip>
-                        ) : i.card ? (
-                          t.fromRadio(i.card)
-                        ) : (
-                          t.originUnknown
-                        )}
-                        {line && ` · ${line}`}
-                      </p>
+                      {line && <p className="m-0 text-sm text-muted">{line}</p>}
                       {edit ? (
                         <form
                           className="flex flex-wrap items-center gap-2"

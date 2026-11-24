@@ -4,9 +4,9 @@ import { dateTime } from '../format.ts';
 import { LANGUAGES, type Lang } from '../texts.ts';
 import { usePrefs, type Theme } from '../usePrefs.ts';
 import { ConnectedRadios } from './ConnectedRadios.tsx';
-import { BackupsIcon, ModelsIcon, MoonIcon, PackagesIcon, RefreshIcon, SettingsIcon, SourcesIcon, SunIcon } from './icons.tsx';
+import { BackupsIcon, ModelsIcon, MoonIcon, PackagesIcon, RadiosIcon, RefreshIcon, SettingsIcon, SourcesIcon, SunIcon } from './icons.tsx';
 
-export type Page = 'radio' | 'update' | 'flash' | 'sources' | 'packages' | 'backups' | 'restore' | 'models' | 'modelsFlow' | 'settings';
+export type Page = 'radio' | 'update' | 'flash' | 'sources' | 'packages' | 'radios' | 'backups' | 'restore' | 'models' | 'modelsFlow' | 'settings';
 
 export function Sidebar(props: {
   state?: StateView;
@@ -25,6 +25,7 @@ export function Sidebar(props: {
   const overview = [
     { page: 'sources' as const, label: t.sources, Icon: SourcesIcon },
     { page: 'packages' as const, label: t.packages, Icon: PackagesIcon },
+    { page: 'radios' as const, label: t.radios, Icon: RadiosIcon },
     { page: 'backups' as const, label: t.backups, Icon: BackupsIcon },
     { page: 'models' as const, label: t.models, Icon: ModelsIcon },
     { page: 'settings' as const, label: t.settings, Icon: SettingsIcon },
@@ -170,8 +171,9 @@ export function Sidebar(props: {
         </div>
 
         <div className="flex flex-col gap-2 rounded-xl bg-zinc-800 p-3">
-          <span className="text-xs text-zinc-400">
-            {downloading ? progressText : state?.lastCheck ? t.lastChecked(dateTime(state.lastCheck, t.locale)) : t.notChecked}
+          {/* always two lines high, so the box keeps its size while file names change during a check */}
+          <span className="line-clamp-2 h-8 text-xs text-zinc-400 [overflow-wrap:anywhere]">
+            {downloading ? progressText : state?.lastCheck ? <>{t.lastChecked}<br />{dateTime(state.lastCheck, t.locale)}</> : t.notChecked}
           </span>
           <Button variant="outline" className="text-white" isDisabled={!!state?.busy} onPress={onDownload}>
             {downloading ? <Spinner size="sm" color="current" /> : <RefreshIcon size={16} />}

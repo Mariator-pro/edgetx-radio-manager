@@ -10,13 +10,13 @@ import { mainDir, mainInfo, mainVersion, versionDir, type MainInfo, type Release
 import { isSafeName, type Paths } from './paths.ts';
 import { soundsOf, type Settings, type Source } from './settings.ts';
 
-export interface WantedFile {
+interface WantedFile {
   name: string;
   url: string;
   size?: number;
 }
 
-export interface DownloadResult {
+interface DownloadResult {
   source: string;
   status: 'new' | 'current' | 'no-release' | 'skipped' | 'error';
   tag?: string;

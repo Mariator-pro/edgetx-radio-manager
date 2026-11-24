@@ -1,4 +1,5 @@
-import { Alert, Button, Card, Checkbox, Chip, Label, ListBox, Radio, RadioGroup, Select, Spinner } from '@heroui/react';
+import { Alert, Button, Card, Checkbox, Chip, Label, Radio, RadioGroup, Spinner } from '@heroui/react';
+import { RadioChoice } from '../components/RadioChoice.tsx';
 import { useEffect, useRef, useState } from 'react';
 import type { CardModelView, DiffGroupView, ImportView, ModelEntryView, ModelRef, ModelsView, RadioView, StateView } from '../../server/api.ts';
 import { errorText, get, post, postFile, tokenUrl } from '../api.ts';
@@ -179,36 +180,17 @@ export function ModelsPage({
         </div>
         <div className="flex flex-wrap items-end gap-2">
           {view.sources.length > 0 && (
-            <Select
-              variant="secondary"
-              aria-label={t.modelsOf}
-              className="w-56"
-              selectedKey={view.source}
-              onSelectionChange={(k) => {
-                if (k === null) return;
-                setSource(String(k));
+            <RadioChoice
+              choices={view.sources}
+              value={view.source}
+              onChange={(k) => {
+                setSource(k);
                 setPicked(new Set([...picked].filter((x) => x.startsWith('i:'))));
                 setChosen({});
                 setOpen(new Set());
                 setComparing(undefined);
               }}
-            >
-              <Label>{t.modelsOf}</Label>
-              <Select.Trigger>
-                <Select.Value />
-                <Select.Indicator />
-              </Select.Trigger>
-              <Select.Popover className="field-list">
-                <ListBox>
-                  {view.sources.map((b) => (
-                    <ListBox.Item key={b.key} id={b.key} textValue={b.radio}>
-                      {b.radio}
-                      <ListBox.ItemIndicator />
-                    </ListBox.Item>
-                  ))}
-                </ListBox>
-              </Select.Popover>
-            </Select>
+            />
           )}
           <input
             ref={fileInput}

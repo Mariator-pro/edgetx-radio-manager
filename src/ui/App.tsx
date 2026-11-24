@@ -9,6 +9,7 @@ import { ModelsFlow } from './pages/ModelsFlow.tsx';
 import { notify, type Notice } from './notify.ts';
 import { ModelsPage, type ModelsRequest } from './pages/ModelsPage.tsx';
 import { PackagesPage } from './pages/PackagesPage.tsx';
+import { RadiosPage } from './pages/RadiosPage.tsx';
 import { RadioPage } from './pages/RadioPage.tsx';
 import { RestoreFlow } from './pages/RestoreFlow.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
@@ -219,6 +220,12 @@ export function App() {
           <SettingsPage run={run} />
         ) : page === 'packages' ? (
           <PackagesPage run={run} refreshKey={`${state.lastCheck}|${state.busy}`} />
+        ) : page === 'radios' ? (
+          <RadiosPage
+            run={run}
+            busy={state.busy}
+            refreshKey={`${state.radios.map((r) => `${r.volume}|${r.label}|${r.cardPilot ?? ''}|${r.lastBackup}`).join()}|${state.busy}`}
+          />
         ) : page === 'backups' ? (
           <BackupsPage
             run={run}

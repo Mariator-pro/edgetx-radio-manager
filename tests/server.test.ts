@@ -4,7 +4,7 @@ import { delimiter, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { versionDir } from '../src/core/packages.ts';
 import { paths } from '../src/core/paths.ts';
-import { PREFS_META, TOKEN_HEADER, TOKEN_META, type AppUpdateView, type BackupView, type LicensesView, type PlanView, type RestorePlanView, type RestoreResultView, type StateView, type UpdateResultView } from '../src/server/api.ts';
+import { PREFS_META, TOKEN_HEADER, TOKEN_META, type AppUpdateView, type BackupView, type KnownRadioView, type LicensesView, type PlanView, type RestorePlanView, type RestoreResultView, type StateView, type UpdateResultView } from '../src/server/api.ts';
 import { noteServer, runningServer } from '../src/server/running.ts';
 import { oneAtATime, startServer } from '../src/server/server.ts';
 import { ApiError, errorText } from '../src/ui/errors.ts';
@@ -408,17 +408,29 @@ describe('two radios of the same type', () => {
       const view = async (volume: string) => (await all()).find((r) => r.volume === volume)!;
       expect(await view(radio)).toMatchObject({ lastBackup: made, backups: 2 }); // its own and the one without an id
       expect((await view(card)).lastBackup).not.toBe(made);
-      // "this SD card" is the radio chosen in the app; with two of the type connected and none chosen, neither
-      const backups = async (volume: string) =>
-        ((await (await req(`/api/backups?volume=${encodeURIComponent(volume)}`)).json()) as BackupView[]).find((g) => g.board === 'tx16smk3')!;
-      const group = await backups(radio);
-      expect(group.items.find((i) => i.name === made)).toMatchObject({ thisCard: true, card: 'tx16smk3' });
-      expect((await backups(card)).items.find((i) => i.name === made)).not.toHaveProperty('thisCard');
-      expect((await backups('')).items.find((i) => i.name === made)).not.toHaveProperty('thisCard');
-      expect(group!.items.find((i) => i.name === '2026-10-01_1200')).not.toHaveProperty('card');
+      // one entry per SD card, each with only its own backups; the one without an id under its type
+      const groups = (await (await req('/api/backups')).json()) as BackupView[];
+      const ofRadio = groups.find((g) => g.volume === radio)!;
+      expect(ofRadio).toMatchObject({ board: 'tx16smk3', type: 'tx16smk3', cardId: expect.any(String) });
+      expect(ofRadio.items.map((i) => i.name)).toEqual([made]);
+      expect(groups.find((g) => g.volume === card)!.items.map((i) => i.name)).not.toContain(made);
+      expect(groups.find((g) => g.unknown && g.board === 'tx16smk3')).toMatchObject({ key: 'tx16smk3', items: [{ name: '2026-10-01_1200' }] });
+      expect(groups.findIndex((g) => g.unknown)).toBeGreaterThan(groups.findIndex((g) => g.volume)); // connected cards first
 
       expect((await req('/api/radio/name', { volume: radio, name: 'Mk3 Wing' })).status).toBe(200);
       expect(await mine()).toMatchObject({ label: 'Mk3 Wing', cardName: 'Mk3 Wing' });
+      expect((await req('/api/radio/name', { volume: radio, name: 'Mk3 Wing', pilot: 'Alex' })).status).toBe(200);
+      expect(await mine()).toMatchObject({ cardName: 'Mk3 Wing', cardPilot: 'Alex' });
+      expect((await req('/api/radio/name', { volume: radio, name: 'x', pilot: 'p'.repeat(41) })).status).toBe(400);
+
+      // the radios page: both connected, named as the card is; a connected radio can't be forgotten
+      const known = (await (await req('/api/radios')).json()) as KnownRadioView[];
+      const wing = known.find((r) => r.volume === radio)!;
+      expect(wing).toMatchObject({ name: 'Mk3 Wing', pilot: 'Alex', type: 'tx16smk3', backups: 1 });
+      expect(known.filter((r) => r.volume)).toHaveLength(2);
+      const forget = await req('/api/radios/forget', { key: wing.key });
+      expect(forget.status).toBe(409);
+      expect(await forget.json()).toMatchObject({ code: 'radioConnected' });
 
       // the backup as if from the other radio of this type
       await writeFile(join(q.backups, 'tx16smk3', made, '.radio-manager', 'radio.json'), '{"id":"another-card-1"}');

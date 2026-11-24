@@ -5,16 +5,22 @@ import { parse } from 'yaml';
 import { dropAppleDouble } from './appledouble.ts';
 import { isCardPath, isSafeKey, printable } from './paths.ts';
 
-export const LIST_FILE = join('.radio-manager', 'installed.json');
+const LIST_FILE = join('.radio-manager', 'installed.json');
 export const ID_FILE = join('.radio-manager', 'radio.json');
 export const ID_PATH = '.radio-manager/radio.json'; // as card paths are written in lists and plans
 export const MAX_CARD_NAME = 40;
 
-// Which SD card this is: its id, and the name given to it in the app.
+// Which SD card this is: its id, and the name and pilot given to it in the app.
 export interface CardIdentity {
   cardId?: string;
   cardName?: string;
+  cardPilot?: string;
 }
+
+// Test cards (disk images, the screenshot image) carry an id starting with "test-"; the app's own random ids never do.
+export const isTestId = (id: string | undefined) => !!id?.startsWith('test-');
+// The start of a card's id, as the interface shows it.
+export const shortId = (id: string) => id.slice(0, 8);
 
 export interface ListedFile {
   sha256: string;
@@ -57,7 +63,7 @@ export interface RadioCard extends CardIdentity {
   installed?: InstalledList;
 }
 
-export interface RadioYml {
+interface RadioYml {
   board?: string;
   firmware?: string;
   language?: string;
@@ -128,21 +134,26 @@ export async function writeList(root: string, list: InstalledList): Promise<void
 
 const cleanName = (name: string) => printable(name).trim().slice(0, MAX_CARD_NAME);
 
-// Id and name of a card or of a backup folder; none when it has no radio.json yet or an unreadable one.
+// Id, name and pilot of a card or of a backup folder; none when it has no radio.json yet or an unreadable one.
 export async function readIdentity(root: string): Promise<CardIdentity> {
   try {
-    const o = JSON.parse(await readFile(join(root, ID_FILE), 'utf8')) as { id?: unknown; name?: unknown };
+    const o = JSON.parse(await readFile(join(root, ID_FILE), 'utf8')) as { id?: unknown; name?: unknown; pilot?: unknown };
     const name = typeof o.name === 'string' ? cleanName(o.name) : '';
-    return { ...(typeof o.id === 'string' && /^[\w-]{8,64}$/.test(o.id) ? { cardId: o.id } : {}), ...(name ? { cardName: name } : {}) };
+    const pilot = typeof o.pilot === 'string' ? cleanName(o.pilot) : '';
+    return {
+      ...(typeof o.id === 'string' && /^[\w-]{8,64}$/.test(o.id) ? { cardId: o.id } : {}),
+      ...(name ? { cardName: name } : {}),
+      ...(pilot ? { cardPilot: pilot } : {}),
+    };
   } catch {
     return {};
   }
 }
 
-async function writeIdentity(root: string, id: string, name?: string): Promise<void> {
+async function writeIdentity(root: string, id: string, name?: string, pilot?: string): Promise<void> {
   const path = join(root, ID_FILE);
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify({ id, ...(name ? { name } : {}) }, null, 1)}\n`);
+  await writeFile(path, `${JSON.stringify({ id, ...(name ? { name } : {}), ...(pilot ? { pilot } : {}) }, null, 1)}\n`);
   await dropAppleDouble(path);
   await dropAppleDouble(dirname(path));
 }
@@ -157,7 +168,7 @@ export function ensureCardId(root: string): Promise<string> {
       const have = await readIdentity(root);
       if (have.cardId) return have.cardId;
       const id = randomUUID();
-      await writeIdentity(root, id, have.cardName);
+      await writeIdentity(root, id, have.cardName, have.cardPilot);
       return id;
     })().finally(() => givingId.delete(root));
     givingId.set(root, pending);
@@ -165,9 +176,11 @@ export function ensureCardId(root: string): Promise<string> {
   return pending;
 }
 
-// Gives the card a name, or takes it away with an empty one.
-export async function setCardName(root: string, name: string): Promise<void> {
-  await writeIdentity(root, await ensureCardId(root), cleanName(name) || undefined);
+// Gives the card a name and a pilot; an empty one takes it away. Without a pilot given, the card keeps its own.
+export async function setCardName(root: string, name: string, pilot?: string): Promise<void> {
+  const id = await ensureCardId(root);
+  const keep = pilot === undefined ? (await readIdentity(root)).cardPilot : cleanName(pilot) || undefined;
+  await writeIdentity(root, id, cleanName(name) || undefined, keep);
 }
 
 // Whether a write failed because the card went away (cable pulled, radio off). Right after a pull the drive's

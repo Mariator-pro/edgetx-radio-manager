@@ -11,7 +11,7 @@ import { readZip } from './zip.ts';
 
 const REPO = /^[\w.-]+\/[\w.-]+$/;
 
-export interface SourceCheck {
+interface SourceCheck {
   source: Source;
   tag: string;
   files: number;

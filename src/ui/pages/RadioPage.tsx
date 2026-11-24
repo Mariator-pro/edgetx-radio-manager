@@ -1,4 +1,5 @@
-import { Alert, Button, Card, Chip, CloseButton, Input, Label, ListBox, Select, Spinner, Switch, TextField, ToggleButton, ToggleButtonGroup } from '@heroui/react';
+import { Alert, Button, Card, Chip, CloseButton, Label, ListBox, Select, Spinner, Switch, ToggleButton, ToggleButtonGroup } from '@heroui/react';
+import { EditRadio } from '../components/EditRadio.tsx';
 import { Fragment, type ReactNode, useEffect, useState } from 'react';
 import type { ProgressEvent, RadioSourceView, RadioView, VoiceView } from '../../server/api.ts';
 import { get, post } from '../api.ts';
@@ -247,54 +248,22 @@ function SoundsRow({ radio, run }: { radio: RadioView; run: Run }) {
   );
 }
 
-// The radio's heading, and its own name: optional, kept on the SD card, to tell radios of the same type apart.
+// The radio's heading, its own name and its pilot: optional, kept on the SD card, to tell radios apart.
 function RadioName({ radio, run }: { radio: RadioView; run: Run }) {
   const { t } = usePrefs();
-  const [editing, setEditing] = useState<string>();
-  const save = () => run(async () => {
-    await post('/api/radio/name', { volume: radio.volume, name: editing ?? '' });
-    setEditing(undefined);
-  });
-  if (editing === undefined) {
-    return (
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="m-0 text-3xl font-bold tracking-tight">{radio.label}</h1>
-        {radio.cardName && <span className="text-sm text-muted">{radio.name}</span>}
-        {radio.board && (
-          <Button size="sm" variant="ghost" isDisabled={radio.checking} onPress={() => setEditing(radio.cardName ?? '')}>
-            {t.rename}
-          </Button>
-        )}
-      </div>
-    );
-  }
+  const [editing, setEditing] = useState(false);
   return (
-    <form
-      className="flex flex-col gap-1.5"
-      onSubmit={(e) => {
-        e.preventDefault();
-        save();
-      }}
-    >
-      <div className="flex flex-wrap items-end gap-2">
-        <TextField
-          className="min-w-64"
-          value={editing}
-          onChange={setEditing}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') setEditing(undefined);
-          }}
-        >
-          <Label>{t.radioNameLabel}</Label>
-          <Input placeholder={t.namePlaceholder} maxLength={40} autoFocus />
-        </TextField>
-        <Button type="submit">{t.save}</Button>
-        <Button variant="tertiary" onPress={() => setEditing(undefined)}>
-          {t.cancel}
+    <div className="flex flex-wrap items-center gap-3">
+      <h1 className="m-0 text-3xl font-bold tracking-tight">{radio.label}</h1>
+      {radio.cardName && <span className="text-sm text-muted">{radio.name}</span>}
+      {radio.cardPilot && <span className="text-sm text-muted">· {t.pilot} {radio.cardPilot}</span>}
+      {radio.board && (
+        <Button size="sm" variant="ghost" isDisabled={radio.checking} onPress={() => setEditing(true)}>
+          {t.editRadio}
         </Button>
-      </div>
-      <span className="text-xs text-muted">{t.nameHint}</span>
-    </form>
+      )}
+      {editing && <EditRadio volume={radio.volume} name={radio.cardName} pilot={radio.cardPilot} run={run} onClose={() => setEditing(false)} />}
+    </div>
   );
 }
 

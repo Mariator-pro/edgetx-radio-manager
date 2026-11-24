@@ -15,7 +15,7 @@ export type DiffArea =
   | 'screens'
   | 'other';
 
-export const DIFF_AREAS: DiffArea[] = [
+const DIFF_AREAS: DiffArea[] = [
   'setup',
   'flightModes',
   'inputs',
@@ -55,13 +55,13 @@ const AREA_OF: Record<string, DiffArea> = {
   view: 'screens',
 };
 
-export interface DiffEntry {
+interface DiffEntry {
   path: string; // e.g. "Mix CH2, line 3 › weight"
   from?: string; // missing: added
   to?: string; // missing: removed
 }
 
-export interface DiffGroup {
+interface DiffGroup {
   area: DiffArea;
   entries: DiffEntry[];
 }

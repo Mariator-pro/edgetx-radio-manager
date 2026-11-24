@@ -18,7 +18,7 @@ export interface PackageState {
   changed: string[]; // files of the version that differ on the card
 }
 
-export interface CardCheck {
+interface CardCheck {
   cardId: string;
   list: InstalledList;
   states: PackageState[];
@@ -242,7 +242,7 @@ async function recheck(volume: string, path: string, f: ListedFile): Promise<boo
 }
 
 // Per package the files missing or changed on the card, as the last check found them.
-export function packageStates(list: InstalledList): PackageState[] {
+function packageStates(list: InstalledList): PackageState[] {
   const states = new Map<string, PackageState>();
   for (const name of Object.keys(list.packages)) states.set(name, { name, missing: [], changed: [] });
   for (const [path, f] of Object.entries(list.files)) {

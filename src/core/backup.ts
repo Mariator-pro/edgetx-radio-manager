@@ -16,7 +16,7 @@ export const isBackupName = (name: string) => BACKUP_NAME.test(name);
 const PARTIAL = /^\..+\.partial$/;
 const partialName = (name: string) => `.${name}.partial`;
 
-export interface BackupProgress {
+interface BackupProgress {
   file: string;
   done: number;
   total: number;
@@ -24,7 +24,7 @@ export interface BackupProgress {
   bytesTotal: number;
 }
 
-export interface BackupResult {
+interface BackupResult {
   dir: string;
   name: string;
   files: number;

@@ -10,7 +10,7 @@ import type { PlanItem } from './plan.ts';
 // For a conflict: keep the card's file, or go ahead (write the package version, or delete).
 export type Resolution = 'keep' | 'apply';
 
-export interface ApplyInput {
+interface ApplyInput {
   plan: PlanItem[];
   contents: PackageContent[];
   held?: Pick<InstalledList, 'packages' | 'files'>; // packages switched on but not available: kept in the list as they are
@@ -22,7 +22,7 @@ export interface ApplyProgress {
   total: number;
 }
 
-export interface ApplyResult {
+interface ApplyResult {
   written: number;
   deleted: number;
   kept: number;

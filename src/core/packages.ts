@@ -2,7 +2,7 @@ import { readdir, readFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AppError } from './errors.ts';
 import { isSafeName, type Paths } from './paths.ts';
-import { boardOfKey, type Settings } from './settings.ts';
+import type { Settings } from './settings.ts';
 
 // release.json next to the zips of one package version.
 export interface ReleaseInfo {
@@ -63,17 +63,17 @@ export async function folderSize(dir: string): Promise<number> {
   return total;
 }
 
-// Radios that had this package version installed when last seen; such versions can't be deleted.
+// Radios (their settings keys) that had this package version installed when last seen; such versions can't be deleted.
 export function installedOn(s: Settings, name: string, tag: string): string[] {
-  const keys = Object.entries(s.radios)
+  return Object.entries(s.radios)
     .filter(([, r]) => r.installed?.[name] === tag || (name === 'edgetx-firmware' && r.firmware && `v${r.firmware}` === tag))
-    .map(([key]) => boardOfKey(key));
-  return [...new Set(keys)];
+    .map(([key]) => key);
 }
 
-export async function deleteVersion(p: Paths, s: Settings, name: string, tag: string): Promise<void> {
+// label: how the message names a radio, by its settings key.
+export async function deleteVersion(p: Paths, s: Settings, name: string, tag: string, label: (key: string) => string): Promise<void> {
   if (!isSafeName(name) || !isSafeName(tag)) throw new AppError('invalidRequest', { what: 'package' });
-  const boards = installedOn(s, name, tag);
-  if (boards.length > 0) throw new AppError('installedOn', { name, tag, radios: boards.join(', ') });
+  const keys = installedOn(s, name, tag);
+  if (keys.length > 0) throw new AppError('installedOn', { name, tag, radios: keys.map(label).join(', ') });
   await rm(versionDir(p, name, tag), { recursive: true, force: true });
 }

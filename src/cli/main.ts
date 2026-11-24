@@ -7,7 +7,8 @@ import { basename, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { applyPlan, type Resolution } from '../core/apply.ts';
 import { backupCard, backupFirmware, cardBackups, listBackups, pruneBackups } from '../core/backup.ts';
-import { findCards, readCard, readIdentity, type RadioCard } from '../core/card.ts';
+import { findCards, readCard, readIdentity, shortId, type RadioCard } from '../core/card.ts';
+import { findRadioKey, forgetRadio, knownRadios, radioLabel } from '../core/known-radios.ts';
 import { localVersion } from '../core/content.ts';
 import { checkFirmwareFile, firmwareFile, flashFile, flashMethod, knownMethod, type FlashMethod } from '../core/firmware.ts';
 import { downloadAll, downloadTag } from '../core/download.ts';
@@ -45,6 +46,7 @@ import {
   lastFirmware,
   loadSettings,
   radioKey,
+  markSeen,
   rememberRadio,
   saveSettings,
   soundsOf,
@@ -77,6 +79,8 @@ Commands:
              "models diff <model> [<backup> [<backup>|card]]" differences, newest version against the SD card
   flash      flash firmware: "flash" for the newest download, "flash v2.12.2" or "flash v2.13.0-rc1" for another (downloaded first), "flash --file <path>" for your own .uf2 or .bin
   sources    list sources; "sources add <owner/repo>", "sources remove <name>"
+  radios     every radio the app knows: name, pilot, ID, last connected, backups
+  forget     "forget <ID>" takes a radio that isn't connected out of the app (the start of the ID is enough)
   ui         open the browser interface
 
 Options:
@@ -87,6 +91,7 @@ Options:
   --add             models copy/import: add as new models instead of replacing those of the same name
   --from <radio>[/<backup>]  models copy/export/diff: take the models from these backups
   --out <folder>    models export: where the files go (default: current folder)
+  --with-backups    forget: delete the radio's backups too
 `;
 
 class UserError extends Error {}
@@ -131,7 +136,42 @@ async function askBoard(p: Paths, s: Settings): Promise<string> {
 }
 
 async function remember(p: Paths, s: Settings, cards: RadioCard[]): Promise<void> {
-  if (cards.map((c) => rememberRadio(s, c)).some(Boolean)) await saveSettings(p, s);
+  const at = new Date();
+  for (const c of cards) markSeen(s, c, at);
+  cards.forEach((c) => rememberRadio(s, c));
+  if (cards.some((c) => c.board)) await saveSettings(p, s);
+}
+
+const backupCount = (n: number) => `${n} ${n === 1 ? 'backup' : 'backups'}`;
+
+const cardsAsConnected = (cards: RadioCard[]) => cards.map((c) => ({ volume: c.volume, board: c.board, cardId: c.cardId, cardName: c.cardName, cardPilot: c.cardPilot }));
+
+async function radios(p: Paths, s: Settings): Promise<void> {
+  const cards = await connectedCards();
+  await remember(p, s, cards);
+  const known = (await knownRadios(p, s, cardsAsConnected(cards))).filter((r) => r.inSettings || r.volume);
+  if (known.length === 0) console.log('The app knows no radio yet. Connect one.');
+  for (const r of known) {
+    const when = r.volume ? 'connected' : r.seen ? `last connected ${r.seen.slice(0, 16).replace('T', ' ')}` : 'last connected unknown';
+    const tags = [r.test ? 'test' : '', r.pilot ? `pilot ${r.pilot}` : ''].filter(Boolean).join(', ');
+    const backups = backupCount(r.backups.length);
+    console.log(
+      `  ${r.type.padEnd(22)} ${(r.name ?? '').padEnd(16)} ${(r.cardId ? shortId(r.cardId) : 'no ID yet').padEnd(10)} ${when.padEnd(32)} ${backups.padEnd(10)}${tags ? ` (${tags})` : ''}`.trimEnd(),
+    );
+  }
+}
+
+async function forget(p: Paths, s: Settings, idStart: string | undefined, withBackups: boolean): Promise<void> {
+  if (!idStart) throw new UserError('Name the radio by its ID, e.g. "forget 5f854692". "radios" lists them.');
+  const cards = await connectedCards();
+  const known = (await knownRadios(p, s, cardsAsConnected(cards))).filter((r) => r.inSettings || r.volume || withBackups);
+  const r = findRadioKey(known, idStart);
+  if (r.volume) throw new UserError(`${radioLabel(r)} is connected. Disconnect it to forget it.`);
+  const what = withBackups && r.backups.length > 0 ? ` and delete its ${backupCount(r.backups.length)}${r.kept.length > 0 ? ` (${r.kept.length} marked to keep)` : ''}` : '';
+  if ((await ask(`Forget ${radioLabel(r)}${r.name ? ` (${r.type})` : ''}${what}? [y/N] `)) !== 'y') return;
+  const gone = await forgetRadio(p, s, r.key, withBackups);
+  await saveSettings(p, s);
+  console.log(`Forgot ${radioLabel(r)}${gone.length > 0 ? `, deleted ${backupCount(gone.length)}` : ''}.${!withBackups && r.backups.length > 0 ? ` Its ${backupCount(r.backups.length)} stay in ${join(p.backups, r.board)}.` : ''}`);
 }
 
 async function status(p: Paths, s: Settings, volume?: string): Promise<void> {
@@ -728,6 +768,7 @@ async function main(): Promise<void> {
       add: { type: 'boolean' },
       from: { type: 'string' },
       out: { type: 'string' },
+      'with-backups': { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
   });
@@ -762,6 +803,10 @@ async function main(): Promise<void> {
         noBackup: values['no-backup'],
         out: values.out,
       });
+    case 'radios':
+      return radios(p, s);
+    case 'forget':
+      return forget(p, s, positionals[1], !!values['with-backups']);
     case 'ui':
       return ui(p);
     case 'flash':
