@@ -74,6 +74,9 @@ export const DEFAULT_SOURCES: readonly Source[] = [
   { name: 'elrs-lua', repo: 'ExpressLRS/ExpressLRS', kind: 'project', file: { asset: 'elrs.lua', card: 'SCRIPTS/TOOLS/elrs.lua', repoPath: 'src/lua/elrs.lua' } },
 ];
 
+// The app ships the checksums of these; every other source was added by the user.
+export const isBuiltIn = (source: Source) => DEFAULT_SOURCES.some((d) => d.repo.toLowerCase() === source.repo.toLowerCase());
+
 export function defaultSettings(): Settings {
   return {
     sources: DEFAULT_SOURCES.map((s) => ({ ...s })),

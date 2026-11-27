@@ -5,10 +5,12 @@ import { parseRadioYml } from '../src/core/card.ts';
 import { mainContent } from '../src/core/content.ts';
 import { downloadAll, wantedFiles, wantedVoices } from '../src/core/download.ts';
 import type { FetchFn, Release } from '../src/core/github.ts';
+import { knownVersions, packKnown, setShippedCatalog } from '../src/core/known.ts';
 import { localVersions, mainDir } from '../src/core/packages.ts';
 import { paths } from '../src/core/paths.ts';
 import { defaultOrigin } from '../src/core/selection.ts';
 import { defaultSettings, loadSettings, rememberRadio, type Settings, type Source } from '../src/core/settings.ts';
+import { checkSource } from '../src/core/sources.ts';
 import { voiceViews } from '../src/server/views.ts';
 import { makeZip, tempDir } from './helpers.ts';
 
@@ -141,7 +143,6 @@ describe('downloadAll', () => {
     name: r.name,
     published_at: r.published,
     html_url: r.url,
-    zipball_url: r.zipball,
     assets: r.assets.map((a) => ({ name: a.name, browser_download_url: a.url, size: a.size })),
     prerelease: r.prerelease,
   });
@@ -161,7 +162,7 @@ describe('downloadAll', () => {
         const sha = commits[c[1]!];
         return sha ? Response.json({ sha, commit: { committer: { date: '2026-10-01T10:00:00Z' } } }) : new Response('{}', { status: 409 });
       }
-      const z = url.match(/zipball\/([0-9a-f]+)$/);
+      const z = url.match(/codeload.*\/zip\/([0-9a-f]+)$/);
       if (z) return new Response(makeZip({ [`x-y-${z[1]!.slice(0, 7)}/src/WIDGETS/LIPONY/main.lua`]: z[1]! }));
       const l = url.match(/repos\/(.+)\/releases\?/);
       if (l) return Response.json((lists[l[1]!] ?? []).map(api));
@@ -253,7 +254,7 @@ describe('downloadAll', () => {
     const results = await downloadAll(p, s, fakeGitHub({}, calls, { 'ExpressLRS/ExpressLRS': 'ccccccc333' }));
     expect(results.map((r) => [r.status, r.tag])).toEqual([['no-release', undefined], ['new', 'main ccccccc']]);
     expect(calls).toContain('https://raw.githubusercontent.com/ExpressLRS/ExpressLRS/ccccccc333/src/lua/elrs.lua');
-    expect(calls.some((c) => c.includes('zipball'))).toBe(false);
+    expect(calls.some((c) => c.includes('codeload'))).toBe(false);
     expect((await readdir(mainDir(p, 'elrs-lua'))).sort()).toEqual(['commit.json', 'elrs.lua']);
     const c = await mainContent(p, s.sources[0]!);
     expect([...c!.files.keys()]).toEqual(['SCRIPTS/TOOLS/elrs.lua']);
@@ -276,5 +277,34 @@ describe('downloadAll', () => {
     expect(c?.version).toBe('main bbbbbbb');
     expect(c?.files.get('WIDGETS/LIPONY/main.lua')?.data.toString()).toBe('bbbbbbb222');
     expect(await defaultOrigin(p, s.sources[0]!)).toBe('main');
+  });
+
+  it('learns the checksums of built-in releases newer than the shipped ones, keeping no package of them', async () => {
+    const p = paths(await tempDir());
+    const s = { ...defaultSettings(), sources: [source('elrs-lua')] };
+    const at = (tag: string, day: number) => ({ ...release(tag, ['elrs.lua']), published: `2026-10-0${day}T00:00:00Z`, assets: [{ name: 'elrs.lua', url: `https://dl/${tag}`, size: tag.length }] });
+    const list = [at('4.3.0', 4), at('4.2.0', 3), at('4.1.0', 2), at('4.0.0', 1)];
+    const repo = source('elrs-lua').repo;
+    setShippedCatalog({ 'elrs-lua': packKnown([{ tag: '4.1.0', published: '2026-10-02T00:00:00Z', variants: new Map([['', new Map()]]) }]) });
+    try {
+      const calls: string[] = [];
+      await downloadAll(p, s, fakeGitHub({ [repo]: list[0]! }, calls, {}, { [repo]: list }));
+      expect(calls.filter((c) => c.startsWith('https://dl/'))).toEqual(['https://dl/4.3.0', 'https://dl/4.2.0']);
+      expect((await knownVersions(p, source('elrs-lua'))).map((v) => v.tag)).toEqual(['4.3.0', '4.2.0', '4.1.0']);
+      expect((await localVersions(p, 'elrs-lua')).map((v) => v.tag)).toEqual(['4.3.0']);
+    } finally {
+      setShippedCatalog({});
+    }
+  });
+
+  it('learns the 5 newest releases of a project when it is added', async () => {
+    const p = paths(await tempDir());
+    const list = [9, 8, 7, 6, 5, 4, 3].map((n) => ({ ...release(`v${n}`, ['w.zip']), published: `2026-10-0${n}T00:00:00Z` }));
+    const zips = fakeGitHub({ 'x/w': list[0]! }, [], {}, { 'x/w': list });
+    const fetchFn = (async (input: string) =>
+      input.startsWith('https://dl/') ? new Response(new Uint8Array(makeZip({ 'WIDGETS/W/main.lua': 'w' }))) : zips(input)) as FetchFn;
+    const r = await checkSource(p, defaultSettings(), 'x/w', fetchFn);
+    expect((await knownVersions(p, r.source)).map((v) => v.tag)).toEqual(['v9', 'v8', 'v7', 'v6', 'v5']);
+    expect((await localVersions(p, 'w')).map((v) => v.tag)).toEqual(['v9']);
   });
 });

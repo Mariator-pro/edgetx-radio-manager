@@ -1,23 +1,33 @@
-import { Alert, Button, Checkbox, Label, ListBox, ProgressBar, Select, Spinner, Switch } from '@heroui/react';
+import { Alert, Button, Checkbox, Label, ListBox, ProgressBar, Select, Spinner, Switch, ToggleButton, ToggleButtonGroup } from '@heroui/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FirmwareCatalogView, FirmwareFileView, FirmwareView, FlashResultView, ProgressEvent } from '../../server/api.ts';
 import { errorText, get, post, postFile } from '../api.ts';
+import { CheckIcon } from '../components/icons.tsx';
 import { bytes, isNewer } from '../format.ts';
 import { usePrefs } from '../usePrefs.ts';
 
 type Phase = 'loading' | 'ready' | 'running' | 'done' | 'error';
 
-export function FlashFlow({ board, name, progress, onBack }: { board: string; name: string; progress?: ProgressEvent; onBack: () => void }) {
+// How long the app waits for the radio after "Start flashing" (waitFor in the core).
+const WAIT_MS = 5 * 60_000;
+const minSec = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, '0')}`;
+
+export function FlashFlow({ board, name, progress, onBack, onPhase }: { board: string; name: string; progress?: ProgressEvent; onBack: () => void; onPhase: (p: Phase) => void }) {
   const { t } = usePrefs();
   const [fw, setFw] = useState<FirmwareView>();
   const [tag, setTag] = useState<string>();
   const [phase, setPhase] = useState<Phase>('loading');
+  useEffect(() => onPhase(phase), [phase, onPhase]);
   const [error, setError] = useState<unknown>();
   const [result, setResult] = useState<FlashResultView>();
   // an own firmware file instead of a downloaded version, and the confirmation for one without identification
   const [file, setFile] = useState<FirmwareFileView>();
   const [force, setForce] = useState(false);
   const [busy, setBusy] = useState(false);
+  // where the firmware comes from: a downloaded EdgeTX version or an own file
+  const [mode, setMode] = useState<'release' | 'file'>('release');
+  // time left while the app waits for the radio, counted down once a second
+  const [left, setLeft] = useState(WAIT_MS);
   const picker = useRef<HTMLInputElement>(null);
   // compatible releases on GitHub that are not downloaded; empty when offline
   const [remote, setRemote] = useState<FirmwareCatalogView['versions']>([]);
@@ -85,7 +95,7 @@ export function FlashFlow({ board, name, progress, onBack }: { board: string; na
     setPhase('running');
     setError(undefined);
     try {
-      setResult(await post<FlashResultView>('/api/firmware/flash', file ? { board, file: true, force } : { board, tag }));
+      setResult(await post<FlashResultView>('/api/firmware/flash', mode === 'file' ? { board, file: true, force } : { board, tag }));
       setPhase('done');
     } catch (e) {
       setError(e);
@@ -93,30 +103,38 @@ export function FlashFlow({ board, name, progress, onBack }: { board: string; na
     }
   };
 
-  const method = file?.method ?? fw?.method;
+  const waiting = phase === 'running' && progress?.op === 'flash' && progress.step === 'waiting';
+  useEffect(() => {
+    if (!waiting) return;
+    const begin = Date.now();
+    const timer = setInterval(() => setLeft(Math.max(0, WAIT_MS - (Date.now() - begin))), 1000);
+    return () => {
+      clearInterval(timer);
+      setLeft(WAIT_MS);
+    };
+  }, [waiting]);
+
+  // a chosen file counts only while "Own file" is selected; it stays chosen when switching back and forth
+  const own = mode === 'file' ? file : undefined;
+  const method = own?.method ?? fw?.method;
   const blocked = method === 'dfu' && fw?.dfuUtil === false;
   const isOlder = (v: string) => !!fw?.installed && isNewer(fw.installed, v);
   const isCandidate = (v: string) => !!fw?.prereleases.includes(v) || !!remote.find((r) => r.tag === v)?.prerelease;
-  const version = file ? file.version : tag;
+  const version = mode === 'file' ? own?.version : tag;
   const names: Record<string, string> = { ...Object.fromEntries(remote.filter((r) => r.name).map((r) => [r.tag, r.name!])), ...fw?.names };
   const label = (v: string) => names[v] ?? v;
   const notes = (v: string) =>
     [isCandidate(v) && t.releaseCandidate, isOlder(v) && t.downgrade].filter(Boolean).join(', ');
   // downloaded and not yet downloaded versions together, newest first
   const versions = fw ? [...fw.versions, ...remote.map((r) => r.tag).filter((v) => !fw.versions.includes(v))].sort((a, b) => (isNewer(a, b) ? -1 : isNewer(b, a) ? 1 : 0)) : [];
-  const ready = file ? !!file.board || force : !!tag;
+  const ready = mode === 'file' ? !!file && (!!file.board || force) : !!tag;
   const writing = phase === 'running' && progress?.op === 'flash' && progress.step === 'flash';
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm text-muted">{t.flashFirmware}</span>
-          <h1 className="m-0 text-3xl font-bold tracking-tight">{name}</h1>
-        </div>
-        <Button variant="outline" size="sm" isDisabled={phase === 'running'} onPress={onBack}>
-          {t.back}
-        </Button>
+    <div className="flex flex-col gap-6 [&>*:not(:first-child)]:max-w-3xl">
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm text-muted">{t.flashFirmware}</span>
+        <h1 className="m-0 text-3xl font-bold tracking-tight">{name}</h1>
       </div>
 
       {phase === 'loading' && <Spinner />}
@@ -133,23 +151,53 @@ export function FlashFlow({ board, name, progress, onBack }: { board: string; na
 
       {fw && phase !== 'done' && (
         <>
-          {file ? (
+          <ToggleButtonGroup
+            aria-label={t.firmwareSource}
+            selectionMode="single"
+            disallowEmptySelection
+            isDisabled={phase === 'running' || busy}
+            selectedKeys={new Set([mode])}
+            onSelectionChange={(keys) => {
+              const m = [...keys][0];
+              if (m) setMode(String(m) as 'release' | 'file');
+            }}
+          >
+            <ToggleButton id="release">{t.fromVersion}</ToggleButton>
+            <ToggleButton id="file">{t.fromOwnFile}</ToggleButton>
+          </ToggleButtonGroup>
+
+          {mode === 'file' ? (
             <section aria-labelledby="own-file" className="flex flex-col gap-3 rounded-2xl border border-border p-5">
               <h2 id="own-file" className="m-0 text-base font-semibold">
                 {t.ownFile}
               </h2>
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="flex flex-col">
-                  <span className="font-mono text-sm">{file.name}</span>
-                  <span className="text-sm text-muted">
-                    {file.version ? t.fileFor(file.version, name) : t.fileUnknown} · {bytes(file.size)}
+                {file ? (
+                  <span className="flex flex-col">
+                    <span className="font-mono text-sm">{file.name}</span>
+                    <span className="text-sm text-muted">
+                      {file.version ? t.fileFor(file.version, name) : t.fileUnknown} · {bytes(file.size)}
+                    </span>
                   </span>
+                ) : (
+                  <span className="text-sm text-muted">{t.ownFileHint(fw.method === 'uf2' ? '.uf2' : fw.method === 'dfu' ? '.bin' : '.uf2 / .bin')}</span>
+                )}
+                <span className="flex items-center gap-2">
+                  {busy && <Spinner size="sm" aria-label={t.checkingFile} />}
+                  <Button variant="outline" isDisabled={phase === 'running' || busy} onPress={() => picker.current?.click()}>
+                    {file ? t.otherFile : t.chooseFile}
+                  </Button>
                 </span>
-                <Button variant="outline" isDisabled={phase === 'running'} onPress={() => setFile(undefined)}>
-                  {t.useDownloaded}
-                </Button>
               </div>
-              {!file.board && (
+              <input
+                ref={picker}
+                type="file"
+                accept={fw.method === 'uf2' ? '.uf2' : fw.method === 'dfu' ? '.bin' : '.uf2,.bin'}
+                hidden
+                aria-label={t.ownFile}
+                onChange={(e) => void chooseFile(e.target.files?.[0])}
+              />
+              {file && !file.board && (
                 <Alert status="warning">
                   <Alert.Indicator />
                   <Alert.Content>
@@ -158,7 +206,7 @@ export function FlashFlow({ board, name, progress, onBack }: { board: string; na
                   </Alert.Content>
                 </Alert>
               )}
-              {!file.board && (
+              {file && !file.board && (
                 <Checkbox isSelected={force} isDisabled={phase === 'running'} onChange={setForce}>
                   <Checkbox.Content>
                     <Checkbox.Control>
@@ -169,67 +217,54 @@ export function FlashFlow({ board, name, progress, onBack }: { board: string; na
                 </Checkbox>
               )}
             </section>
-          ) : versions.length === 0 ? (
-            <p className="m-0 text-muted">{t.noFirmware}</p>
           ) : (
-            <div className="flex flex-wrap items-end gap-6">
-              <Select
-                variant="secondary"
-                className="min-w-96"
-                selectedKey={tag ?? null}
-                isDisabled={phase === 'running' || busy}
-                onSelectionChange={(k) => k !== null && setTag(String(k))}
-              >
-                <Label>{t.edgetxVersion}</Label>
-                <Select.Trigger>
-                  <Select.Value />
-                  <Select.Indicator />
-                </Select.Trigger>
-                <Select.Popover className="field-list" placement="bottom start">
-                  <ListBox>
-                    {versions.map((v) => (
-                      <ListBox.Item key={v} id={v} textValue={label(v)}>
-                        {label(v)}
-                        {notes(v) && <span className="text-muted">· {notes(v)}</span>}
-                        <ListBox.ItemIndicator />
-                      </ListBox.Item>
-                    ))}
-                  </ListBox>
-                </Select.Popover>
-              </Select>
-              <span className="pb-2 text-sm text-muted">{t.installed(fw.installed ?? t.unknown)}</span>
+            <div className="flex flex-col gap-4">
+              {versions.length === 0 ? (
+                <p className="m-0 text-muted">{t.noFirmware}</p>
+              ) : (
+                <div className="flex flex-wrap items-end gap-6">
+                  <Select
+                    variant="secondary"
+                    className="min-w-96"
+                    selectedKey={tag ?? null}
+                    isDisabled={phase === 'running' || busy}
+                    onSelectionChange={(k) => k !== null && setTag(String(k))}
+                  >
+                    <Label>{t.edgetxVersion}</Label>
+                    <Select.Trigger>
+                      <Select.Value />
+                      <Select.Indicator />
+                    </Select.Trigger>
+                    <Select.Popover className="field-list" placement="bottom start">
+                      <ListBox>
+                        {versions.map((v) => (
+                          <ListBox.Item key={v} id={v} textValue={label(v)}>
+                            {label(v)}
+                            {notes(v) && <span className="text-muted">· {notes(v)}</span>}
+                            <ListBox.ItemIndicator />
+                          </ListBox.Item>
+                        ))}
+                      </ListBox>
+                    </Select.Popover>
+                  </Select>
+                  <span className="pb-2 text-sm text-muted">{t.installed(fw.installed ?? t.unknown)}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-3">
+                <Switch isSelected={fw.includePrereleases} isDisabled={phase === 'running' || busy} onChange={(on) => void toggleCandidates(on)}>
+                  <Switch.Content>
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
+                    <Label>{t.releaseCandidates}</Label>
+                  </Switch.Content>
+                </Switch>
+                {busy && <Spinner size="sm" />}
+              </div>
             </div>
           )}
 
-          {!file && (
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-              <Switch isSelected={fw.includePrereleases} isDisabled={phase === 'running' || busy} onChange={(on) => void toggleCandidates(on)}>
-                <Switch.Content>
-                  <Switch.Control>
-                    <Switch.Thumb />
-                  </Switch.Control>
-                  <Label>{t.releaseCandidates}</Label>
-                </Switch.Content>
-              </Switch>
-              <span className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" size="sm" isDisabled={phase === 'running' || busy} onPress={() => picker.current?.click()}>
-                  {t.chooseFile}
-                </Button>
-                <span className="text-sm text-muted">{t.ownFileHint(fw.method === 'uf2' ? '.uf2' : fw.method === 'dfu' ? '.bin' : '.uf2 / .bin')}</span>
-              </span>
-              <input
-                ref={picker}
-                type="file"
-                accept={fw.method === 'uf2' ? '.uf2' : fw.method === 'dfu' ? '.bin' : '.uf2,.bin'}
-                hidden
-                aria-label={t.ownFile}
-                onChange={(e) => void chooseFile(e.target.files?.[0])}
-              />
-              {busy && <Spinner size="sm" aria-label={t.checkingFile} />}
-            </div>
-          )}
-
-          {!file && tag && isCandidate(tag) && (
+          {mode === 'release' && tag && isCandidate(tag) && (
             <Alert status="warning">
               <Alert.Indicator />
               <Alert.Content>
@@ -259,60 +294,68 @@ export function FlashFlow({ board, name, progress, onBack }: { board: string; na
             </Alert>
           )}
 
+          {/* start first, then the steps; while it runs, the status and "Cancel" sit below the steps.
+              No back button, the sidebar leads back. */}
+          {phase !== 'running' && (
+            <div className="flex gap-2">
+              <Button isDisabled={!ready || blocked || busy} onPress={start}>
+                {t.startFlashing}
+              </Button>
+            </div>
+          )}
+
           {method && (
             <section aria-labelledby="steps" className="flex flex-col gap-3 rounded-2xl border border-border p-5">
               <h2 id="steps" className="m-0 text-base font-semibold">
                 {method === 'uf2' ? t.startBootloader : t.startDfu}
               </h2>
-              <ol className="m-0 flex list-decimal flex-col gap-2 pl-5">
-                {t.flashSteps[method].map((step) => (
-                  <li key={step}>{step}</li>
-                ))}
+              <ol className="m-0 flex list-none flex-col gap-2.5 p-0">
+                {t.flashSteps[method].map((step, i) => {
+                  // the app can't see the steps done by hand; once the radio shows up (as a drive or in DFU mode),
+                  // everything up to that step is done
+                  const connect = method === 'uf2' ? 2 : 1;
+                  const checked = writing && i <= connect;
+                  return (
+                    <li key={step} className="flex items-start gap-3">
+                      <span
+                        className={`mt-0.5 inline-flex size-[22px] shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                          checked ? 'bg-success-soft text-success-soft-foreground' : 'bg-surface-secondary text-muted'
+                        }`}
+                      >
+                        {checked ? <CheckIcon size={13} /> : i + 1}
+                      </span>
+                      <span>{step}</span>
+                    </li>
+                  );
+                })}
               </ol>
-              <p className="m-0 text-sm text-muted">{t.flashHint}</p>
-            </section>
-          )}
-
-          {phase === 'running' && (
-            <div className="flex flex-col gap-3">
-              {writing && progress?.done !== undefined ? (
-                <ProgressBar aria-label={t.writingFirmware} value={progress.done} maxValue={100}>
-                  <Label>{t.writingFile(progress.file ?? '')}</Label>
+              {phase === 'running' && !writing && (
+                <div className="flex flex-wrap items-center gap-3 border-t border-separator pt-3 text-sm">
+                  <Spinner size="sm" />
+                  <span className="flex-1 tabular-nums" aria-live="polite">
+                    {waiting
+                      ? `${method === 'uf2' ? t.waitingUf2 : t.waitingDfu} ${t.timeLeft(minSec(left))}`
+                      : progress?.op === 'flash' && progress.step === 'download'
+                        ? t.downloadingVersion(label(progress.file ?? ''))
+                        : t.starting}
+                  </span>
+                  <Button size="sm" variant="tertiary" onPress={() => void post('/api/cancel')}>
+                    {t.cancel}
+                  </Button>
+                </div>
+              )}
+              {writing && (
+                <ProgressBar aria-label={t.writingFirmware} value={progress?.done ?? 0} maxValue={100}>
+                  <Label>{t.writingFile(progress?.file ?? '')}</Label>
                   <ProgressBar.Output />
                   <ProgressBar.Track>
                     <ProgressBar.Fill />
                   </ProgressBar.Track>
                 </ProgressBar>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <Spinner size="sm" />
-                  <span>
-                    {progress?.op !== 'flash'
-                      ? t.starting
-                      : progress.step === 'download'
-                        ? t.downloadingVersion(label(progress.file ?? ''))
-                        : progress.step === 'flash'
-                          ? t.writingFile(progress.file ?? '')
-                          : method === 'uf2'
-                          ? t.waitingUf2
-                          : t.waitingDfu}
-                  </span>
-                </div>
               )}
-            </div>
+              {phase !== 'running' && <p className="m-0 text-sm text-muted">{t.flashHint}</p>}
+            </section>
           )}
-
-          <div className="flex gap-2">
-            {phase === 'running' ? (
-              <Button variant="tertiary" isDisabled={writing} onPress={() => void post('/api/cancel')}>
-                {t.cancel}
-              </Button>
-            ) : (
-              <Button isDisabled={!ready || blocked || busy} onPress={start}>
-                {t.startFlashing}
-              </Button>
-            )}
-          </div>
         </>
       )}
 

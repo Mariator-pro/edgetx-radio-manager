@@ -99,8 +99,8 @@ describe('models page', () => {
   it('shows the differences between a version and the card', async () => {
     const d = await post<DiffGroupView[]>('/api/models/diff', { a: { board: 'tx15', backup, file: 'model1.yml' }, volume: card });
     expect(d).toEqual([
-      { area: 'setup', entries: [{ path: 'header › bitmap', from: 'c.png', to: '' }] },
-      { area: 'mixes', entries: [{ path: 'Mix CH1, line 1 › weight', from: '100', to: '80' }] },
+      { area: 'setup', entries: [{ kind: 'removed', term: 'image' }] },
+      { area: 'mixes', entries: [{ kind: 'changed', name: 'CH1' }] },
     ]);
   });
 

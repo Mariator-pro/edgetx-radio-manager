@@ -4,7 +4,7 @@ import { AppError } from './errors.ts';
 import { knownVersions } from './known.ts';
 import type { Paths } from './paths.ts';
 import { makePlan, mergePackages, type PlanItem, type Wanted } from './plan.ts';
-import { ensureSelection, updateSources } from './selection.ts';
+import { ensureSelection, updateSources, withoutSource } from './selection.ts';
 import { radioOf, soundsOf, type PackageChange, type Settings } from './settings.ts';
 
 export interface UpdateSetup {
@@ -68,5 +68,6 @@ export async function prepareUpdate(p: Paths, s: Settings, card: RadioCard, boar
     const to = contents.find((c) => c.name === src.name)?.version;
     if (to ? to !== from : from && !choices[src.name]?.on) changes.push({ name: src.name, from, to });
   }
+  for (const name of withoutSource(s, list)) changes.push({ name, from: list.packages[name]!.version, to: undefined });
   return { contents, missing, held, plan, changes, selectionChanged };
 }

@@ -1,4 +1,4 @@
-import { AlertDialog, Button, Card, Checkbox, Chip, Spinner } from '@heroui/react';
+import { AlertDialog, Button, Card, Checkbox, Chip, Link, Spinner } from '@heroui/react';
 import { useCallback, useEffect, useState } from 'react';
 import type { KnownRadioView } from '../../server/api.ts';
 import { get, post } from '../api.ts';
@@ -69,7 +69,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 // Every radio the app knows, one card each, connected ones first.
-export function RadiosPage({ run, refreshKey, busy }: { run: Run; refreshKey: unknown; busy?: string }) {
+export function RadiosPage({ run, refreshKey, busy, onBackups }: { run: Run; refreshKey: unknown; busy?: string; onBackups: (key: string) => void }) {
   const { t } = usePrefs();
   const [radios, setRadios] = useState<KnownRadioView[]>();
   const [editing, setEditing] = useState<KnownRadioView>();
@@ -113,17 +113,28 @@ export function RadiosPage({ run, refreshKey, busy }: { run: Run; refreshKey: un
                 <Row label={t.radioId}>{r.idShort ? <span className="font-mono">{r.idShort}</span> : t.noIdYet}</Row>
                 {r.firmware && <Row label={t.radioFirmware}>{r.firmware}</Row>}
                 {!r.volume && <Row label={t.lastConnected}>{r.seen ? dateTime(r.seen, t.locale) : t.unknownTime}</Row>}
-                <Row label={t.radioBackups}>{r.backups}</Row>
+                <Row label={t.radioBackups}>
+                  {r.backups}
+                  {r.backups > 0 && (
+                    <Link className="ml-2 cursor-pointer text-sm" aria-label={t.showBackupsOf(radioTitle(r))} onPress={() => onBackups(r.key)}>
+                      {t.show}
+                    </Link>
+                  )}
+                </Row>
                 {r.packages.length > 0 && (
-                  <Row label={t.radioPackages}>
-                    <ul className="m-0 list-none p-0">
-                      {r.packages.map((pk) => (
-                        <li key={pk.name}>
-                          {pk.name} <span className="text-muted">{pk.version}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </Row>
+                  <>
+                    <dt className="col-span-2 mt-1.5 border-t border-separator pt-3 text-sm text-muted">{t.radioPackages}</dt>
+                    <dd className="col-span-2 m-0 min-w-0 text-sm">
+                      <ul className="m-0 flex max-w-sm list-none flex-col gap-1 p-0">
+                        {r.packages.map((pk) => (
+                          <li key={pk.name} className="flex justify-between gap-4">
+                            <span className="min-w-0 wrap-anywhere">{pk.name}</span>
+                            <span className="whitespace-nowrap text-muted tabular-nums">{pk.version}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </dd>
+                  </>
                 )}
               </dl>
             </Card.Content>
@@ -134,14 +145,9 @@ export function RadiosPage({ run, refreshKey, busy }: { run: Run; refreshKey: un
                 </Button>
               )}
               {r.volume ? (
-                <>
-                  <Button size="sm" variant="danger-soft" isDisabled aria-describedby={`locked-${r.key}`}>
-                    {t.forget}
-                  </Button>
-                  <span id={`locked-${r.key}`} className="self-center text-xs text-muted">
-                    {t.forgetLocked}
-                  </span>
-                </>
+                <Button size="sm" variant="danger-soft" isDisabled>
+                  {t.forget}
+                </Button>
               ) : (
                 <Button size="sm" variant="danger-soft" isDisabled={!!busy} onPress={() => setForgetting(r)}>
                   {t.forget}

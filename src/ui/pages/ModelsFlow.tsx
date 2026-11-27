@@ -24,9 +24,10 @@ function notes(t: Texts, i: CopyItemView): { text: string; warn: boolean }[] {
   return out;
 }
 
-export function ModelsFlow({ request, radio, progress, onBack }: { request: ModelsRequest; radio: RadioView; progress?: ProgressEvent; onBack: () => void }) {
+export function ModelsFlow({ request, radio, progress, onBack, onPhase }: { request: ModelsRequest; radio: RadioView; progress?: ProgressEvent; onBack: () => void; onPhase: (p: Phase) => void }) {
   const { t } = usePrefs();
   const [phase, setPhase] = useState<Phase>('loading');
+  useEffect(() => onPhase(phase), [phase, onPhase]);
   const [plan, setPlan] = useState<ModelsPlanView>();
   const [modes, setModes] = useState<('replace' | 'add' | undefined)[]>(request.copy.map(() => undefined));
   const [planned, setPlanned] = useState<typeof modes>(); // the choices the shown plan was made for
@@ -81,7 +82,7 @@ export function ModelsFlow({ request, radio, progress, onBack }: { request: Mode
   const n = copying ? request.copy.length : request.delete.length;
 
   return (
-    <div className="flex flex-col gap-7">
+    <div className="flex flex-1 flex-col gap-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className="font-bold">{radio.label}</span>
@@ -193,7 +194,7 @@ export function ModelsFlow({ request, radio, progress, onBack }: { request: Mode
             </Alert>
           )}
 
-          <div className="sticky bottom-0 -mx-7 -mb-7 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background/95 px-7 py-4 backdrop-blur">
+          <div className="page-bar sticky bottom-0 -mb-7 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background py-4">
             <div className="flex flex-col gap-1">
               <Checkbox isSelected={backupFirst} onChange={setBackupFirst}>
                 <Checkbox.Content>
@@ -234,7 +235,7 @@ export function ModelsFlow({ request, radio, progress, onBack }: { request: Mode
           <Alert.Indicator />
           <Alert.Content>
             <Alert.Title>{copying ? t.modelsCopied : t.modelsDeleted}</Alert.Title>
-            <Alert.Description>{t.modelsDoneText(result.written + result.moved, result.backup && backupLabel(result.backup))}</Alert.Description>
+            <Alert.Description>{t.modelsDoneText(result.written + result.moved, result.backup && backupLabel(result.backup, t.locale))}</Alert.Description>
           </Alert.Content>
         </Alert>
       )}

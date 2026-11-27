@@ -16,6 +16,14 @@ const isModelFile = (name: string) => MODEL_FILE.test(name);
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown) => (v === undefined || v === null ? '' : String(v));
+// Model files saved by desktop tools pad fixed-length names with NUL, also inside combined values
+// ("disarm\x00\x00,1,!1x"); EdgeTX reads them as C strings, so the NULs carry nothing.
+const withoutNul = (v: unknown): unknown => {
+  if (typeof v === 'string') return v.replaceAll('\0', '');
+  if (Array.isArray(v)) return v.map(withoutNul);
+  if (isObject(v)) return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, withoutNul(x)]));
+  return v;
+};
 const sha256 = (data: Buffer) => createHash('sha256').update(data).digest('hex');
 
 interface ModelModule {
@@ -45,7 +53,7 @@ const labelList = (csv: string) =>
 export function parseModel(file: string, data: Buffer): ModelFile {
   let doc: unknown;
   try {
-    doc = parse(data.toString('utf8'));
+    doc = withoutNul(parse(data.toString('utf8')));
   } catch {
     doc = undefined;
   }
@@ -104,7 +112,7 @@ interface RadioHardware {
 export function parseHardware(text: string | undefined): RadioHardware {
   let doc: unknown;
   try {
-    doc = text === undefined ? undefined : parse(text);
+    doc = text === undefined ? undefined : withoutNul(parse(text));
   } catch {
     doc = undefined;
   }

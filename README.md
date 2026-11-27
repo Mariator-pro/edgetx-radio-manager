@@ -82,24 +82,24 @@ Below them are the sources on this radio. Each time you connect it, they show wh
 
 ### 3. Update the SD card
 
-"Prepare update" shows the plan before anything is written: how many files are new, replaced or deleted, and every file per package.
+"Prepare update" shows the plan before anything is written: how many files are new, replaced or deleted, and every file per package. Click one of the counts to see only those files.
 
 ![The update plan with counts of new, replaced and deleted files and one conflict](docs/screenshots/update.png)
 
-Files that you changed on the SD card, or that did not come from a package, show up as **conflicts**. You decide per file whether to keep it or overwrite it. If you don't choose, it stays as it is. An older released version of a package file is no conflict, it is replaced like any update. Models, settings and files you copied yourself are never touched.
+Files that you changed on the SD card, or that did not come from a package, show up as **conflicts**. You decide per file whether to keep it or overwrite it; "Show differences" compares the file on the SD card with the new one, line by line. If you don't choose, it stays as it is. An older released version of a package file is no conflict, it is replaced like any update. Models, settings and files you copied yourself are never touched.
 
 "Back up and update" first copies the whole SD card into a backup, then writes exactly the changes the plan showed. If the SD card changed in the meantime, the app writes nothing and asks you to open the plan again. The same goes for restoring a backup and for copying or deleting models.
 
 ### 4. Flash firmware
 
-"Flash firmware" on the firmware card opens the flash page. Pick the EdgeTX version (the newest downloaded one is preselected), click "Start flashing" and follow the steps to put the radio into its bootloader. The app waits up to five minutes for the radio. Afterwards, run an SD card update so the card matches the new firmware.
+"Flash firmware" on the firmware card opens the flash page. Pick the EdgeTX version (the newest downloaded one is preselected), click "Start flashing" and follow the steps to put the radio into its bootloader. The app waits up to five minutes for the radio, shows the time left with "Cancel" next to it, and ticks off the steps once the radio shows up. Afterwards, run an SD card update so the card matches the new firmware.
 
 The list also shows the older EdgeTX versions from 2.12 on that have a file for your radio, also those not downloaded yet. To find them the app reads only the end of each firmware zip on GitHub, a few KB, and remembers the result. A version that is not downloaded yet is downloaded when you click "Start flashing", and then stays like any other download. "Check for updates" itself only downloads the newest firmware.
 
-Two more options sit below the version list:
+Two more options:
 
-- **Show release candidates**: also lists the test versions EdgeTX publishes before a release (e.g. `v2.12.0-rc4`), from 2.12 on. Like the older versions they are downloaded when you flash one. The newest finished release stays preselected, and the SD content stays at the newest release.
-- **Choose file**: flashes a `.uf2` or `.bin` file of your own, e.g. a firmware you built yourself. The app reads the radio type and version that EdgeTX builds into every firmware and refuses a file for another radio or of the wrong kind. A file without this identification can only be flashed after choosing "Flash anyway".
+- **Show release candidates** (below the version list): also lists the test versions EdgeTX publishes before a release (e.g. `v2.12.0-rc4`), from 2.12 on. Like the older versions they are downloaded when you flash one. The newest finished release stays preselected, and the SD content stays at the newest release.
+- **Own file** (at the top, instead of "EdgeTX version"): "Choose file" flashes a `.uf2` or `.bin` file of your own, e.g. a firmware you built yourself. The app reads the radio type and version that EdgeTX builds into every firmware and refuses a file for another radio or of the wrong kind. A file without this identification can only be flashed after choosing "Flash anyway".
 
 ![The flash page with the bootloader steps for a RadioMaster TX15](docs/screenshots/flash.png)
 
@@ -121,7 +121,7 @@ The "Packages" page lists every downloaded version. Nothing there is deleted aut
 
 ### 7. Copy, restore and compare models
 
-The "Models" page lists the models in the backups of a radio, chosen under "Radio" at the top like on the "Backups" page. Each model shows its picture, labels, EdgeTX version and whether the radio chosen in the sidebar has it: "on the SD card", "on the SD card, changed" or "not on the SD card". Open a model to see its earlier versions (each different state in the backups is one version) and pick the one you want. "Compare" lists what differs between two versions, or between a version and the model on the SD card, grouped like the radio's model menus. Models that are on the SD card but in no backup yet show up as "only on the SD card".
+The "Models" page lists the models in the backups of a radio, chosen under "Radio" at the top like on the "Backups" page. Each model shows its picture, labels, EdgeTX version and whether the radio chosen in the sidebar has it: "on the SD card", "on the SD card, changed" or "not on the SD card". Open a model to see its earlier versions (each different state in the backups is one version) and pick the one you want. "Compare" shows which entries differ between two versions, or between a version and the model on the SD card, grouped like the radio's model menus and named like on the radio (CH2, SF18, sensor names), each marked as new, removed or changed. Models that are on the SD card but in no backup yet show up as "only on the SD card".
 
 ![The models page with the models of a RadioMaster TX15, one of them opened to its versions](docs/screenshots/models.png)
 
@@ -137,7 +137,7 @@ To bring models onto a new SD card, put the card into the radio once (or create 
 
 ### 8. Manage your radios
 
-The "Radios" page shows every radio whose SD card the app has read, the connected ones first: its name and pilot, the start of its ID, the EdgeTX version and packages when it was last connected, when that was, and how many backups it has. "Edit" on a connected radio sets its name and pilot.
+The "My radios" page shows every radio whose SD card the app has read, the connected ones first: its name and pilot, the start of its ID, the EdgeTX version and packages when it was last connected, when that was, and how many backups it has. "Edit" on a connected radio sets its name and pilot.
 
 A package version that is on a radio can't be deleted on the "Packages" page; its tag says on how many radios it is (point at it to see which). "Forget" takes a radio you no longer use out of the app, so its package versions can be deleted. It works only while that radio isn't connected. Its backups stay unless you tick "Also delete its backups"; connect the radio again and it is back with everything.
 

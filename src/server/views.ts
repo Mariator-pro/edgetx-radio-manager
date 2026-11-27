@@ -10,7 +10,7 @@ import type { Paths } from '../core/paths.ts';
 import { cardStatus, modelEntries, readModels, type CopyItem, type DeleteItem, type ModelCache, type ModelFile } from '../core/models.ts';
 import { countActions, type PlanItem } from '../core/plan.ts';
 import { isBelowMin, radioName, radioTypes, type RadioType } from '../core/radios.ts';
-import { updateSources } from '../core/selection.ts';
+import { updateSources, withoutSource } from '../core/selection.ts';
 import { radioKey, soundsOf, voiceLanguage, type Settings } from '../core/settings.ts';
 import type { RestorePlan } from '../core/restore.ts';
 import type { UpdateSetup } from '../core/update.ts';
@@ -56,6 +56,7 @@ async function sourceViews(p: Paths, s: Settings): Promise<SourceView[]> {
 // Reading a card (checkCard): the packages not done yet, the list as far as it got, and what it found.
 export interface CardCheckView {
   running: boolean;
+  searching?: string[]; // only these are left, their older versions are searched on GitHub; the others can be changed
   pending: Set<string>;
   list?: InstalledList;
   states?: PackageState[];
@@ -74,11 +75,13 @@ export async function radioView(
   const sel = r?.sources ?? {};
   const read: RadioCard = { ...card, installed: check?.list ?? card.installed };
   const reading = check?.running ?? !!board; // a card with a type is read right after it shows up
+  const readingSource = (name: string) => reading && !(check?.searching && !check.searching.includes(name));
   const radioSources: RadioSourceView[] = await Promise.all(updateSources(s).map(async (src) => {
     const view = sources.find((x) => x.name === src.name);
     // while the card is read, what is on it so far: the selection follows the card once reading is done
-    const onCard = reading ? read.installed?.packages[src.name] : undefined;
-    const choice = reading
+    const readingIt = readingSource(src.name);
+    const onCard = readingIt ? read.installed?.packages[src.name] : undefined;
+    const choice = readingIt
       ? { on: src.kind === 'sdcard' || !!onCard, origin: onCard?.origin ?? sel[src.name]?.origin ?? ('release' as const) }
       : (sel[src.name] ?? { on: false, origin: 'release' as const });
     const checking = !!check?.running && check.pending.has(src.name);
@@ -98,7 +101,7 @@ export async function radioView(
       fixed: src.kind === 'sdcard',
       installed: same ? available : listed,
       ...(checking ? { checking } : {}),
-      ...(reading ? { reading } : {}),
+      ...(readingIt ? { reading: true } : {}),
       ...(state?.missing.length ? { missing: state.missing } : {}),
       ...(state?.changed.length ? { changed: state.changed } : {}),
       available,
@@ -109,9 +112,13 @@ export async function radioView(
       hasLocal: !!view?.local,
     };
   }));
+  for (const name of withoutSource(s, read.installed)) {
+    const { version, origin } = read.installed!.packages[name]!;
+    radioSources.push({ name, repo: '', kind: 'project', on: false, origin, fixed: false, removed: true, installed: version, hasRelease: false, hasMain: false, releaseOnly: true, hasLocal: false });
+  }
   // switched on with a newer version, other voices or files missing; switched off and on the card
   const updates = radioSources
-    .filter((x) => !x.reading && ((x.on && ((x.available && x.available !== x.installed) || x.voicesChanged || x.missing)) || (!x.on && x.installed)))
+    .filter((x) => !reading && ((x.on && ((x.available && x.available !== x.installed) || x.voicesChanged || x.missing)) || (!x.on && x.installed)))
     .map((x) => x.name);
   // this card's backups: its own and those from before cards had an id
   const backups: string[] = [];

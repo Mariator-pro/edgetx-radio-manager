@@ -20,8 +20,8 @@ describe('interface texts', () => {
   });
 
   it('picks the plural that fits the number', () => {
-    expect(TEXTS.en.backupCount(1)).toBe('1 backup');
-    expect(TEXTS.en.backupCount(3)).toBe('3 backups');
+    expect(TEXTS.en.versionCount(1)).toBe('1 version');
+    expect(TEXTS.en.versionCount(3)).toBe('3 versions');
     expect(TEXTS.de.versionCount(1)).toBe('1 Stand');
     expect(TEXTS.de.versionCount(3)).toBe('3 Stände');
   });

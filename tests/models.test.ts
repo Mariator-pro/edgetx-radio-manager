@@ -350,29 +350,83 @@ describe('export and import', () => {
 });
 
 describe('differences', () => {
-  it('groups by area, mixes per channel, numbered entries like the radio', () => {
+  it('takes a field missing on one side as its zero value, values on both sides exactly', () => {
+    const card = {
+      mixData: [{ destCh: 0, srcRaw: 'I0', weight: 100 }],
+      moduleData: { 0: { type: 'TYPE_CROSSFIRE', antennaMode: 'MODE_PER_MODEL', subType: 0 } },
+      telemetrySensors: { 0: { label: 'GPS', cfg: { param: 0 } } },
+      jitterFilter: 'OFF',
+    };
+    const tool = {
+      mixData: [{ destCh: 0, srcRaw: 'I0', weight: 100, curve: { type: 0, value: 0 } }],
+      moduleData: { 0: { type: 'TYPE_CROSSFIRE' } },
+      telemetrySensors: { 0: { label: 'GPS', cfg: { custom: { ratio: 0, offset: 0 } } } },
+      jitterFilter: 'OFF',
+      swashR: { type: 'TYPE_NONE', value: 0, collectiveSource: 'NONE' },
+      trainerData: { mode: 'OFF', channelsStart: 0 },
+      limitData: { 5: { min: 0, max: 0 } },
+    };
+    expect(diffModels(card, tool)).toEqual([]);
+    expect(diffModels(card, { ...tool, jitterFilter: 'GLOBAL', mixData: [{ destCh: 0, srcRaw: 'I0' }] })).toEqual([
+      { area: 'setup', entries: [{ kind: 'changed', term: 'otherSettings' }] },
+      { area: 'mixes', entries: [{ kind: 'changed', name: 'CH1' }] },
+    ]);
+  });
+
+  it('ignores NUL padding in names, as some desktop tools write it', () => {
+    const fn = (def: string) => `customFn: \n   0:\n      func: PLAY_TRACK\n      def: "${def}"\n`;
+    const card = parseModel('m.yml', Buffer.from(model('Quad', { extra: fn('armed,1,!1x') })));
+    const padded = parseModel('m.yml', Buffer.from(model('Quad\\x00\\x00', { extra: fn('armed\\x00\\x00\\x00,1,!1x') })));
+    expect(padded.name).toBe('Quad');
+    expect((padded.doc.customFn as Record<string, { def: string }>)[0]!.def).toBe('armed,1,!1x');
+    expect(diffModels(card.doc, padded.doc)).toEqual([]);
+  });
+
+  it('names the changed entries per area like the radio, without values', () => {
     const a = parseModel('m.yml', Buffer.from(model('A', { weight: 100, extra: 'customFn: \n   0:\n      func: PLAY_TRACK\n      def: "a"\n' }))).doc;
     const b = parseModel('m.yml', Buffer.from(model('B', { weight: 80, extra: 'customFn: \n   0:\n      func: PLAY_TRACK\n      def: "b"\n   1:\n      func: HAPTIC\n' }))).doc;
     expect(diffModels(a, b)).toEqual([
-      { area: 'setup', entries: [{ path: 'header › name', from: 'A', to: 'B' }] },
-      { area: 'mixes', entries: [{ path: 'Mix CH1, line 1 › weight', from: '100', to: '80' }] },
+      { area: 'setup', entries: [{ kind: 'changed', term: 'name' }] },
+      { area: 'mixes', entries: [{ kind: 'changed', name: 'CH1' }] },
       {
         area: 'specialFunctions',
         entries: [
-          { path: 'SF1 › def', from: 'a', to: 'b' },
-          { path: 'SF2', to: 'HAPTIC' },
+          { kind: 'added', name: 'SF2' },
+          { kind: 'changed', name: 'SF1' },
         ],
       },
     ]);
     expect(diffModels(a, a)).toEqual([]);
   });
 
-  it('names an added input by its name, an unnamed line by source and weight', () => {
-    const line = { mode: 3, srcRaw: 'Thr', weight: 100, chn: 18, name: '' };
-    const diff = diffModels({ expoData: [], inputNames: { 0: { val: 'Ail' } } }, { expoData: [line], inputNames: { 0: { val: 'Ail' }, 18: { val: 'test' } } });
-    expect(diff.flatMap((g) => g.entries)).toEqual([
-      { path: 'Input 19, line 1', to: 'Thr, weight 100' },
-      { path: 'Input 19', to: 'test' },
+  it('matches sensors by name, inputs by number, and joins runs of three or more', () => {
+    const sensor = (label: string) => ({ label, unit: 1 });
+    const fn = (n: number) => Object.fromEntries(Array.from({ length: n }, (_, i) => [i, { func: 'PLAY_TRACK' }]));
+    const diff = diffModels(
+      { telemetrySensors: { 0: sensor('RxBt'), 1: sensor('GPS'), 2: sensor('Curr') }, expoData: [], inputNames: { 0: { val: 'Ail' } }, customFn: fn(2) },
+      {
+        telemetrySensors: { 0: sensor('RxBt'), 1: { ...sensor('Curr'), unit: 2 } },
+        expoData: [{ srcRaw: 'Thr', weight: 100, chn: 18 }],
+        inputNames: { 0: { val: 'Ail' } },
+        customFn: fn(6),
+      },
+    );
+    expect(diff).toEqual([
+      { area: 'inputs', entries: [{ kind: 'added', name: 'I19' }] },
+      { area: 'specialFunctions', entries: [{ kind: 'added', name: 'SF3–SF6' }] },
+      {
+        area: 'telemetry',
+        entries: [
+          { kind: 'removed', name: 'GPS' },
+          { kind: 'changed', name: 'Curr' },
+        ],
+      },
     ]);
+  });
+
+  it('keeps each curve with its points and ignores the EdgeTX version', () => {
+    const curves = { 0: { type: 0, points: 0, name: 'R1' }, 1: { type: 0, points: 0, name: 'P1' } };
+    const diff = diffModels({ semver: '2.12.1', curves, points: { 7: { val: 10 } } }, { semver: '2.12.5', curves, points: { 7: { val: 20 } } });
+    expect(diff).toEqual([{ area: 'curves', entries: [{ kind: 'changed', name: 'P1' }] }]);
   });
 });

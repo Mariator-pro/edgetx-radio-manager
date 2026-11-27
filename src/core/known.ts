@@ -128,6 +128,11 @@ function shippedVersions(name: string): KnownVersion[] {
   return shipped.get(name)!;
 }
 
+// The newest version the app ships checksums of.
+export function newestShipped(name: string): { tag: string; published: string } | undefined {
+  return shippedVersions(name).reduce<KnownVersion | undefined>((a, b) => (a && a.published >= b.published ? a : b), undefined);
+}
+
 async function storedVersion(p: Paths, source: Source, tag: string): Promise<KnownVersion | undefined> {
   const text = await readFile(join(p.known, source.name, `${tag}.json`), 'utf8').catch(() => undefined);
   if (text === undefined) return undefined;
@@ -145,12 +150,18 @@ async function rememberVersion(p: Paths, source: Source, tag: string): Promise<K
   if (!info || tooOld(source, tag)) return undefined;
   const v = await knownVersionIn(versionDir(p, source.name, tag), source, tag, info.published);
   if (v.variants.size === 0) return undefined;
+  await storeVersion(p, source, v);
+  return v;
+}
+
+export async function storeVersion(p: Paths, source: Source, v: KnownVersion): Promise<void> {
+  if (!isSafeName(source.name) || !isSafeName(v.tag)) return;
   const dir = join(p.known, source.name);
   await mkdir(dir, { recursive: true });
-  const file = join(dir, `${tag}.json`);
+  const file = join(dir, `${v.tag}.json`);
   await writeFile(`${file}.tmp`, JSON.stringify(packKnown([v])));
   await rename(`${file}.tmp`, file);
-  return v;
+  merged.delete(`${p.root}|${source.name}`);
 }
 
 function joinVersion(into: KnownVersion, more: KnownVersion): void {

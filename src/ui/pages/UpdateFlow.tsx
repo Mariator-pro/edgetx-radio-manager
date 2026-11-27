@@ -1,15 +1,76 @@
-import { Alert, Button, Chip, Label, ProgressBar, Radio, RadioGroup, Spinner } from '@heroui/react';
+import { Alert, Button, Chip, Label, Modal, ProgressBar, Radio, RadioGroup, Spinner } from '@heroui/react';
 import { useEffect, useState } from 'react';
-import type { Action, PlanFileView, PlanView, ProgressEvent, RadioView, UpdateResultView } from '../../server/api.ts';
+import type { Action, ConflictFileView, PlanFileView, PlanView, ProgressEvent, RadioView, UpdateResultView } from '../../server/api.ts';
 import { ApiError, errorText, post } from '../api.ts';
 import { WarningIcon } from '../components/icons.tsx';
 import { Stepper } from '../components/Stepper.tsx';
 import { backupLabel, isLastWrite } from '../format.ts';
-import { COLORS, TILES } from '../planColors.ts';
+import { COLORS, tileClass } from '../planColors.ts';
 import { usePrefs } from '../usePrefs.ts';
 
 type Phase = 'loading' | 'plan' | 'running' | 'done' | 'error';
 type Resolution = 'keep' | 'apply';
+type FileAction = Exclude<Action, 'unchanged'>;
+
+const LINE_CLASS = { same: '', add: 'bg-success-soft text-success-soft-foreground', del: 'bg-danger-soft text-danger-soft-foreground' } as const;
+
+// The file on the card against the one the update would write, line by line.
+function ConflictDiff({ volume, f, onClose }: { volume: string; f: PlanFileView; onClose: () => void }) {
+  const { t } = usePrefs();
+  const [view, setView] = useState<ConflictFileView>();
+  const [error, setError] = useState<unknown>();
+  useEffect(() => {
+    post<ConflictFileView>('/api/update/conflict', { volume, path: f.path }).then(setView, setError);
+  }, [volume, f.path]);
+  const changed = view?.lines?.some((l) => l.kind === 'add' || l.kind === 'del');
+  return (
+    <Modal.Backdrop isOpen onOpenChange={(open) => !open && onClose()}>
+      <Modal.Container size="lg" scroll="inside">
+        <Modal.Dialog>
+          <Modal.CloseTrigger aria-label={t.close} />
+          <Modal.Header className="flex flex-col items-start gap-1">
+            <Modal.Heading>{t.diffTitle(f.path.split('/').pop() ?? f.path)}</Modal.Heading>
+            <span className="text-sm text-muted">{view ? t.conflictSides(f.pkg, view.version) : f.path}</span>
+          </Modal.Header>
+          <Modal.Body className="flex flex-col gap-3">
+            {error !== undefined ? (
+              <p className="m-0 text-danger">{errorText(t, error)}</p>
+            ) : !view ? (
+              <Spinner size="sm" />
+            ) : view.binary ? (
+              <p className="m-0 text-muted">{t.conflictBinary}</p>
+            ) : view.tooLarge ? (
+              <p className="m-0 text-muted">{t.conflictTooLarge}</p>
+            ) : !changed ? (
+              // the comparison ignores Windows line ends and a missing last line break
+              <p className="m-0 text-muted">{t.onlyLineEnds}</p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  <Chip size="sm" variant="soft" color="danger">{t.onCardOnly}</Chip>
+                  <Chip size="sm" variant="soft" color="success">{t.newOnly}</Chip>
+                </div>
+                <pre className="m-0 overflow-x-auto rounded-2xl border border-border py-2 font-mono text-[12.5px] leading-5">
+                  {view.lines!.map((l, i) =>
+                    l.kind === 'skip' ? (
+                      <div key={i} className="px-4 py-0.5 font-sans text-xs text-muted">{t.unchangedLines(l.n)}</div>
+                    ) : (
+                      <div key={i} className={`px-4 whitespace-pre-wrap ${LINE_CLASS[l.kind]}`}>
+                        <span aria-hidden className="inline-block w-4 select-none">{l.kind === 'add' ? '+' : l.kind === 'del' ? '−' : ''}</span>
+                        <span className="sr-only">{l.kind === 'add' ? t.newOnly : l.kind === 'del' ? t.onCardOnly : ''}</span>
+                        {l.text || ' '}
+                      </div>
+                    ),
+                  )}
+                </pre>
+              </>
+            )}
+          </Modal.Body>
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
+  );
+}
 
 function FileRow({ f }: { f: PlanFileView }) {
   const { t } = usePrefs();
@@ -25,8 +86,9 @@ function FileRow({ f }: { f: PlanFileView }) {
   );
 }
 
-function Conflict({ f, value, onChange }: { f: PlanFileView; value: Resolution; onChange: (r: Resolution) => void }) {
+function Conflict({ volume, f, value, onChange }: { volume: string; f: PlanFileView; value: Resolution; onChange: (r: Resolution) => void }) {
   const { t } = usePrefs();
+  const [diff, setDiff] = useState(false);
   const deleting = f.reason === 'removed-modified';
   return (
     <section className="flex flex-col gap-3 rounded-2xl border border-warning bg-warning-soft/40 px-5 py-4">
@@ -34,7 +96,13 @@ function Conflict({ f, value, onChange }: { f: PlanFileView; value: Resolution; 
         <WarningIcon size={20} />
         <h3 className="m-0 text-[15px] font-semibold">{t.conflict(f.path.split('/').pop() ?? f.path)}</h3>
       </div>
-      <code className="font-mono text-[13px]">{f.path}</code>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <code className="font-mono text-[13px] break-all">{f.path}</code>
+        <Button size="sm" variant="ghost" onPress={() => setDiff(true)}>
+          {t.showDifferences}
+        </Button>
+      </div>
+      {diff && <ConflictDiff volume={volume} f={f} onClose={() => setDiff(false)} />}
       <p className="m-0 text-sm text-warning-soft-foreground">
         {t.reasons[f.reason!](f.pkg)}
       </p>
@@ -67,14 +135,17 @@ function Conflict({ f, value, onChange }: { f: PlanFileView; value: Resolution; 
   );
 }
 
-export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; progress?: ProgressEvent; onBack: () => void }) {
+export function UpdateFlow({ radio, progress, onBack, onPhase }: { radio: RadioView; progress?: ProgressEvent; onBack: () => void; onPhase: (p: Phase) => void }) {
   const { t } = usePrefs();
   const [phase, setPhase] = useState<Phase>('loading');
+  useEffect(() => onPhase(phase), [phase, onPhase]);
   const [plan, setPlan] = useState<PlanView>();
   const [result, setResult] = useState<UpdateResultView>();
   const [error, setError] = useState<unknown>();
   const [resolutions, setResolutions] = useState<Record<string, Resolution>>({});
   const [cancelling, setCancelling] = useState(false);
+  // a tile pressed in the plan: only files with that action in the list below
+  const [filter, setFilter] = useState<FileAction>();
 
   useEffect(() => {
     post<PlanView>('/api/update/plan', { volume: radio.volume }).then(
@@ -108,17 +179,12 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
   const cancelled = error instanceof ApiError && error.info.code === 'updateCancelled';
 
   return (
-    <div className="flex flex-col gap-7">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="font-bold">{radio.label}</span>
-          <span className="font-mono text-xs text-muted">
-            {radio.board} · EdgeTX {radio.firmware} · {radio.sounds.join(', ')}
-          </span>
-        </div>
-        <Button variant="outline" size="sm" isDisabled={phase === 'running'} onPress={onBack}>
-          {t.changeSources}
-        </Button>
+    <div className="flex flex-1 flex-col gap-7">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="font-bold">{radio.label}</span>
+        <span className="font-mono text-xs text-muted">
+          {radio.board} · EdgeTX {radio.firmware} · {radio.sounds.join(', ')}
+        </span>
       </div>
 
       <Stepper current={step} steps={t.steps} label={t.stepsLabel} />
@@ -148,13 +214,20 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
 
           <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
             {(['add', 'replace', 'delete', 'conflict'] as const).map((a) => (
-              <div
+              <button
                 key={a}
-                className={`flex flex-col rounded-2xl px-4 py-3.5 ${TILES[a]} ${a === 'conflict' && c[a] > 0 ? 'ring-2 ring-warning ring-inset' : ''}`}
+                type="button"
+                disabled={c[a] === 0}
+                aria-pressed={filter === a}
+                aria-label={t.filterFiles(c[a], t.actions[a])}
+                onClick={() => setFilter(filter === a ? undefined : a)}
+                className={`flex flex-col rounded-2xl px-4 py-3.5 text-left ${tileClass(a, c[a])} ${c[a] > 0 ? 'cursor-pointer hover:brightness-95' : ''} ${
+                  filter === a ? 'outline-2 outline-offset-2 outline-accent' : ''
+                } ${a === 'conflict' && c[a] > 0 ? 'ring-2 ring-warning ring-inset' : ''} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus`}
               >
                 <span className="text-[26px] font-bold">{c[a]}</span>
                 <span className="text-sm">{t.actions[a]}</span>
-              </div>
+              </button>
             ))}
           </div>
 
@@ -191,6 +264,7 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
           {plan.conflicts.map((f) => (
             <Conflict
               key={f.path}
+              volume={radio.volume}
               f={f}
               value={resolutions[f.path] ?? 'keep'}
               onChange={(r) => setResolutions((prev) => ({ ...prev, [f.path]: r }))}
@@ -201,13 +275,20 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
             <p className="m-0 text-muted">{t.nothing}</p>
           ) : (
             <section aria-labelledby="files" className="flex flex-col gap-3.5">
-              <h2 id="files" className="m-0 text-base font-semibold">
-                {t.files}
-              </h2>
-              {plan.groups.map((g) => (
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 id="files" className="m-0 text-base font-semibold">
+                  {filter ? t.filesOnly(t.actions[filter]) : t.files}
+                </h2>
+                {filter && (
+                  <Button size="sm" variant="ghost" onPress={() => setFilter(undefined)}>
+                    {t.showAllFiles}
+                  </Button>
+                )}
+              </div>
+              {plan.groups.map((g) => ({ ...g, files: filter ? g.files.filter((f) => f.action === filter) : g.files })).filter((g) => g.files.length > 0).map((g) => (
                 <details
-                  key={g.name}
-                  open={g.files.length <= 20 || g.files.some((f) => f.action === 'conflict')}
+                  key={`${g.name}-${filter ?? ''}`}
+                  open={!!filter || g.files.length <= 20 || g.files.some((f) => f.action === 'conflict')}
                   className="overflow-hidden rounded-2xl border border-border"
                 >
                   <summary className="flex cursor-pointer flex-wrap items-center gap-2 bg-surface-secondary px-4 py-3">
@@ -241,7 +322,7 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
             </section>
           )}
 
-          <div className="sticky bottom-0 -mx-7 -mb-7 flex flex-wrap items-center justify-end gap-3 border-t border-border bg-background/95 px-7 py-4 backdrop-blur">
+          <div className="page-bar sticky bottom-0 -mb-7 flex flex-wrap items-center justify-end gap-3 border-t border-border bg-background py-4">
             <div className="flex gap-2">
               <Button variant="outline" onPress={onBack}>
                 {t.back}
@@ -289,11 +370,11 @@ export function UpdateFlow({ radio, progress, onBack }: { radio: RadioView; prog
           <Alert.Indicator />
           <Alert.Content>
             <Alert.Title>{t.updated}</Alert.Title>
-            <Alert.Description>{t.updatedText(result.written, result.deleted, result.kept, backupLabel(result.backup))}</Alert.Description>
+            <Alert.Description>{t.updatedText(result.written, result.deleted, result.kept, backupLabel(result.backup, t.locale))}</Alert.Description>
           </Alert.Content>
         </Alert>
       )}
-      {(phase === 'done' || cancelled) && (
+      {(phase === 'done' || phase === 'error') && (
         <div>
           <Button onPress={onBack}>{t.backToRadio}</Button>
         </div>

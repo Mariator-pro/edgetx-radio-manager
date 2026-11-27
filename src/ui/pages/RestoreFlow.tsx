@@ -4,7 +4,7 @@ import type { ProgressEvent, RadioView, RestoreAction, RestorePlanView, RestoreR
 import { errorText, post } from '../api.ts';
 import { Stepper } from '../components/Stepper.tsx';
 import { backupLabel, isLastWrite } from '../format.ts';
-import { COLORS, TILES } from '../planColors.ts';
+import { COLORS, tileClass } from '../planColors.ts';
 import { usePrefs } from '../usePrefs.ts';
 
 type Phase = 'loading' | 'plan' | 'running' | 'done' | 'error';
@@ -21,9 +21,10 @@ function byFolder(files: RestorePlanView['files']): [string, RestorePlanView['fi
   return [...groups];
 }
 
-export function RestoreFlow({ radio, name, progress, onBack }: { radio: RadioView; name: string; progress?: ProgressEvent; onBack: () => void }) {
+export function RestoreFlow({ radio, name, progress, onBack, onPhase }: { radio: RadioView; name: string; progress?: ProgressEvent; onBack: () => void; onPhase: (p: Phase) => void }) {
   const { t } = usePrefs();
   const [phase, setPhase] = useState<Phase>('loading');
+  useEffect(() => onPhase(phase), [phase, onPhase]);
   const [plan, setPlan] = useState<RestorePlanView>();
   const [result, setResult] = useState<RestoreResultView>();
   const [error, setError] = useState<unknown>();
@@ -62,7 +63,7 @@ export function RestoreFlow({ radio, name, progress, onBack }: { radio: RadioVie
   const otherFirmware = plan?.backupFirmware && plan.cardFirmware && plan.backupFirmware !== plan.cardFirmware;
 
   return (
-    <div className="flex flex-col gap-7">
+    <div className="flex flex-1 flex-col gap-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className="font-bold">{radio.name}</span>
@@ -96,13 +97,13 @@ export function RestoreFlow({ radio, name, progress, onBack }: { radio: RadioVie
       {phase === 'plan' && plan && c && (
         <>
           <div className="flex flex-col gap-1.5">
-            <h1 className="m-0 text-2xl font-bold tracking-tight">{t.restoreTitle(backupLabel(name))}</h1>
+            <h1 className="m-0 text-2xl font-bold tracking-tight">{t.restoreTitle(backupLabel(name, t.locale))}</h1>
             <p className="m-0 text-muted">{t.restoreText}</p>
           </div>
 
           <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
             {ACTIONS.map((a) => (
-              <div key={a} className={`flex flex-col rounded-2xl px-4 py-3.5 ${TILES[a]}`}>
+              <div key={a} className={`flex flex-col rounded-2xl px-4 py-3.5 ${tileClass(a, c[a])}`}>
                 <span className="text-[26px] font-bold">{c[a]}</span>
                 <span className="text-sm">{t.restoreActions[a]}</span>
               </div>
@@ -168,7 +169,7 @@ export function RestoreFlow({ radio, name, progress, onBack }: { radio: RadioVie
             </section>
           )}
 
-          <div className="sticky bottom-0 -mx-7 -mb-7 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background/95 px-7 py-4 backdrop-blur">
+          <div className="page-bar sticky bottom-0 -mb-7 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background py-4">
             <div className="flex flex-col gap-1">
               <Checkbox isSelected={backupFirst} onChange={setBackupFirst}>
                 <Checkbox.Content>
@@ -210,7 +211,7 @@ export function RestoreFlow({ radio, name, progress, onBack }: { radio: RadioVie
           <Alert.Indicator />
           <Alert.Content>
             <Alert.Title>{t.restored}</Alert.Title>
-            <Alert.Description>{t.restoredText(result.written, result.deleted, result.backup && backupLabel(result.backup))}</Alert.Description>
+            <Alert.Description>{t.restoredText(result.written, result.deleted, result.backup && backupLabel(result.backup, t.locale))}</Alert.Description>
           </Alert.Content>
         </Alert>
       )}

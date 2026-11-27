@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Checkbox, Chip, Label, Radio, RadioGroup, Spinner } from '@heroui/react';
+import { Alert, Button, Card, Checkbox, Chip, Dropdown, Header, Label, Radio, RadioGroup, Spinner } from '@heroui/react';
 import { RadioChoice } from '../components/RadioChoice.tsx';
 import { useEffect, useRef, useState } from 'react';
 import type { CardModelView, DiffGroupView, ImportView, ModelEntryView, ModelRef, ModelsView, RadioView, StateView } from '../../server/api.ts';
@@ -37,7 +37,6 @@ export function ModelsPage({
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [chosen, setChosen] = useState<Record<string, number>>({}); // entry -> version to use
   const [open, setOpen] = useState<Set<string>>(new Set());
-  const [comparing, setComparing] = useState<{ key: string; version: number }>();
   const [diff, setDiff] = useState<{ title: string; subtitle: string; groups?: DiffGroupView[] }>();
   const [imported, setImported] = useState<ImportView>();
   const [error, setError] = useState<unknown>();
@@ -90,7 +89,7 @@ export function ModelsPage({
     onStart({
       radio,
       copy: [
-        ...entries.map((e) => ({ ref: refOf(e), source: t.fromBackup(view.radio, backupLabel(versionOf(e).backup)) })),
+        ...entries.map((e) => ({ ref: refOf(e), source: t.fromBackup(view.radio, backupLabel(versionOf(e).backup, t.locale)) })),
         ...fromFile.map((m) => ({ ref: { import: imported!.id, file: m.file }, source: t.fromFile(imported!.name) })),
       ],
       delete: [],
@@ -118,9 +117,8 @@ export function ModelsPage({
   const compare = (e: ModelEntryView, a: number, b: number | 'card') => {
     const left = e.versions[a]!;
     const ref = (v: (typeof e.versions)[number]) => ({ board: view.board, backup: v.backup, file: v.file });
-    const other = b === 'card' ? t.theCard : backupLabel(e.versions[b]!.backup);
-    setComparing(undefined);
-    setDiff({ title: t.diffTitle(e.name), subtitle: `${backupLabel(left.backup)} → ${other}` });
+    const other = b === 'card' ? t.theCard : backupLabel(e.versions[b]!.backup, t.locale);
+    setDiff({ title: t.diffTitle(e.name), subtitle: `${backupLabel(left.backup, t.locale)} → ${other}` });
     run(async () => {
       try {
         const groups = await post<DiffGroupView[]>('/api/models/diff', {
@@ -133,6 +131,40 @@ export function ModelsPage({
         throw err;
       }
     });
+  };
+  // One target compares right away; several open a menu, the SD card first.
+  const compareButton = (e: ModelEntryView, i: number) => {
+    const targets: { id: string; label: string }[] = [
+      ...(cardDiffers(e, i) ? [{ id: 'card', label: t.theCard }] : []),
+      ...e.versions.flatMap((y, j) => (j !== i ? [{ id: String(j), label: backupLabel(y.backup, t.locale) }] : [])),
+    ];
+    const pick = (id: string) => compare(e, i, id === 'card' ? 'card' : Number(id));
+    if (targets.length === 0) return null;
+    if (targets.length === 1)
+      return (
+        <Button size="sm" variant="ghost" onPress={() => pick(targets[0]!.id)}>
+          {targets[0]!.id === 'card' ? t.compareWithCard : t.compareWithVersion(targets[0]!.label)}
+        </Button>
+      );
+    return (
+      <Dropdown>
+        <Button size="sm" variant="ghost">
+          {t.compare} ▾
+        </Button>
+        <Dropdown.Popover placement="bottom end">
+          <Dropdown.Menu aria-label={t.compareWith} onAction={(k) => pick(String(k))}>
+            <Dropdown.Section>
+              <Header>{t.compareWith}</Header>
+              {targets.map((x) => (
+                <Dropdown.Item key={x.id} id={x.id} textValue={x.label}>
+                  <Label>{x.label}</Label>
+                </Dropdown.Item>
+              ))}
+            </Dropdown.Section>
+          </Dropdown.Menu>
+        </Dropdown.Popover>
+      </Dropdown>
+    );
   };
   const importFile = (f: File) =>
     run(async () => {
@@ -172,7 +204,7 @@ export function ModelsPage({
   const labels = (l: string[]) => l.map((x) => <Chip key={x} size="sm" variant="soft">{x}</Chip>);
 
   return (
-    <div className="flex flex-col gap-6 pb-20">
+    <div className="flex flex-1 flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex max-w-3xl flex-col gap-1.5">
           <h1 className="m-0 text-3xl font-bold tracking-tight">{t.models}</h1>
@@ -188,7 +220,6 @@ export function ModelsPage({
                 setPicked(new Set([...picked].filter((x) => x.startsWith('i:'))));
                 setChosen({});
                 setOpen(new Set());
-                setComparing(undefined);
               }}
             />
           )}
@@ -203,14 +234,17 @@ export function ModelsPage({
               if (f) importFile(f);
             }}
           />
-          <Button variant="outline" isDisabled={!radio} onPress={() => fileInput.current?.click()} aria-describedby="import-hint">
-            {t.importFile}
-          </Button>
-          <span id="import-hint" className="sr-only">
-            {t.importHint}
+          {/* the hint sits on the line of the button, not centred on the field with its label above */}
+          <span className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" isDisabled={!radio} onPress={() => fileInput.current?.click()} aria-describedby="import-hint">
+              {t.importFile}
+            </Button>
+            <span id="import-hint" className="sr-only">
+              {t.importHint}
+            </span>
+            {/* the list comes from the backups chosen above, the comparison and copying go to the radio in the sidebar */}
+            {radio && <span className="text-sm text-muted">{t.comparedWith(radio.label)}</span>}
           </span>
-          {/* the list comes from the backups chosen above, the comparison and copying go to the radio in the sidebar */}
-          {radio && <span className="self-center text-sm text-muted">{t.comparedWith(radio.label)}</span>}
         </div>
       </div>
 
@@ -273,10 +307,11 @@ export function ModelsPage({
                           {labels(v.labels)}
                         </span>
                         <span className="text-sm text-muted">
-                          {[v.semver && `EdgeTX ${v.semver}`, backupLabel(e.versions[0]!.backup)].filter(Boolean).join(' · ')}
+                          {[v.semver && `EdgeTX ${v.semver}`, backupLabel(e.versions[0]!.backup, t.locale)].filter(Boolean).join(' · ')}
                         </span>
                       </div>
-                      {e.card && (
+                      {/* open, the version on the card carries the tag itself */}
+                      {e.card && !(expanded && e.cardVersion !== undefined) && (
                         <Chip size="sm" variant="soft" color={STATUS_COLOR[e.card]}>
                           {t.cardStates[e.card]}
                         </Chip>
@@ -308,46 +343,26 @@ export function ModelsPage({
                         {e.versions.map((x, i) => (
                           <div key={x.backup} className="flex flex-col gap-2 border-t border-separator py-2.5 pl-8">
                             <div className="flex flex-wrap items-center gap-3">
-                              <Radio value={String(i)} aria-label={t.pickVersion(backupLabel(x.backup))}>
+                              <Radio value={String(i)} aria-label={t.pickVersion(backupLabel(x.backup, t.locale))}>
                                 <Radio.Content>
                                   <Radio.Control>
                                     <Radio.Indicator />
                                   </Radio.Control>
-                                  <Label className="font-mono text-sm">{backupLabel(x.backup)}</Label>
+                                  {/* date, EdgeTX and the card tag in the label, so they share its line */}
+                                  <Label className="flex flex-wrap items-baseline gap-x-3 text-sm">
+                                    <span className="tabular-nums">{backupLabel(x.backup, t.locale)}</span>
+                                    {x.semver && <span className="font-normal text-muted">EdgeTX {x.semver}</span>}
+                                    {e.cardVersion === i && (
+                                      <Chip size="sm" variant="soft" color="success">
+                                        {t.thisOnCard}
+                                      </Chip>
+                                    )}
+                                  </Label>
                                 </Radio.Content>
                               </Radio>
-                              {x.since !== x.backup && <span className="text-sm text-muted">{t.sinceDate(backupLabel(x.since))}</span>}
-                              {x.semver && <span className="text-sm text-muted">EdgeTX {x.semver}</span>}
-                              {e.cardVersion === i && (
-                                <Chip size="sm" variant="soft" color="success">
-                                  {t.thisOnCard}
-                                </Chip>
-                              )}
                               <span className="flex-1" />
-                              {(e.versions.length > 1 || cardDiffers(e, i)) && (
-                                <Button size="sm" variant="ghost" onPress={() => setComparing(comparing?.key === key && comparing.version === i ? undefined : { key, version: i })}>
-                                  {t.compare}
-                                </Button>
-                              )}
+                              {compareButton(e, i)}
                             </div>
-                            {comparing?.key === key && comparing.version === i && (
-                              <div className="flex flex-wrap items-center gap-2 text-sm">
-                                <span className="text-muted">{t.compareWith}</span>
-                                {cardDiffers(e, i) && (
-                                  <Button size="sm" variant="ghost" onPress={() => compare(e, i, 'card')}>
-                                    {t.theCard}
-                                  </Button>
-                                )}
-                                {e.versions.map(
-                                  (y, j) =>
-                                    j !== i && (
-                                      <Button key={y.backup} size="sm" variant="ghost" onPress={() => compare(e, i, j)}>
-                                        {backupLabel(y.backup)}
-                                      </Button>
-                                    ),
-                                )}
-                              </div>
-                            )}
                           </div>
                         ))}
                       </RadioGroup>
@@ -378,7 +393,7 @@ export function ModelsPage({
       )}
 
       {count > 0 && (
-        <div className="sticky bottom-0 -mx-7 -mb-7 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background/95 px-7 py-4 backdrop-blur">
+        <div className="page-bar sticky bottom-0 -mb-7 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background py-4">
           <span className="text-sm text-muted">{t.selectedCount(count)}</span>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" isDisabled={!canExport} onPress={exportAll}>

@@ -200,7 +200,6 @@ esac
       name: `EdgeTX "Test" ${tag}`,
       published_at: '',
       html_url: '',
-      zipball_url: '',
       assets: [asset(tag)],
       prerelease: tag === 'nightly' || tag.includes('-rc'),
     }));

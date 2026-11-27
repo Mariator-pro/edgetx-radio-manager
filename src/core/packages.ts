@@ -70,10 +70,22 @@ export function installedOn(s: Settings, name: string, tag: string): string[] {
     .map(([key]) => key);
 }
 
+// Every downloaded version of a source that was removed. Checksums in Known/ stay.
+export async function deleteDownloads(p: Paths, name: string): Promise<void> {
+  if (isSafeName(name)) await rm(join(p.packages, name), { recursive: true, force: true });
+}
+
 // label: how the message names a radio, by its settings key.
 export async function deleteVersion(p: Paths, s: Settings, name: string, tag: string, label: (key: string) => string): Promise<void> {
   if (!isSafeName(name) || !isSafeName(tag)) throw new AppError('invalidRequest', { what: 'package' });
   const keys = installedOn(s, name, tag);
   if (keys.length > 0) throw new AppError('installedOn', { name, tag, radios: keys.map(label).join(', ') });
   await rm(versionDir(p, name, tag), { recursive: true, force: true });
+}
+
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Sound pack zip of one voice; "en" must not match "en_gb-ryan": the voice id is followed directly by the version.
+export function soundPackPattern(voice: string): RegExp {
+  return new RegExp(`^edgetx-sdcard-sounds-${escape(voice)}-\\d[\\d.]*\\.zip$`);
 }

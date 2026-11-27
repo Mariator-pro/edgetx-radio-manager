@@ -1,7 +1,7 @@
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CARD_DIRS } from './content.ts';
-import { downloadSource } from './download.ts';
+import { downloadSource, learnNewest } from './download.ts';
 import { AppError } from './errors.ts';
 import { repoExists, type FetchFn } from './github.ts';
 import { versionDir } from './packages.ts';
@@ -58,6 +58,8 @@ export async function checkSource(p: Paths, s: Settings, input: string, fetchFn:
   const sdDir = findSdDir(names);
   if (sdDir === null) throw new AppError('noSdFolder', { repo, tag: r.tag });
   if (sdDir) source.sdDir = sdDir;
+  // recognizing older versions is a bonus: without it the card's reading searches for them
+  await learnNewest(p, s, source, 5, fetchFn).catch(() => {});
   const card = names.filter((n) => [...CARD_DIRS].some((d) => n.includes(`${d}/`)));
   return { source, tag: r.tag, files: card.length, sample: card.slice(0, 8) };
 }
@@ -74,7 +76,7 @@ export function addSource(s: Settings, source: Source, connected: string[] = [])
   }
 }
 
-// Removes a project source from the list and from every radio; downloaded versions stay.
+// Removes a project source from the list and from every radio. Its files stay on an SD card until the next update there.
 // EdgeTX's own sources can't be removed.
 export function removeSource(s: Settings, name: string): boolean {
   const before = s.sources.length;

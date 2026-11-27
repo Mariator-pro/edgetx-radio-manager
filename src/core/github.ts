@@ -25,7 +25,6 @@ interface ApiRelease {
   name?: string | null;
   published_at: string;
   html_url: string;
-  zipball_url: string;
   assets: { name: string; browser_download_url: string; size: number }[];
   draft?: boolean;
   prerelease?: boolean;
@@ -33,19 +32,23 @@ interface ApiRelease {
 
 // Newest non-prerelease release, or undefined when the repo has none.
 export function latestRelease(repo: string, fetchFn: FetchFn = fetch): Promise<Release | undefined> {
-  return getRelease(`https://api.github.com/repos/${repo}/releases/latest`, fetchFn);
+  return getRelease(repo, 'latest', fetchFn);
 }
 
 // The release of one tag, or undefined when there is none.
 export function releaseByTag(repo: string, tag: string, fetchFn: FetchFn = fetch): Promise<Release | undefined> {
-  return getRelease(`https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(tag)}`, fetchFn);
+  return getRelease(repo, `tags/${encodeURIComponent(tag)}`, fetchFn);
 }
 
 // The newest 30 releases without drafts, newest first: the finished ones, or with prereleases only the pre-releases.
 export async function listReleases(repo: string, fetchFn: FetchFn = fetch, prereleases = false): Promise<Release[]> {
   const list = await getJson<ApiRelease[]>(`https://api.github.com/repos/${repo}/releases?per_page=30`, fetchFn);
-  return (list ?? []).filter((r) => !r.draft && !!r.prerelease === prereleases).map(toRelease);
+  return (list ?? []).filter((r) => !r.draft && !!r.prerelease === prereleases).map((r) => toRelease(repo, r));
 }
+
+// The source archive of a tag or commit, straight from the server GitHub's API redirects to: loading it there doesn't
+// count toward the limit of requests.
+export const sourceZip = (repo: string, ref: string) => `https://codeload.github.com/${repo}/zip/${ref.split('/').map(encodeURIComponent).join('/')}`;
 
 export interface Commit {
   sha: string;
@@ -60,7 +63,7 @@ export async function latestCommit(repo: string, fetchFn: FetchFn = fetch): Prom
     fetchFn,
     [404, 409],
   );
-  return c && { sha: c.sha, date: c.commit.committer.date, zipball: `https://api.github.com/repos/${repo}/zipball/${c.sha}` };
+  return c && { sha: c.sha, date: c.commit.committer.date, zipball: sourceZip(repo, c.sha) };
 }
 
 // Whether GitHub shows the repo; a mistyped or private one answers 404.
@@ -82,18 +85,18 @@ async function getJson<T>(url: string, fetchFn: FetchFn, missing = [404]): Promi
   return (await res.json()) as T;
 }
 
-async function getRelease(url: string, fetchFn: FetchFn): Promise<Release | undefined> {
-  const r = await getJson<ApiRelease>(url, fetchFn);
-  return r && toRelease(r);
+async function getRelease(repo: string, which: string, fetchFn: FetchFn): Promise<Release | undefined> {
+  const r = await getJson<ApiRelease>(`https://api.github.com/repos/${repo}/releases/${which}`, fetchFn);
+  return r && toRelease(repo, r);
 }
 
-function toRelease(r: ApiRelease): Release {
+function toRelease(repo: string, r: ApiRelease): Release {
   return {
     tag: r.tag_name,
     ...(r.name ? { name: r.name } : {}),
     published: r.published_at,
     url: r.html_url,
-    zipball: r.zipball_url,
+    zipball: sourceZip(repo, `refs/tags/${r.tag_name}`),
     assets: r.assets.map((a) => ({ name: a.name, url: a.browser_download_url, size: a.size })),
     prerelease: !!r.prerelease,
   };

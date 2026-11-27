@@ -30,3 +30,34 @@ body {
 .field-list .menu-item[data-focus-visible='true'] {
   background-color: color-mix(in oklab, var(--default), var(--foreground) 8%);
 }
+
+/* Pages are at most 72rem wide (max-w-6xl on <main>'s children); a bar at the bottom of a page still reaches
+   both edges of <main>, while its buttons stay at the edge of the content. The page fills the window's height
+   (flex-1 on its outer element), so the bar sits at the bottom of the window also on a short page. */
+.page-bar {
+  margin-top: auto;
+  --extra: max(0px, 100cqw - 72rem);
+  margin-inline: -1.75rem calc(-1.75rem - var(--extra));
+  padding-inline: 1.75rem calc(1.75rem + var(--extra));
+}
+
+/* The card-in-use symbol in the sidebar: the access light flickers, the lock pulses. */
+.usb-led {
+  animation: usb-led 1.3s steps(1) infinite;
+}
+@keyframes usb-led {
+  0%, 20%, 50%, 64%, 90% { opacity: 1; }
+  12%, 34%, 58%, 82% { opacity: 0.2; }
+}
+.usb-lock {
+  animation: usb-lock 1.6s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes usb-lock {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.25); opacity: 0.6; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .usb-led, .usb-lock { animation: none; }
+}

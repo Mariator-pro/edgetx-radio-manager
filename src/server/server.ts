@@ -28,7 +28,7 @@ import {
   type ModelFile,
   type ModelOrigin,
 } from '../core/models.ts';
-import { downloadAll, downloadMain, downloadSource, downloadTag, soundPackPattern, type DownloadEvent } from '../core/download.ts';
+import { downloadAll, downloadMain, downloadSource, downloadTag, type DownloadEvent } from '../core/download.ts';
 import { AppError, errorInfo, type ErrorArgs, type ErrorCode } from '../core/errors.ts';
 import {
   checkFirmwareFile,
@@ -42,7 +42,7 @@ import {
   type FlashOptions,
 } from '../core/firmware.ts';
 import { forgetRadio, labelOfKey } from '../core/known-radios.ts';
-import { deleteVersion, localVersions, mainInfo, versionDir } from '../core/packages.ts';
+import { deleteDownloads, deleteVersion, localVersions, mainInfo, versionDir, soundPackPattern } from '../core/packages.ts';
 import { isSafeKey, isSafeName, type Paths } from '../core/paths.ts';
 import { isBelowMin, MIN_EDGETX, radioName, radioTypes } from '../core/radios.ts';
 import { applyRestore, planRestore, type RestorePlan } from '../core/restore.ts';
@@ -64,6 +64,7 @@ import {
   type Settings,
 } from '../core/settings.ts';
 import { addSource, checkSource, removeSource } from '../core/sources.ts';
+import { isText, lineDiff } from '../core/textdiff.ts';
 import { prepareUpdate, type UpdateSetup } from '../core/update.ts';
 import { listVolumes } from '../platform/volumes.ts';
 import {
@@ -81,6 +82,7 @@ import {
   type LicensesView,
   type PrefsView,
   type ProgressEvent,
+  type ConflictFileView,
   type RestoreResultView,
   type SourceCheckView,
   type UpdateResultView,
@@ -261,6 +263,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
   const boards = new Map<string, string>(); // volume -> type chosen for a card without radio.yml
   const clients = new Set<ServerResponse>();
   let busy: string | undefined;
+  let busyVolume: string | undefined;
   let abort: AbortController | undefined; // stops the running operation, where it can be stopped
   // the firmware file chosen last on the flash page, until it is flashed or another one is chosen
   let customFirmware: { board: string; name: string; data: Buffer; check: FirmwareFileCheck } | undefined;
@@ -270,7 +273,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
   const modelCache: ModelCache = new Map();
   const imports = new Map<string, ImportedFile>();
   // reading each connected card in the background (checkCard), by volume; key: the card state it read
-  const checks = new Map<string, CardCheckView & { key: string }>();
+  const checks = new Map<string, CardCheckView & { key: string; abort: AbortController }>();
   // The plans as last shown, by card, with the card as it was then: confirming does exactly that plan.
   const plans = new Map<string, { what: string; at: CardSnapshot; restore?: RestorePlan; update?: UpdateSetup; models?: Awaited<ReturnType<typeof modelsPlan>> }>();
   // the plan shown for this request, while the card hasn't changed since
@@ -297,6 +300,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     const appUpdate = o.appUpdates?.view();
     return {
       ...(await stateView(p, s, cards, boards, busy, checks)),
+      ...(busyVolume ? { busyVolume } : {}),
       ...(appUpdate ? { appUpdate } : {}),
       ...(s.localRepos ? { localRepos: s.localRepos } : {}),
       ...(o.pickFolder ? { pickFolder: true } : {}),
@@ -326,20 +330,39 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     const board = boardOf(c);
     const key = JSON.stringify([board, c.installed?.updated ?? null]);
     if (!board || checks.get(c.volume)?.key === key) return;
-    const entry: CardCheckView & { key: string } = { key, running: true, pending: new Set(s.sources.map((x) => x.name)) };
+    checks.get(c.volume)?.abort.abort();
+    const abort = new AbortController(); // the card was pulled
+    const entry: CardCheckView & { key: string; abort: AbortController } = { key, abort, running: true, pending: new Set(s.sources.map((x) => x.name)) };
     checks.set(c.volume, entry);
-    void checkCard(p, s, c, board, (name, list) => {
-      entry.pending.delete(name);
-      entry.list = list;
-      void pushState();
+    // known at once, not only after the next read
+    const noteId = (cardId: string) => {
+      for (const x of cards) if (x.volume === c.volume) x.cardId = cardId;
+    };
+    void checkCard(p, s, c, board, {
+      signal: abort.signal,
+      fetchFn: (url, init) => fetch(url, { ...init, signal: abort.signal }),
+      onPackage: (name, list, states) => {
+        entry.pending.delete(name);
+        entry.list = list;
+        entry.states = states;
+        void pushState();
+      },
+      onSearch: async (names, list, cardId) => {
+        if (abort.signal.aborted) return;
+        if (await selectionFromCard(p, s, board, { ...c, cardId }, list)) await saveSettings(p, s);
+        noteId(cardId);
+        entry.list = list;
+        entry.searching = names;
+        await pushState();
+      },
     })
       .then(async (r) => {
-        if (await selectionFromCard(p, s, board, { ...c, cardId: r.cardId }, r.list)) await saveSettings(p, s);
-        for (const x of cards) if (x.volume === c.volume) x.cardId = r.cardId; // known at once, not only after the next read
+        if (await selectionFromCard(p, s, board, { ...c, cardId: r.cardId }, r.list, entry.searching)) await saveSettings(p, s);
+        noteId(r.cardId);
         entry.states = r.states;
         entry.key = JSON.stringify([board, r.list.updated]); // its own writing is no reason to read again
       })
-      .catch((e: unknown) => console.error(`Reading ${c.volume}:`, errorInfo(e).message)) // tried again when connected again
+      .catch((e: unknown) => abort.signal.aborted || console.error(`Reading ${c.volume}:`, errorInfo(e).message)) // tried again when connected again
       .finally(() => {
         entry.running = false;
         void poll(true);
@@ -363,7 +386,11 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     for (const c of [...came, ...went]) markSeen(s, { ...c, board: boardOf(c) }, at);
     if (came.length + went.length > 0) await saveSettings(p, s);
     cards = now;
-    for (const v of checks.keys()) if (!cards.some((c) => c.volume === v)) checks.delete(v);
+    for (const v of checks.keys()) {
+      if (cards.some((c) => c.volume === v)) continue;
+      checks.get(v)!.abort.abort();
+      checks.delete(v);
+    }
     for (const c of cards) {
       await adopt(c);
       startCheck(c);
@@ -372,15 +399,17 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
   });
 
   // One long operation at a time; the state shows which one runs.
-  const op = async <T>(name: string, fn: (signal: AbortSignal) => Promise<T>): Promise<T> => {
+  const op = async <T>(name: string, fn: (signal: AbortSignal) => Promise<T>, volume?: string): Promise<T> => {
     if (busy) throw new HttpError(409, 'busy', { op: busy });
     busy = name;
+    busyVolume = volume;
     abort = new AbortController();
     await pushState();
     try {
       return await fn(abort.signal);
     } finally {
       busy = undefined;
+      busyVolume = undefined;
       abort = undefined;
       await poll(true);
     }
@@ -563,7 +592,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     'POST /api/backup': async (req) => {
       const { volume } = await body<{ volume: string }>(req);
       const [c, board] = await cardAt(volume);
-      return op('backup', async () => (await runBackup(c, board, { reason: 'manual' })).name);
+      return op('backup', async () => (await runBackup(c, board, { reason: 'manual' })).name, volume);
     },
     'POST /api/update/plan': async (req) => {
       const { volume } = await body<{ volume: string }>(req);
@@ -574,6 +603,20 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       if (setup.selectionChanged) await saveSettings(p, s);
       plans.set(volume, { what: 'update', at, update: setup });
       return planView(volume, board, c, setup);
+    },
+    // only for a path that is a conflict of the plan shown, so nothing else on the card can be read this way
+    'POST /api/update/conflict': async (req): Promise<ConflictFileView> => {
+      const { volume, path } = await body<{ volume: string; path: string }>(req);
+      const setup = plans.get(volume)?.what === 'update' ? plans.get(volume)!.update! : undefined;
+      if (!setup) throw new HttpError(409, 'planGone');
+      const item = setup.plan.find((x) => x.path === path && x.action === 'conflict');
+      if (!item) throw new HttpError(404, 'notFound');
+      const onCard = await readFile(join(volume, ...path.split('/')));
+      const next = item.wanted?.data ?? Buffer.alloc(0);
+      const version = item.wanted ? setup.contents.find((c) => c.name === item.pkg)?.version : undefined;
+      if (!isText(onCard) || !isText(next)) return { version, binary: true };
+      const lines = lineDiff(onCard.toString('utf8'), next.toString('utf8'));
+      return lines ? { version, lines } : { version, tooLarge: true };
     },
     'POST /api/update/run': async (req) => {
       const { volume, resolutions } = await body<{ volume: string; resolutions: Record<string, Resolution> }>(req);
@@ -598,7 +641,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
           signal,
         ).catch(cancelled(b.name));
         return { ...r, backup: b.name };
-      });
+      }, volume);
     },
     'POST /api/restore/plan': async (req) => {
       const { volume, board, name } = await body<{ volume: string; board: string; name: string }>(req);
@@ -621,7 +664,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
           progress({ op: 'restore', step: 'write', text: pr.path, done: pr.done, total: pr.total }),
         );
         return { ...r, backup: b?.name };
-      });
+      }, volume);
     },
     'GET /api/models': async (_req, q) => {
       const source = q.get('source') || undefined; // checked against the sources found in the backups
@@ -679,7 +722,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
         const copied = await applyCopy(c.volume, items, onProgress);
         const moved = await applyDelete(c.volume, deletes, onProgress);
         return { written: items.length > 0 ? copied.written : 0, moved: deletes.length > 0 ? moved.moved : 0, backup: backup?.name };
-      });
+      }, b.volume);
     },
     'POST /api/models/diff': async (req) => {
       const { a, b, volume } = await body<{ a: ModelRef; b?: ModelRef; volume?: string }>(req);
@@ -859,8 +902,10 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     },
     'POST /api/sources/remove': async (req) => {
       const { name } = await body<{ name: string }>(req);
+      if (busy) throw new HttpError(409, 'busy', { op: busy }); // a download could be writing its versions
       if (!removeSource(s, name)) throw new HttpError(400, 'onlyProjectsRemovable');
       await saveSettings(p, s);
+      await deleteDownloads(p, name);
       await pushState();
     },
   };

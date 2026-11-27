@@ -1,5 +1,4 @@
-// Differences between two model files, grouped like the radio's model menus.
-// Headings are translated by the interface; the entries name the file's keys and stay English.
+// Which entries of two model files differ, grouped like the radio's model menus. Values are not shown.
 
 export type DiffArea =
   | 'setup'
@@ -12,8 +11,7 @@ export type DiffArea =
   | 'specialFunctions'
   | 'telemetry'
   | 'customScripts'
-  | 'screens'
-  | 'other';
+  | 'screens';
 
 const DIFF_AREAS: DiffArea[] = [
   'setup',
@@ -27,149 +25,231 @@ const DIFF_AREAS: DiffArea[] = [
   'telemetry',
   'customScripts',
   'screens',
-  'other',
 ];
 
-const AREA_OF: Record<string, DiffArea> = {
-  header: 'setup',
-  semver: 'setup',
-  timers: 'setup',
-  moduleData: 'setup',
-  switchWarning: 'setup',
-  customSwitches: 'setup',
-  cfsGroupOn: 'setup',
-  flightModeData: 'flightModes',
-  expoData: 'inputs',
-  inputNames: 'inputs',
-  mixData: 'mixes',
-  limitData: 'outputs',
-  curves: 'curves',
-  points: 'curves',
-  logicalSw: 'logicalSwitches',
-  customFn: 'specialFunctions',
-  telemetrySensors: 'telemetry',
-  scriptsData: 'customScripts',
-  screenData: 'screens',
-  topbarData: 'screens',
-  topbarWidgetWidth: 'screens',
-  view: 'screens',
-};
+export type DiffKind = 'added' | 'removed' | 'changed';
 
-interface DiffEntry {
-  path: string; // e.g. "Mix CH2, line 3 › weight"
-  from?: string; // missing: added
-  to?: string; // missing: removed
+// Entries without a name on the radio; the interface translates them.
+export type DiffTerm = 'name' | 'image' | 'timer' | 'internalModule' | 'externalModule' | 'switchWarnings' | 'otherSettings' | 'screen' | 'topBar';
+
+// Either a name as the radio shows it ("CH2", "SF28–SF40", "RxBt") or a term with an optional number.
+export interface DiffEntry {
+  kind: DiffKind;
+  name?: string;
+  term?: DiffTerm;
+  n?: number;
 }
 
-interface DiffGroup {
+export interface DiffGroup {
   area: DiffArea;
   entries: DiffEntry[];
 }
 
-const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-const isLeaf = (v: unknown) => !isObject(v) && !Array.isArray(v);
-const text = (v: unknown) => (v === null || v === undefined ? '' : isLeaf(v) ? String(v) : JSON.stringify(v));
-const num = (k: string) => (/^\d+$/.test(k) ? parseInt(k, 10) : NaN);
+type Doc = Record<string, unknown>;
+type Label = { name: string } | { term: DiffTerm; n?: number };
+// One entry's content on each side, keyed by how the radio names it.
+type Side = Map<string, { label: Label; parts: Doc }>;
 
-// Names like the radio shows them for numbered entries; other keys stay as they are.
-const LABELS: Record<string, (n: number) => string> = {
-  customFn: (n) => `SF${n + 1}`,
-  logicalSw: (n) => `L${n + 1}`,
-  limitData: (n) => `CH${n + 1}`,
-  flightModeData: (n) => `FM${n}`,
-  timers: (n) => `Timer ${n + 1}`,
-  telemetrySensors: (n) => `Sensor ${n + 1}`,
-  curves: (n) => `Curve ${n + 1}`,
-  scriptsData: (n) => `Script ${n + 1}`,
-  screenData: (n) => `Screen ${n + 1}`,
-  inputNames: (n) => `Input ${n + 1}`,
-  moduleData: (n) => (n === 0 ? 'Internal module' : n === 1 ? 'External module' : `Module ${n}`),
-};
+const isObject = (v: unknown): v is Doc => typeof v === 'object' && v !== null && !Array.isArray(v);
+const list = (v: unknown): [number, unknown][] =>
+  Array.isArray(v) ? v.map((x, i) => [i, x]) : isObject(v) ? Object.entries(v).map(([k, x]) => [Number(k), x]) : [];
+// EdgeTX leaves fields that hold zero out of the file, other tools write them; so a field missing on one side
+// matches a zero on the other: 0, empty, or an enum's first value. Values on both sides compare exactly.
+const ZERO_NAMES = new Set(['NONE', 'none', 'TYPE_NONE', 'MODE_PER_MODEL', 'OFF', 'GLOBAL']);
+const zero = (v: unknown): boolean =>
+  v === undefined ||
+  v === null ||
+  v === 0 ||
+  v === '' ||
+  v === false ||
+  (typeof v === 'string' && ZERO_NAMES.has(v)) ||
+  (Array.isArray(v) && v.every(zero)) ||
+  (isObject(v) && Object.values(v).every(zero));
+const asObject = (v: unknown): Doc | undefined => (Array.isArray(v) ? Object.fromEntries(v.map((x, i) => [i, x])) : isObject(v) ? v : undefined);
+function same(a: unknown, b: unknown): boolean {
+  if (a === undefined || a === null) return zero(b);
+  if (b === undefined || b === null) return zero(a);
+  const x = asObject(a);
+  const y = asObject(b);
+  if (x && y) return [...new Set([...Object.keys(x), ...Object.keys(y)])].every((k) => same(x[k], y[k]));
+  return !x && !y && a === b;
+}
+const str = (v: unknown) => (typeof v === 'string' ? v : '');
 
-function walk(a: unknown, b: unknown, path: string[], out: DiffEntry[]): void {
-  if (isLeaf(a) && isLeaf(b)) {
-    if (text(a) !== text(b)) out.push({ path: path.join(' › '), ...(a !== undefined ? { from: text(a) } : {}), ...(b !== undefined ? { to: text(b) } : {}) });
-    return;
-  }
-  if (a === undefined || b === undefined) {
-    out.push({ path: path.join(' › '), ...(a !== undefined ? { from: summary(a) } : {}), ...(b !== undefined ? { to: summary(b) } : {}) });
-    return;
-  }
-  if (Array.isArray(a) && Array.isArray(b)) {
-    for (let i = 0; i < Math.max(a.length, b.length); i++) walk(a[i], b[i], [...path, String(i + 1)], out);
-    return;
-  }
-  const x = isObject(a) ? a : {};
-  const y = isObject(b) ? b : {};
-  const keys = [...new Set([...Object.keys(x), ...Object.keys(y)])].sort((k, l) => (num(k) - num(l)) || k.localeCompare(l));
-  const parent = path.length === 1 ? path[0] : undefined;
-  for (const k of keys) {
-    const label = parent && LABELS[parent] && !Number.isNaN(num(k)) ? LABELS[parent]!(num(k)) : k;
-    walk(x[k], y[k], parent && LABELS[parent] && label !== k ? [label] : [...path, label], out);
+// An entry can gather several parts of the file, each under its own name.
+function add(side: Side, key: string, label: Label, value: unknown, part = ''): void {
+  const e = side.get(key) ?? { label, parts: {} };
+  e.parts[part] = value;
+  side.set(key, e);
+}
+
+const named = (name: string): Label => ({ name });
+
+// Lines that belong to one channel or input, under its number.
+function lines(v: unknown, field: string, label: (n: number) => Label, side: Side): void {
+  const count = new Map<number, number>();
+  for (const [, line] of list(v)) {
+    const n = isObject(line) ? Number(line[field]) || 0 : 0;
+    const i = count.get(n) ?? 0;
+    count.set(n, i + 1);
+    add(side, `${n}`, label(n), line, `line${i}`);
   }
 }
 
-// One line for a whole entry that is only on one side.
-function summary(v: unknown): string {
-  if (isLeaf(v)) return text(v);
-  if (isObject(v)) {
-    // input names are { val }; an input or mix line without a name tells its source and weight
-    const name = [v.name, v.label, v.val, v.func, v.LayoutId].find((x) => x !== undefined && x !== '');
-    if (name !== undefined) return String(name);
-    if (v.srcRaw !== undefined) return `${text(v.srcRaw)}${v.weight !== undefined ? `, weight ${text(v.weight)}` : ''}`;
-    return '…';
+// The points of each curve: the file keeps them in one list, each curve after the one before.
+function curvePoints(doc: Doc): Map<number, unknown[]> {
+  const points = new Map(list(doc.points).map(([i, p]) => [i, isObject(p) ? p.val : p]));
+  const out = new Map<number, unknown[]>();
+  let at = 0;
+  for (const [n, c] of list(doc.curves).sort((x, y) => x[0] - y[0])) {
+    const size = 5 + (isObject(c) ? Number(c.points) || 0 : 0);
+    const count = isObject(c) && Number(c.type) === 1 ? size * 2 - 2 : size;
+    out.set(n, Array.from({ length: count }, (_, i) => points.get(at + i) ?? 0));
+    at += count;
   }
-  return '…';
+  return out;
 }
 
-// Mixes by channel, each channel's lines in order, so one inserted mix shifts only its own channel.
-function mixes(a: unknown, b: unknown, out: DiffEntry[]): void {
-  const byChannel = (v: unknown) => {
-    const m = new Map<number, unknown[]>();
-    for (const line of Array.isArray(v) ? v : []) {
-      const ch = isObject(line) ? Number(line.destCh) || 0 : 0;
-      m.set(ch, [...(m.get(ch) ?? []), line]);
+function sides(doc: Doc): Map<DiffArea, Side> {
+  const areas = new Map<DiffArea, Side>(DIFF_AREAS.map((a) => [a, new Map()]));
+  const area = (a: DiffArea) => areas.get(a)!;
+  const inputNames = new Map(list(doc.inputNames).map(([n, x]) => [n, isObject(x) ? str(x.val) : '']));
+  const points = curvePoints(doc);
+  const sensors = new Map<string, number>();
+
+  for (const [key, value] of Object.entries(doc)) {
+    switch (key) {
+      case 'semver':
+      case 'view':
+        break; // the EdgeTX version that saved the file, the screen last shown
+      case 'header':
+        for (const [k, v] of Object.entries(isObject(value) ? value : {})) {
+          if (k === 'name') add(area('setup'), 'name', { term: 'name' }, v);
+          else if (k === 'bitmap') add(area('setup'), 'image', { term: 'image' }, v);
+          else add(area('setup'), 'other', { term: 'otherSettings' }, v, `header.${k}`);
+        }
+        break;
+      case 'timers':
+        for (const [n, v] of list(value)) add(area('setup'), `timer${n}`, { term: 'timer', n: n + 1 }, v);
+        break;
+      case 'moduleData':
+        for (const [n, v] of list(value)) {
+          const label: Label = n === 0 ? { term: 'internalModule' } : n === 1 ? { term: 'externalModule' } : named(`Module ${n}`);
+          add(area('setup'), `module${n}`, label, v);
+        }
+        break;
+      case 'customSwitches':
+        for (const [k, v] of Object.entries(isObject(value) ? value : {})) add(area('setup'), k, named(k), v);
+        break;
+      case 'switchWarning':
+        add(area('setup'), 'switchWarnings', { term: 'switchWarnings' }, value);
+        break;
+      case 'flightModeData':
+        for (const [n, v] of list(value)) add(area('flightModes'), `${n}`, named(`FM${n}`), v);
+        break;
+      case 'expoData':
+        lines(value, 'chn', (n) => named(inputNames.get(n) || `I${n + 1}`), area('inputs'));
+        break;
+      case 'inputNames':
+        for (const [n, v] of list(value)) add(area('inputs'), `${n}`, named(inputNames.get(n) || `I${n + 1}`), v, 'name');
+        break;
+      case 'mixData':
+        lines(value, 'destCh', (n) => named(`CH${n + 1}`), area('mixes'));
+        break;
+      case 'limitData':
+        for (const [n, v] of list(value)) add(area('outputs'), `${n}`, named(`CH${n + 1}`), v);
+        break;
+      case 'curves':
+        for (const [n, v] of list(value)) add(area('curves'), `${n}`, named((isObject(v) && str(v.name)) || `CV${n + 1}`), [v, points.get(n)]);
+        break;
+      case 'points':
+        break; // with their curve
+      case 'logicalSw':
+        for (const [n, v] of list(value)) add(area('logicalSwitches'), `${n}`, named(`L${n + 1}`), v);
+        break;
+      case 'customFn':
+        for (const [n, v] of list(value)) add(area('specialFunctions'), `${n}`, named(`SF${n + 1}`), v);
+        break;
+      case 'telemetrySensors':
+        // by name, so one inserted sensor doesn't shift all that follow
+        for (const [n, v] of list(value)) {
+          const base = (isObject(v) && str(v.label)) || `Sensor ${n + 1}`;
+          const seen = (sensors.get(base) ?? 0) + 1;
+          sensors.set(base, seen);
+          const name = seen > 1 ? `${base} (${seen})` : base;
+          add(area('telemetry'), name, named(name), v);
+        }
+        break;
+      case 'scriptsData':
+        for (const [n, v] of list(value)) add(area('customScripts'), `${n}`, named((isObject(v) && str(v.file)) || `LUA${n + 1}`), v);
+        break;
+      case 'screenData':
+        for (const [n, v] of list(value)) add(area('screens'), `${n}`, { term: 'screen', n: n + 1 }, v);
+        break;
+      case 'topbarData':
+      case 'topbarWidgetWidth':
+        add(area('screens'), 'topBar', { term: 'topBar' }, value, key);
+        break;
+      default:
+        add(area('setup'), 'other', { term: 'otherSettings' }, value, key);
     }
-    return m;
-  };
-  const x = byChannel(a);
-  const y = byChannel(b);
-  for (const ch of [...new Set([...x.keys(), ...y.keys()])].sort((p, q) => p - q)) {
-    const l = x.get(ch) ?? [];
-    const r = y.get(ch) ?? [];
-    for (let i = 0; i < Math.max(l.length, r.length); i++) walk(l[i], r[i], [`Mix CH${ch + 1}, line ${i + 1}`], out);
   }
+  return areas;
 }
 
-// Inputs by their input number, like the radio lists them.
-function inputs(a: unknown, b: unknown, out: DiffEntry[]): void {
-  const byInput = (v: unknown) => {
-    const m = new Map<number, unknown[]>();
-    for (const line of Array.isArray(v) ? v : []) {
-      const ch = isObject(line) ? Number(line.chn) || 0 : 0;
-      m.set(ch, [...(m.get(ch) ?? []), line]);
+// An empty entry (no lines, a slot with nothing set) counts as missing.
+const empty = (v: unknown): boolean =>
+  v === undefined || v === null || v === '' || (Array.isArray(v) && v.every(empty)) || (isObject(v) && Object.values(v).every(empty));
+
+const SERIES = /^(.*?)(\d+)$/;
+
+// "SF28", "SF29", "SF30" become "SF28–SF30"; two in a row stay apart.
+function compact(entries: DiffEntry[]): DiffEntry[] {
+  const out: DiffEntry[] = [];
+  for (let i = 0; i < entries.length; ) {
+    const e = entries[i]!;
+    const m = e.name?.match(SERIES);
+    let j = i + 1;
+    if (m) {
+      while (j < entries.length) {
+        const next = entries[j]!.name?.match(SERIES);
+        if (!next || next[1] !== m[1] || Number(next[2]) !== Number(m[2]) + (j - i)) break;
+        j++;
+      }
     }
-    return m;
-  };
-  const x = byInput(a);
-  const y = byInput(b);
-  for (const ch of [...new Set([...x.keys(), ...y.keys()])].sort((p, q) => p - q)) {
-    const l = x.get(ch) ?? [];
-    const r = y.get(ch) ?? [];
-    for (let i = 0; i < Math.max(l.length, r.length); i++) walk(l[i], r[i], [`Input ${ch + 1}, line ${i + 1}`], out);
+    if (j - i >= 3) {
+      out.push({ kind: e.kind, name: `${e.name}–${entries[j - 1]!.name}` });
+      i = j;
+    } else {
+      out.push(e);
+      i++;
+    }
   }
+  return out;
 }
 
-export function diffModels(a: Record<string, unknown>, b: Record<string, unknown>): DiffGroup[] {
-  const groups = new Map<DiffArea, DiffEntry[]>();
-  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])];
-  for (const k of keys) {
-    const area = AREA_OF[k] ?? (isLeaf(a[k]) && isLeaf(b[k]) ? 'setup' : 'other');
-    const out = groups.get(area) ?? [];
-    if (k === 'mixData') mixes(a[k], b[k], out);
-    else if (k === 'expoData') inputs(a[k], b[k], out);
-    else walk(a[k], b[k], [k], out);
-    groups.set(area, out);
+const KINDS: DiffKind[] = ['added', 'removed', 'changed'];
+
+export function diffModels(a: Doc, b: Doc): DiffGroup[] {
+  const left = sides(a);
+  const right = sides(b);
+  const groups: DiffGroup[] = [];
+  for (const area of DIFF_AREAS) {
+    const x = left.get(area)!;
+    const y = right.get(area)!;
+    const found: DiffEntry[] = [];
+    for (const key of [...new Set([...x.keys(), ...y.keys()])]) {
+      const from = x.get(key);
+      const to = y.get(key);
+      const had = from && !empty(from.parts);
+      const has = to && !empty(to.parts);
+      // an entry on one side only that holds nothing but zeros is what the other side leaves out
+      const kind: DiffKind | undefined =
+        had && has ? (same(from.parts, to.parts) ? undefined : 'changed') : had ? (zero(from.parts) ? undefined : 'removed') : has && !zero(to.parts) ? 'added' : undefined;
+      if (kind) found.push({ kind, ...(to ?? from)!.label });
+    }
+    const entries = KINDS.flatMap((kind) => compact(found.filter((e) => e.kind === kind)));
+    if (entries.length > 0) groups.push({ area, entries });
   }
-  return DIFF_AREAS.filter((area) => (groups.get(area)?.length ?? 0) > 0).map((area) => ({ area, entries: groups.get(area)! }));
+  return groups;
 }

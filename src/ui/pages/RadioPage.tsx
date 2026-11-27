@@ -1,9 +1,9 @@
-import { Alert, Button, Card, Chip, CloseButton, Label, ListBox, Select, Spinner, Switch, ToggleButton, ToggleButtonGroup } from '@heroui/react';
+import { Alert, Button, Card, Chip, CloseButton, Label, ListBox, Select, Spinner, Switch, ToggleButton, ToggleButtonGroup, Tooltip } from '@heroui/react';
 import { EditRadio } from '../components/EditRadio.tsx';
 import { Fragment, type ReactNode, useEffect, useState } from 'react';
 import type { ProgressEvent, RadioSourceView, RadioView, VoiceView } from '../../server/api.ts';
 import { get, post } from '../api.ts';
-import { ArrowIcon, BackupsIcon, CheckIcon } from '../components/icons.tsx';
+import { ArrowIcon, CheckIcon, WarningIcon } from '../components/icons.tsx';
 import { backupLabel, isNewer, languageName } from '../format.ts';
 import type { Texts } from '../texts.ts';
 import { usePrefs } from '../usePrefs.ts';
@@ -29,15 +29,23 @@ function Versions({ s }: { s: RadioSourceView }) {
     <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
       <span className="rounded-md bg-surface-secondary px-2 py-0.5 whitespace-nowrap text-muted">{s.installed ?? t.notInstalled}</span>
       {custom && (
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-label={t.showCustom(s.name)}
-          onClick={() => setOpen(!open)}
-          className="rounded-md bg-warning-soft px-2 py-0.5 whitespace-nowrap text-warning-soft-foreground hover:underline"
-        >
-          {t.custom}
-        </button>
+        <Tooltip delay={200}>
+          <Tooltip.Trigger className="inline-flex">
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-label={t.showCustom(s.name)}
+              onClick={() => setOpen(!open)}
+              className="rounded-md bg-warning-soft px-2 py-0.5 whitespace-nowrap text-warning-soft-foreground hover:underline"
+            >
+              {t.custom}
+            </button>
+          </Tooltip.Trigger>
+          <Tooltip.Content showArrow>
+            <Tooltip.Arrow />
+            <span className="text-sm">{t.customTip}</span>
+          </Tooltip.Content>
+        </Tooltip>
       )}
       {changes && (
         <>
@@ -77,7 +85,10 @@ function originLabel(origin: RadioSourceView['origin'], t: Texts): string {
   return { release: t.tagRelease, main: t.tagMain, local: t.tagLocal }[origin];
 }
 
-function SourceRow({ radio, s, run }: { radio: RadioView; s: RadioSourceView; run: Run }) {
+// rows with a pending update carry a stripe on the left, in the colour of the update tags
+const STRIPE = 'shadow-[inset_3px_0_0_var(--warning)]';
+
+function SourceRow({ radio, s, run, pending }: { radio: RadioView; s: RadioSourceView; run: Run; pending: boolean }) {
   const { t } = usePrefs();
   const origins = (
     [
@@ -89,13 +100,13 @@ function SourceRow({ radio, s, run }: { radio: RadioView; s: RadioSourceView; ru
   const set = (change: { on?: boolean; origin?: string }) =>
     run(() => post('/api/radio/selection', { volume: radio.volume, source: s.name, ...change }));
   return (
-    <tr className="border-t border-separator">
-      <td className="px-5 py-2.5">
+    <tr id={`source-${s.name}`} className="scroll-mt-4 border-t border-separator">
+      <td className={`px-5 py-2.5 ${pending ? STRIPE : ''}`}>
         <span className={`font-semibold ${s.on ? '' : 'text-muted'}`}>{s.name}</span>
-        <div className="text-xs text-muted">{s.repo}</div>
+        <div className="text-xs text-muted">{s.removed ? t.noLongerSource : s.repo}</div>
       </td>
       <td className="px-3 py-2.5">
-        {s.kind === 'project' && origins.length > 1 ? (
+        {s.kind === 'project' && !s.removed && origins.length > 1 ? (
           <ToggleButtonGroup
             aria-label={t.originOf(s.name)}
             isDisabled={!s.on || s.reading}
@@ -124,7 +135,7 @@ function SourceRow({ radio, s, run }: { radio: RadioView; s: RadioSourceView; ru
       </td>
       <td className="px-5 py-2.5">
         <div className="flex justify-end">
-          {!s.checking && (
+          {!s.checking && !s.removed && (
             <Switch aria-label={t.onThisRadio(s.name)} isSelected={s.on} isDisabled={s.fixed || s.reading} onChange={(on) => set({ on })}>
               <Switch.Content>
                 <Switch.Control>
@@ -139,21 +150,25 @@ function SourceRow({ radio, s, run }: { radio: RadioView; s: RadioSourceView; ru
   );
 }
 
-// One card in "What's next": a numbered step, or a check mark once nothing is left to do.
-function Step(props: { mark: ReactNode; done: boolean; primary?: boolean; title: string; tag?: ReactNode; children: ReactNode; action: ReactNode }) {
-  const { mark, done, primary, title, tag, children, action } = props;
-  const circle = done
-    ? 'bg-success-soft text-success-soft-foreground'
-    : primary
-      ? 'bg-accent text-accent-foreground'
-      : 'bg-surface-secondary text-muted';
+// The state of a card in "What's next", the same marks on all three: up to date, update ready, something to do, or nothing to say yet.
+type StepState = 'done' | 'update' | 'action' | 'idle';
+const MARKS: Record<StepState, { circle: string; icon: ReactNode }> = {
+  done: { circle: 'bg-success-soft text-success-soft-foreground', icon: <CheckIcon size={13} /> },
+  update: { circle: 'bg-accent-soft text-accent-soft-foreground', icon: <ArrowIcon size={13} /> },
+  action: { circle: 'bg-warning-soft text-warning-soft-foreground', icon: <WarningIcon size={13} /> },
+  idle: { circle: 'bg-surface-secondary text-muted', icon: <span className="size-1.5 rounded-full bg-current" /> },
+};
+
+function Step(props: { state: StepState; primary?: boolean; title: string; tag?: ReactNode; children: ReactNode; action: ReactNode }) {
+  const { state, primary, title, tag, children, action } = props;
+  const { circle, icon } = MARKS[state];
   return (
     <Card className={primary ? 'border-2 border-accent' : undefined}>
       <Card.Content className="flex h-full flex-col gap-3.5">
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-2 font-semibold">
             <span className={`inline-flex size-[22px] items-center justify-center rounded-full text-xs font-semibold ${circle}`}>
-              {done ? <CheckIcon size={13} /> : mark}
+              {icon}
             </span>
             {title}
           </span>
@@ -167,7 +182,7 @@ function Step(props: { mark: ReactNode; done: boolean; primary?: boolean; title:
 }
 
 // The voices of the sound packs, right below the sounds source in the table: one small field per language.
-function SoundsRow({ radio, run }: { radio: RadioView; run: Run }) {
+function SoundsRow({ radio, run, pending }: { radio: RadioView; run: Run; pending: boolean }) {
   const { t } = usePrefs();
   const [voices, setVoices] = useState<VoiceView[]>([]);
   useEffect(() => {
@@ -179,7 +194,7 @@ function SoundsRow({ radio, run }: { radio: RadioView; run: Run }) {
   const addable = [...new Set(voices.map((v) => v.language))].filter((l) => !used.includes(l));
   return (
     <tr>
-      <td colSpan={4} className="px-5 pt-0.5 pb-3">
+      <td colSpan={4} className={`px-5 pt-0.5 pb-3 ${pending ? STRIPE : ''}`}>
         <div role="group" aria-label={t.sounds} className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {radio.language && <span className="basis-full text-xs text-muted">{t.ttsLanguage(name(radio.language))}</span>}
           {radio.sounds.length === 0 && <span className="basis-full text-xs text-muted">{t.noSounds}</span>}
@@ -339,6 +354,12 @@ export function RadioPage(props: {
   const sdPrimary = !radio.belowMin && !radio.checking && n > 0;
   // changed files don't count as updates, but the plan is where you choose to overwrite them
   const sdNothing = n === 0 && !radio.sources.some((s) => s.on && s.changed?.length);
+  const [showOff, setShowOff] = useState(false);
+  // switched off and not on the card: nothing to see or do, folded away below the others
+  const isOff = (s: RadioSourceView) => !s.on && !s.removed && !s.checking && !s.installed;
+  const shown = radio.sources.filter((s) => !isOff(s));
+  const off = radio.sources.filter(isOff);
+  const showUpdates = () => document.getElementById(`source-${radio.updates[0]}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const chip = (label: string, color: 'default' | 'success' | 'warning') => (
     <Chip size="sm" variant="soft" color={color}>
       {label}
@@ -346,10 +367,7 @@ export function RadioPage(props: {
   );
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1.5">
-        <span className="text-sm text-muted">{t.connectedRadio(radio.volume)}</span>
-        <RadioName radio={radio} run={run} />
-      </div>
+      <RadioName radio={radio} run={run} />
 
       {!radio.board ? (
         <ChooseBoard radio={radio} run={run} />
@@ -372,8 +390,7 @@ export function RadioPage(props: {
             </h2>
             <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
               <Step
-                mark={1}
-                done={firmwareDone}
+                state={radio.belowMin ? 'action' : newer ? 'update' : firmwareDone ? 'done' : 'idle'}
                 primary={radio.belowMin}
                 title={t.firmware}
                 tag={
@@ -402,16 +419,17 @@ export function RadioPage(props: {
               </Step>
 
               <Step
-                mark={2}
-                done={n === 0 && !radio.belowMin && !radio.checking}
+                state={radio.belowMin || radio.checking ? 'idle' : n > 0 ? 'update' : 'done'}
                 primary={sdPrimary}
                 title={t.sdCard}
                 tag={
-                  radio.checking
-                    ? undefined
-                    : n > 0
-                      ? chip(t.updatesReady(n), radio.belowMin ? 'default' : 'warning')
-                      : !radio.belowMin && chip(t.upToDate, 'success')
+                  radio.checking ? undefined : n > 0 ? (
+                    <button type="button" aria-label={t.showUpdates} onClick={showUpdates} className="cursor-pointer rounded-full">
+                      {chip(t.updatesReady(n), radio.belowMin ? 'default' : 'warning')}
+                    </button>
+                  ) : (
+                    !radio.belowMin && chip(t.upToDate, 'success')
+                  )
                 }
                 action={
                   <Button variant={sdPrimary ? 'primary' : 'outline'} isDisabled={!!busy || radio.belowMin || radio.checking || sdNothing} onPress={onPlan}>
@@ -431,8 +449,7 @@ export function RadioPage(props: {
               </Step>
 
               <Step
-                mark={<BackupsIcon size={13} />}
-                done={!!radio.lastBackup}
+                state={radio.lastBackup ? 'done' : 'action'}
                 title={t.backup}
                 action={
                   <Button
@@ -445,13 +462,23 @@ export function RadioPage(props: {
                     {busy === 'backup' && (
                       <span aria-hidden className="absolute inset-y-0 left-0 bg-accent-soft transition-[width] duration-300" style={{ width: `${backupPct ?? 0}%` }} />
                     )}
-                    <span className="relative">{busy === 'backup' ? t.backingUpPct(backupPct ?? 0) : t.backUpNow}</span>
+                    {busy === 'backup' ? (
+                      // the widest text (100 %) holds the width, so the button doesn't grow with the number
+                      <span className="relative inline-grid tabular-nums">
+                        <span className="invisible col-start-1 row-start-1" aria-hidden>
+                          {t.backingUpPct(100)}
+                        </span>
+                        <span className="col-start-1 row-start-1 text-left">{t.backingUpPct(backupPct ?? 0)}</span>
+                      </span>
+                    ) : (
+                      <span className="relative">{t.backUpNow}</span>
+                    )}
                   </Button>
                 }
               >
                 <div className="flex flex-col gap-0.5">
                   <span className="text-sm text-muted">{t.lastBackup}</span>
-                  <span className="font-mono">{radio.lastBackup ? backupLabel(radio.lastBackup) : t.noneYet}</span>
+                  <span className="tabular-nums">{radio.lastBackup ? backupLabel(radio.lastBackup, t.locale) : t.noneYet}</span>
                   <span className="text-xs text-muted">{t.stored(radio.backups, keep)}</span>
                 </div>
               </Step>
@@ -465,7 +492,7 @@ export function RadioPage(props: {
                   <h2 id="sources" className="m-0 text-base font-semibold">
                     {t.sourcesOnRadio}
                   </h2>
-                  <span className="text-sm text-muted">{t.sourcesCount(radio.sources.length, radio.sources.filter((s) => s.on).length)}</span>
+                  <span className="text-sm text-muted">{t.sourcesCount(radio.sources.filter((s) => !s.removed).length, radio.sources.filter((s) => s.on).length)}</span>
                 </div>
                 <Button variant="ghost" size="sm" onPress={onSources}>
                   {t.addSource}
@@ -491,12 +518,22 @@ export function RadioPage(props: {
                     </tr>
                   </thead>
                   <tbody>
-                    {radio.sources.map((s) => (
+                    {[...shown, ...(showOff ? off : [])].map((s) => (
                       <Fragment key={s.name}>
-                        <SourceRow radio={radio} s={s} run={run} />
-                        {s.kind === 'sounds' && s.on && <SoundsRow radio={radio} run={run} />}
+                        <SourceRow radio={radio} s={s} run={run} pending={radio.updates.includes(s.name)} />
+                        {s.kind === 'sounds' && s.on && <SoundsRow radio={radio} run={run} pending={radio.updates.includes(s.name)} />}
                       </Fragment>
                     ))}
+                    {off.length > 0 && (
+                      <tr className="border-t border-separator">
+                        <td colSpan={4} className="px-3 py-1.5">
+                          <Button variant="ghost" size="sm" aria-expanded={showOff} onPress={() => setShowOff(!showOff)}>
+                            <ArrowIcon size={14} className={`transition-transform motion-reduce:transition-none ${showOff ? '-rotate-90' : 'rotate-90'}`} />
+                            {t.turnedOff(off.length)}
+                          </Button>
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

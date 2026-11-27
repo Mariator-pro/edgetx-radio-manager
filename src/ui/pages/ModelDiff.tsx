@@ -1,16 +1,12 @@
-import { Modal, Spinner } from '@heroui/react';
-import type { DiffGroupView } from '../../server/api.ts';
+import { Chip, Modal, Spinner } from '@heroui/react';
+import type { DiffEntry, DiffGroupView } from '../../server/api.ts';
 import { usePrefs } from '../usePrefs.ts';
 
-// The entries name the keys of the model file and stay English in every language; only the headings are translated.
-function change(e: DiffGroupView['entries'][number]): string {
-  if (e.from === undefined) return `added: ${e.to ?? ''}`;
-  if (e.to === undefined) return `removed (was ${e.from})`;
-  return `${e.from} → ${e.to}`;
-}
+const KIND_COLOR = { added: 'success', removed: 'danger', changed: 'warning' } as const;
 
 export function ModelDiff({ title, subtitle, groups, onClose }: { title: string; subtitle: string; groups?: DiffGroupView[]; onClose: () => void }) {
   const { t } = usePrefs();
+  const name = (e: DiffEntry) => e.name ?? `${t.diffTerms[e.term!]}${e.n ? ` ${e.n}` : ''}`;
   return (
     <Modal.Backdrop isOpen onOpenChange={(open) => !open && onClose()}>
       <Modal.Container size="lg" scroll="inside">
@@ -26,22 +22,29 @@ export function ModelDiff({ title, subtitle, groups, onClose }: { title: string;
             ) : groups.length === 0 ? (
               <p className="m-0 text-muted">{t.diffNone}</p>
             ) : (
-              groups.map((g) => (
-                <details key={g.area} open className="shrink-0 overflow-hidden rounded-2xl border border-border">
-                  <summary className="flex cursor-pointer items-center gap-2 bg-surface-secondary px-4 py-2.5 font-semibold">
-                    <span className="flex-1">{t.diffAreas[g.area]}</span>
-                    <span className="text-sm font-normal text-muted">{g.entries.length}</span>
-                  </summary>
-                  <ul className="m-0 list-none p-0" lang="en">
-                    {g.entries.map((e, i) => (
-                      <li key={i} className="flex flex-wrap gap-x-3 border-t border-separator px-4 py-2">
-                        <code className="min-w-0 flex-[1_1_240px] font-mono text-[12.5px] break-all">{e.path}</code>
-                        <span className="min-w-0 flex-[1_1_200px] font-mono text-[12.5px] break-all text-muted">{change(e)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              ))
+              <>
+                <div className="overflow-hidden rounded-2xl border border-border">
+                  {groups.map((g, i) => (
+                    <div key={g.area} className={`flex flex-wrap gap-x-4 gap-y-1.5 px-4 py-2.5 ${i > 0 ? 'border-t border-separator' : ''}`}>
+                      <span className="flex-[0_0_170px] font-semibold">{t.diffAreas[g.area]}</span>
+                      <span className="flex min-w-0 flex-[1_1_240px] flex-wrap gap-1.5">
+                        {g.entries.map((e, j) => (
+                          <Chip key={j} size="sm" variant="soft" color={KIND_COLOR[e.kind]} aria-label={`${t.diffKinds[e.kind]}: ${name(e)}`}>
+                            <span className={e.kind === 'removed' ? 'line-through' : undefined}>{name(e)}</span>
+                          </Chip>
+                        ))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-2 text-sm">
+                  {(['added', 'removed', 'changed'] as const).map((k) => (
+                    <Chip key={k} size="sm" variant="soft" color={KIND_COLOR[k]}>
+                      {t.diffKinds[k]}
+                    </Chip>
+                  ))}
+                </div>
+              </>
             )}
           </Modal.Body>
         </Modal.Dialog>

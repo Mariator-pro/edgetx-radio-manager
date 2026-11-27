@@ -32,18 +32,25 @@ export function bytes(n: number): string {
   return `${n} B`;
 }
 
+// The one date format of the app, in the interface language: "21.11.2026, 15:19" / "Nov 21, 2026, 3:19 PM"
+// for a point in time, "21.11.2026" / "Nov 21, 2026" for a day.
+const DATE_TIME = { dateStyle: 'medium', timeStyle: 'short' } as const;
+
 export function dateTime(iso: string, locale: string): string {
-  return new Date(iso).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' });
+  return new Date(iso).toLocaleString(locale, DATE_TIME);
 }
 
 export function date(iso: string, locale: string): string {
   return new Date(iso).toLocaleDateString(locale, { dateStyle: 'medium' });
 }
 
-// Backup folder "2026-10-21_1430" or "2026-10-21_1430_2" as "2026-10-21 14:30".
-export function backupLabel(name: string): string {
-  const m = name.match(/^(\d{4}-\d{2}-\d{2})_(\d{2})(\d{2})(?:_(\d+))?$/);
-  return m ? `${m[1]} ${m[2]}:${m[3]}${m[4] ? ` (${m[4]})` : ''}` : name;
+// Backup folder "2026-10-21_1430" or "2026-10-21_1430_2" (local time) as "21.10.2026, 14:30" or "21.10.2026, 14:30 (2)".
+export function backupLabel(name: string, locale: string): string {
+  const m = name.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(?:_(\d+))?$/);
+  if (!m) return name;
+  const [, y, mo, d, h, mi, n] = m.map(Number);
+  const text = new Date(y!, mo! - 1, d!, h!, mi!).toLocaleString(locale, DATE_TIME);
+  return n ? `${text} (${n})` : text;
 }
 
 // "2.12.5" newer than "v2.12.3", "v2.12.0" newer than "v2.12.0-rc4", which is newer than "-rc3";

@@ -113,3 +113,18 @@ export const RefreshIcon = (p: IconProps) => (
     <path d="M20 3.5v5h-5" />
   </Svg>
 );
+
+// USB-C port with a red lock and a flickering access light: the card is in use, keep the radio connected.
+export const UsbBusyIcon = ({ size = 20, className }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" className={className}>
+    <g className="text-amber-400">
+      <rect x="1" y="6" width="17" height="8" rx="4" fill="none" stroke="currentColor" strokeWidth="2" />
+      <rect x="5" y="9" width="9" height="2" rx="1" fill="currentColor" />
+    </g>
+    <circle className="usb-led" cx="9.5" cy="2" r="1.6" fill="var(--color-green-400)" />
+    <g className="usb-lock text-red-400">
+      <path d="M16 15.5v-2a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <rect x="14.5" y="15.5" width="8" height="6.5" rx="1.5" fill="currentColor" />
+    </g>
+  </svg>
+);

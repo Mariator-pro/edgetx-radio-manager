@@ -15,3 +15,6 @@ export const TILES: Record<Exclude<Action, 'unchanged'>, string> = {
   delete: 'bg-danger-soft text-danger-soft-foreground',
   conflict: 'bg-warning-soft text-warning-soft-foreground',
 };
+
+// A tile with 0 stays grey, so only the actions that happen draw the eye.
+export const tileClass = (a: Exclude<Action, 'unchanged'>, n: number) => (n > 0 ? TILES[a] : 'bg-surface-secondary text-muted');

@@ -5,11 +5,13 @@ import { describe, expect, it } from 'vitest';
 import { applyPlan } from '../src/core/apply.ts';
 import { readCard, type InstalledList, type RadioCard } from '../src/core/card.ts';
 import { isExcluded, localContent, localVersion, releaseContent, sameOnCard, sdPrefix, sha256, voicesChanged, type PackageContent } from '../src/core/content.ts';
-import { versionDir } from '../src/core/packages.ts';
+import { downloadAll } from '../src/core/download.ts';
+import { deleteDownloads, versionDir } from '../src/core/packages.ts';
 import { paths, type Paths } from '../src/core/paths.ts';
 import { countActions, makePlan, mergePackages } from '../src/core/plan.ts';
 import { ensureSelection, selectionFromCard } from '../src/core/selection.ts';
 import { defaultSettings, findLocalRepos, radioOf, type Settings } from '../src/core/settings.ts';
+import { removeSource } from '../src/core/sources.ts';
 import { prepareUpdate } from '../src/core/update.ts';
 import { checkCard } from '../src/core/initialize.ts';
 import { radioView } from '../src/server/views.ts';
@@ -590,6 +592,11 @@ describe('reading the SD card', () => {
     expect(row('link-sentinel')).toMatchObject({ on: false, reading: true });
     expect(row('edgetx-sounds')).toMatchObject({ checking: true, reading: true });
     expect(view.updates).toEqual([]);
+    // only a project's older versions are still searched: the others can be changed, nothing counts as an update yet
+    const searching = await radioView(p, s, card, 'tx16smk3', [], [], { running: true, pending: new Set(['lipo-nanny']), searching: ['lipo-nanny'] });
+    expect(searching.sources.find((x) => x.name === 'lipo-nanny')).toMatchObject({ checking: true, reading: true });
+    expect(searching.sources.find((x) => x.name === 'link-sentinel')!.reading).toBeUndefined();
+    expect(searching).toMatchObject({ checking: true, updates: [] });
     // shown before reading has started: the same
     expect((await radioView(p, s, card, 'tx16smk3', [], [])).sources.find((x) => x.name === 'lipo-nanny')).toMatchObject({ on: true, reading: true });
   });
@@ -682,5 +689,167 @@ describe('reading the SD card', () => {
     } finally {
       setShippedCatalog({});
     }
+  });
+});
+
+describe('removed source', () => {
+  it('shows its package on the card as an update that deletes it, and keeps the checksums when its downloads go', async () => {
+    const p = paths(await tempDir());
+    const s = { ...defaultSettings(), sources: [{ name: 'wing-tool', repo: 'example/wing-tool', kind: 'project' as const }] };
+    await writeRelease(p, 'wing-tool', 'v1', '2026-01-01T00:00:00Z', { 'w.zip': { 'WIDGETS/WING/main.lua': 'w' } });
+    const tool = s.sources[0]!;
+    const root = await newCard({ 'WIDGETS/WING/main.lua': 'w' });
+    const { card, states } = await checked(p, s, root);
+    expect(removeSource(s, 'wing-tool')).toBe(true);
+    await deleteDownloads(p, 'wing-tool');
+    expect(await readdir(p.packages)).toEqual([]);
+    expect((await knownVersions(p, tool)).map((v) => v.tag)).toEqual(['v1']);
+
+    const view = await radioView(p, s, card, 'tx16smk3', [], [], { running: false, pending: new Set(), list: card.installed, states });
+    expect(view.sources).toMatchObject([{ name: 'wing-tool', removed: true, on: false, installed: 'v1' }]);
+    expect(view.updates).toEqual(['wing-tool']);
+    const setup = await prepareUpdate(p, s, card, 'tx16smk3');
+    expect(setup.changes).toEqual([{ name: 'wing-tool', from: 'v1', to: undefined }]);
+    await applyPlan(root, setup);
+    const after = (await readCard(root))!;
+    expect(after.installed!.packages).toEqual({});
+    expect(await readdir(join(root, 'WIDGETS'))).toEqual([]);
+  });
+});
+
+describe('older versions', () => {
+  const tool = { name: 'wing-tool', repo: 'example/wing-tool', kind: 'project' as const };
+  const A = 'WIDGETS/WING/main.lua';
+  const B = 'WIDGETS/WING/lib.lua';
+  const version = (n: number) => ({ [A]: `main ${n}`, [B]: 'lib' });
+
+  // GitHub with 40 releases of wing-tool, v40 the newest; v12 can't be loaded.
+  function gitHub(calls: string[]): typeof fetch {
+    return (async (input: string | URL | Request) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.includes('/releases?')) {
+        const list = Array.from({ length: 30 }, (_, i) => 40 - i);
+        return Response.json(list.map((n) => ({ tag_name: `v${n}`, published_at: `2026-01-01T00:00:${n}Z`, html_url: '', assets: [] })));
+      }
+      const n = Number(url.match(/refs\/tags\/v(\d+)$/)?.[1]);
+      if (n === 12) return new Response('', { status: 404 });
+      const files = version(n);
+      return new Response(new Uint8Array(makeZip(Object.fromEntries(Object.entries(files).map(([k, v]) => [`wing-tool-${n}/${k}`, v])))));
+    }) as typeof fetch;
+  }
+  const downloads = (calls: string[]) => calls.filter((c) => c.includes('codeload'));
+
+  async function setup(): Promise<{ p: Paths; s: Settings }> {
+    const p = paths(await tempDir());
+    const s = { ...defaultSettings(), sources: [tool] };
+    await writeRelease(p, 'wing-tool', 'v40', '2026-01-01T00:00:40Z', { 'w.zip': version(40) });
+    return { p, s };
+  }
+  const read = async (p: Paths, s: Settings, root: string, fetchFn?: typeof fetch, searched: string[][] = []) =>
+    checkCard(p, s, (await readCard(root))!, 'tx16smk3', { fetchFn, onSearch: async (names) => void searched.push(names) });
+
+  it('loads older releases of an added project one by one until one is completely on the card, and only once', async () => {
+    const { p, s } = await setup();
+    const root = await newCard(version(36));
+    const calls: string[] = [];
+    const searched: string[][] = [];
+    const r = await read(p, s, root, gitHub(calls), searched);
+    expect(r.list.packages['wing-tool']).toEqual({ version: 'v36', origin: 'release' });
+    expect(r.states).toEqual([{ name: 'wing-tool', missing: [], changed: [] }]);
+    expect(searched).toEqual([['wing-tool']]);
+    expect(downloads(calls).map((c) => c.split('/').pop())).toEqual(['v39', 'v38', 'v37', 'v36']);
+    expect(await readdir(join(p.packages, 'wing-tool'))).toEqual(['v40']);
+
+    const again: string[] = [];
+    await read(p, s, root, gitHub(again));
+    expect(again).toEqual([]);
+  });
+
+  it('reassigns a listed project shown as changed', async () => {
+    const { p, s } = await setup();
+    const root = await newCard(version(36));
+    expect((await read(p, s, root)).list.packages['wing-tool']!.version).toBe('v40'); // no search: best match
+    const r = await read(p, s, root, gitHub([]));
+    expect(r.list.packages['wing-tool']!.version).toBe('v36');
+    expect(r.states).toEqual([{ name: 'wing-tool', missing: [], changed: [] }]);
+    expect((await readCard(root))!.installed!.files[A]).toMatchObject({ sha256: sha256(Buffer.from('main 36')), seen: { same: true } });
+  });
+
+  it('keeps the best match when none of the 30 newest fits or GitHub is out of reach, and skips a release it can’t load', async () => {
+    const { p, s } = await setup();
+    const root = await newCard({ [A]: 'mine', [B]: 'lib' });
+    const offline = (async () => Promise.reject(new Error('offline'))) as typeof fetch;
+    expect((await read(p, s, root, offline)).list.packages['wing-tool']!.version).toBe('v40');
+    const calls: string[] = [];
+    const r = await read(p, s, root, gitHub(calls));
+    expect(r.list.packages['wing-tool']!.version).toBe('v40');
+    expect(r.states).toEqual([{ name: 'wing-tool', missing: [], changed: [A] }]);
+    expect(downloads(calls)).toHaveLength(29); // all but the downloaded v40
+    expect(downloads(calls).at(-1)).toMatch(/v11$/);
+
+    // not asked again until the next check for updates
+    const again: string[] = [];
+    await read(p, s, root, gitHub(again));
+    expect(again).toEqual([]);
+    await downloadAll(p, s, (async () => new Response('{}', { status: 404 })) as typeof fetch);
+    await read(p, s, root, gitHub(again));
+    expect(again.filter((c) => c.includes('/releases?'))).toHaveLength(1);
+    expect(downloads(again).map((c) => c.split('/').pop())).toEqual(['v12']);
+  });
+
+  it('keeps unchanged files only the old version had in the list, until they are gone or changed', async () => {
+    const { p, s } = await setup();
+    const C = 'WIDGETS/WING/old.lua';
+    await writeRelease(p, 'wing-tool', 'v39', '2026-01-01T00:00:39Z', { 'w.zip': { ...version(39), [C]: 'old' } });
+    for (const gone of [true, false]) {
+      const root = await newCard({ ...version(39), [C]: 'old' });
+      expect((await read(p, s, root)).list.packages['wing-tool']!.version).toBe('v39');
+      await writeTree(root, { ...version(40), 'WIDGETS/WING/x.lua': 'own' });
+      // v40 and v39 have two unchanged files each, v40 has none missing or changed
+      const r = await read(p, s, root);
+      expect(r.list.packages['wing-tool']!.version).toBe('v40');
+      expect(r.list.files[C]).toMatchObject({ from: ['wing-tool'], written: 'wing-tool', seen: { same: true } });
+      const card = (await readCard(root))!;
+      radioOf(s, 'tx16smk3', card.cardId).sources = { 'wing-tool': { on: true, origin: 'release' } };
+      const { plan } = await prepareUpdate(p, s, card, 'tx16smk3');
+      expect(plan.filter((i) => i.action === 'delete').map((i) => i.path)).toEqual([C]);
+
+      await (gone ? rm(join(root, C)) : writeFile(join(root, C), 'mine'));
+      const after = await read(p, s, root);
+      expect(after.list.files[C]).toBeUndefined();
+      expect(after.states).toEqual([{ name: 'wing-tool', missing: [], changed: [] }]);
+    }
+  });
+
+  it('searches nothing when no file of the project is on the card, nor for built-in projects', async () => {
+    const { p, s } = await setup();
+    s.sources.push({ ...src('lipo-nanny') });
+    await writeRelease(p, 'lipo-nanny', 'v1', '2026-01-01T00:00:00Z', { 'l.zip': { 'src/WIDGETS/LIPONY/main.lua': 'new' } });
+    const calls: string[] = [];
+    await read(p, s, await newCard({ 'WIDGETS/LIPONY/main.lua': 'mine' }), gitHub(calls));
+    expect(calls).toEqual([]);
+  });
+
+  it('stops without writing to the card once it is pulled', async () => {
+    const { p, s } = await setup();
+    const root = await newCard(version(36));
+    const abort = new AbortController();
+    const pulled = (async (...a: Parameters<typeof fetch>) => {
+      abort.abort();
+      return gitHub([])(...a);
+    }) as typeof fetch;
+    await expect(checkCard(p, s, (await readCard(root))!, 'tx16smk3', { fetchFn: pulled, signal: abort.signal })).rejects.toMatchObject({ code: 'cancelled' });
+    expect((await readCard(root))!.installed).toBeUndefined();
+  });
+
+  it('takes over only the searched packages once the others were', async () => {
+    const { p, s } = await setup();
+    s.sources.push({ ...src('lipo-nanny') });
+    const card = { volume: '/v', board: 'tx16smk3' };
+    radioOf(s, 'tx16smk3').sources = { 'lipo-nanny': { on: true, origin: 'main' } };
+    const list: InstalledList = { tool: 1, updated: '', packages: { 'wing-tool': { version: 'v36', origin: 'release' } }, files: {} };
+    await selectionFromCard(p, s, 'tx16smk3', card, list, ['wing-tool']);
+    expect(radioOf(s, 'tx16smk3').sources).toEqual({ 'lipo-nanny': { on: true, origin: 'main' }, 'wing-tool': { on: true, origin: 'release' } });
   });
 });

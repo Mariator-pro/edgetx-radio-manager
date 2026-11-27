@@ -1,10 +1,10 @@
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
 import { delimiter, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { versionDir } from '../src/core/packages.ts';
 import { paths } from '../src/core/paths.ts';
-import { PREFS_META, TOKEN_HEADER, TOKEN_META, type AppUpdateView, type BackupView, type KnownRadioView, type LicensesView, type PlanView, type RestorePlanView, type RestoreResultView, type StateView, type UpdateResultView } from '../src/server/api.ts';
+import { PREFS_META, TOKEN_HEADER, TOKEN_META, type AppUpdateView, type BackupView, type ConflictFileView, type KnownRadioView, type LicensesView, type PlanView, type RestorePlanView, type RestoreResultView, type StateView, type UpdateResultView } from '../src/server/api.ts';
 import { noteServer, runningServer } from '../src/server/running.ts';
 import { oneAtATime, startServer } from '../src/server/server.ts';
 import { ApiError, errorText } from '../src/ui/errors.ts';
@@ -107,6 +107,23 @@ describe('server', () => {
     const [backups] = await get<BackupView[]>('/api/backups');
     expect(backups!.items.map((i) => i.name)).toEqual(expect.arrayContaining([lastBackup, r.backup]));
     expect((await ready()).radios[0]!.updates).toEqual(['edgetx-sdcard']);
+  });
+
+  it('shows the differences of a conflict, and no other file of the card', async () => {
+    await ready();
+    const file = join(card, 'WIDGETS/BattAnalog/main.lua');
+    await mkdir(join(card, 'WIDGETS/BattAnalog'), { recursive: true });
+    await writeFile(file, 'mine\n');
+    try {
+      const plan = await post<PlanView>('/api/update/plan', { volume: card });
+      expect(plan.conflicts.map((f) => f.path)).toEqual(['WIDGETS/BattAnalog/main.lua']);
+      const diff = await post<ConflictFileView>('/api/update/conflict', { volume: card, path: 'WIDGETS/BattAnalog/main.lua' });
+      expect(diff).toEqual({ version: 'v2.12.3', lines: [{ kind: 'del', text: 'mine' }, { kind: 'add', text: 'b' }] });
+      const other = await call('/api/update/conflict', { method: 'POST', body: JSON.stringify({ volume: card, path: 'RADIO/radio.yml' }) });
+      expect(other.status).toBe(404);
+    } finally {
+      await rm(file);
+    }
   });
 
   it('labels backups with EdgeTX version and reason, and keeps notes until the backup goes', async () => {

@@ -13,7 +13,7 @@ import { localVersion } from '../core/content.ts';
 import { checkFirmwareFile, firmwareFile, flashFile, flashMethod, knownMethod, type FlashMethod } from '../core/firmware.ts';
 import { downloadAll, downloadTag } from '../core/download.ts';
 import { AppError } from '../core/errors.ts';
-import { diffModels, type DiffArea } from '../core/modeldiff.ts';
+import { diffModels, type DiffArea, type DiffTerm } from '../core/modeldiff.ts';
 import {
   applyCopy,
   applyDelete,
@@ -34,7 +34,7 @@ import {
   type DeleteItem,
   type ModelFile,
 } from '../core/models.ts';
-import { localVersions } from '../core/packages.ts';
+import { deleteDownloads, localVersions } from '../core/packages.ts';
 import { paths, type Paths } from '../core/paths.ts';
 import { countActions, type PlanItem } from '../core/plan.ts';
 import { isBelowMin, MIN_EDGETX, radioName, radioTypes } from '../core/radios.ts';
@@ -63,7 +63,7 @@ import { FLASH_STEPS } from '../server/api.ts';
 import { noteServer, runningServer } from '../server/running.ts';
 import { startServer } from '../server/server.ts';
 
-const HELP = `Usage: radio-manager <command> [options]
+const HELP = `Usage: edgetx-radio-manager <command> [options]
 
 Commands:
   status     connected radio, installed and downloaded versions
@@ -270,9 +270,12 @@ async function update(p: Paths, s: Settings, volume?: string, boardOpt?: string)
     throw new UserError(`EdgeTX ${connected.firmware} is older than ${MIN_EDGETX}. Flash the firmware first.`);
   }
   console.log('Reading the SD card ...');
-  const checked = await checkCard(p, s, connected, board, (name, list) => {
-    const v = list.packages[name]?.version;
-    if (v) console.log(`  ${name.padEnd(16)} ${v}`);
+  const checked = await checkCard(p, s, connected, board, {
+    fetchFn: fetch,
+    onPackage: (name, list) => {
+      const v = list.packages[name]?.version;
+      if (v) console.log(`  ${name.padEnd(16)} ${v}`);
+    },
   });
   if (await selectionFromCard(p, s, board, { ...connected, cardId: checked.cardId }, checked.list)) await saveSettings(p, s);
   for (const st of checked.states) {
@@ -418,7 +421,18 @@ const AREAS: Record<DiffArea, string> = {
   telemetry: 'Telemetry',
   customScripts: 'Custom scripts',
   screens: 'Screens',
-  other: 'Other',
+};
+
+const TERMS: Record<DiffTerm, string> = {
+  name: 'Name',
+  image: 'Image',
+  timer: 'Timer',
+  internalModule: 'Internal module',
+  externalModule: 'External module',
+  switchWarnings: 'Switch warnings',
+  otherSettings: 'Other settings',
+  screen: 'Screen',
+  topBar: 'Top bar',
 };
 
 const matches = (m: { name: string; file: string }, want: string) => m.name.toLowerCase() === want.toLowerCase() || m.file.toLowerCase() === want.toLowerCase();
@@ -611,9 +625,9 @@ async function modelsDiff(p: Paths, name: string | undefined, a: string | undefi
   if (groups.length === 0) console.log('\nNo differences.');
   for (const g of groups) {
     console.log(`\n${AREAS[g.area]}`);
-    for (const e of g.entries) {
-      const change = e.from === undefined ? `added ${e.to}` : e.to === undefined ? `removed (was ${e.from})` : `${e.from} -> ${e.to}`;
-      console.log(`  ${e.path}: ${change}`);
+    for (const kind of ['added', 'removed', 'changed'] as const) {
+      const names = g.entries.filter((e) => e.kind === kind).map((e) => e.name ?? `${TERMS[e.term!]}${e.n ? ` ${e.n}` : ''}`);
+      if (names.length > 0) console.log(`  ${kind}: ${names.join(', ')}`);
     }
   }
 }
@@ -717,7 +731,8 @@ async function sources(p: Paths, s: Settings, args: string[]): Promise<void> {
   if (sub === 'remove' && arg) {
     if (!removeSource(s, arg)) throw new UserError(`${arg} isn't a project source.`);
     await saveSettings(p, s);
-    console.log(`Removed ${arg}. Downloaded versions stay in ${p.packages}.`);
+    await deleteDownloads(p, arg);
+    console.log(`Removed ${arg} and deleted its downloaded versions. If it is on an SD card, the next SD update deletes its files there.`);
     return;
   }
   if (sub) throw new UserError('Use "sources", "sources add <owner/repo>" or "sources remove <name>".');

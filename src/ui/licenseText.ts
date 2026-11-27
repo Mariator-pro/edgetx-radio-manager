@@ -1,7 +1,7 @@
 // Reads THIRD_PARTY_LICENSES.txt as the build writes it: an intro, then per package a block between two
 // lines of 80 "=" with "name version", "License: …" and maybe "Source: …", followed by its license texts.
 
-interface LicensePackage {
+export interface LicensePackage {
   id: string; // name and version
   license: string;
   source?: string;

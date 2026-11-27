@@ -1,5 +1,6 @@
 import type { ErrorInfo } from '../core/errors.ts';
-import type { DiffArea } from '../core/modeldiff.ts';
+import type { DiffArea, DiffEntry } from '../core/modeldiff.ts';
+import type { DiffLine } from '../core/textdiff.ts';
 
 // Shapes the server sends to the browser interface, shared by both sides (and the CLI);
 // imports only Node-free code, so the interface's type check doesn't pull in Node code.
@@ -25,6 +26,7 @@ export interface RadioSourceView {
   on: boolean;
   origin: 'release' | 'main' | 'local';
   fixed: boolean; // SD content: always on
+  removed?: boolean; // no longer a source, still on the card: the next update deletes it
   installed?: string;
   checking?: boolean; // the app is still reading the card for this package
   reading?: boolean; // the app is still reading the card: on and origin show the card, can't be changed yet
@@ -75,6 +77,7 @@ export interface StateView {
   radios: RadioView[];
   sources: SourceView[];
   busy?: string;
+  busyVolume?: string; // the card the running operation works on
   lastCheck?: string;
   backupsToKeep: number;
   appUpdate?: AppUpdateView;
@@ -115,6 +118,14 @@ export interface PlanView {
   conflicts: PlanFileView[];
   missing: string[];
   luac: number; // stale .luac files that go away with written or deleted .lua files
+}
+
+// A conflict in the SD update: the file on the card against the one the update would write.
+export interface ConflictFileView {
+  version?: string; // version of the package that writes it; absent when the package no longer has the file
+  binary?: boolean; // one of the two is no text file
+  tooLarge?: boolean; // too long to compare line by line
+  lines?: DiffLine[];
 }
 
 export interface UpdateResultView {
@@ -228,11 +239,11 @@ export interface ModelsResultView {
   backup?: string;
 }
 
-export type { DiffArea };
+export type { DiffArea, DiffEntry };
 
 export interface DiffGroupView {
   area: DiffArea;
-  entries: { path: string; from?: string; to?: string }[];
+  entries: DiffEntry[];
 }
 
 interface PackageVersionView {

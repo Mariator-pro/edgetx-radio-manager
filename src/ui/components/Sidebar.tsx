@@ -1,10 +1,15 @@
 import { Button, ListBox, Select, Spinner, ToggleButton, ToggleButtonGroup } from '@heroui/react';
+import type { ReactNode } from 'react';
 import type { ProgressEvent, StateView } from '../../server/api.ts';
 import { dateTime } from '../format.ts';
 import { LANGUAGES, type Lang } from '../texts.ts';
 import { usePrefs, type Theme } from '../usePrefs.ts';
 import { ConnectedRadios } from './ConnectedRadios.tsx';
-import { BackupsIcon, ModelsIcon, MoonIcon, PackagesIcon, RadiosIcon, RefreshIcon, SettingsIcon, SourcesIcon, SunIcon } from './icons.tsx';
+import { BackupsIcon, ModelsIcon, MoonIcon, PackagesIcon, RadiosIcon, RefreshIcon, SettingsIcon, SourcesIcon, SunIcon, UsbBusyIcon } from './icons.tsx';
+
+// "RadioMaster TX16S MK3": the maker is the first word. Below it the radio's label without the maker.
+const maker = (type: string) => (type.includes(' ') ? type.slice(0, type.indexOf(' ')) : '');
+const withoutMaker = (label: string, type: string) => (maker(type) && label.startsWith(`${maker(type)} `) ? label.slice(maker(type).length + 1) : label);
 
 export type Page = 'radio' | 'update' | 'flash' | 'sources' | 'packages' | 'radios' | 'backups' | 'restore' | 'models' | 'modelsFlow' | 'settings';
 
@@ -13,22 +18,33 @@ export function Sidebar(props: {
   progress?: ProgressEvent;
   page: Page;
   volume?: string;
+  preparing?: string; // the card a flow is reading for its plan
   onNavigate: (page: Page, volume?: string) => void;
   onDownload: () => void;
   onAppUpdate: () => void;
 }) {
-  const { state, progress, page, volume, onNavigate, onDownload, onAppUpdate } = props;
+  const { state, progress, page, volume, preparing, onNavigate, onDownload, onAppUpdate } = props;
   const appUpdate = state?.appUpdate;
   const updatingApp = state?.busy === 'appUpdate';
   const { t, lang, setLang, theme, setTheme } = usePrefs();
   const downloading = state?.busy === 'download';
-  const overview = [
-    { page: 'sources' as const, label: t.sources, Icon: SourcesIcon },
-    { page: 'packages' as const, label: t.packages, Icon: PackagesIcon },
-    { page: 'radios' as const, label: t.radios, Icon: RadiosIcon },
-    { page: 'backups' as const, label: t.backups, Icon: BackupsIcon },
-    { page: 'models' as const, label: t.models, Icon: ModelsIcon },
-    { page: 'settings' as const, label: t.settings, Icon: SettingsIcon },
+  // what the app keeps for all radios, then what it keeps from each radio; settings sit at the bottom
+  const groups = [
+    {
+      title: t.library,
+      items: [
+        { page: 'sources' as const, label: t.sources, Icon: SourcesIcon },
+        { page: 'packages' as const, label: t.packages, Icon: PackagesIcon },
+        { page: 'radios' as const, label: t.radios, Icon: RadiosIcon },
+      ],
+    },
+    {
+      title: t.radioData,
+      items: [
+        { page: 'backups' as const, label: t.backups, Icon: BackupsIcon },
+        { page: 'models' as const, label: t.models, Icon: ModelsIcon },
+      ],
+    },
   ];
   // the guided flows count as part of the page they start from
   const current = (target: Page) => page === target || (page === 'restore' && target === 'backups') || (page === 'modelsFlow' && target === 'models');
@@ -43,6 +59,18 @@ export function Sidebar(props: {
   // Its width there is a whole number: a fractional one moves with the Windows scrollbar and puts
   // the edges of the toggle buttons on half pixels, which shows as a thin gap between them.
   const item = 'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-left no-underline transition-colors';
+  const link = (target: Page, label: string, icon: ReactNode) => (
+    <button
+      key={target}
+      type="button"
+      onClick={() => onNavigate(target)}
+      aria-current={current(target) ? 'page' : undefined}
+      className={`${item} ${current(target) ? 'bg-zinc-800 text-white' : 'hover:bg-zinc-800/60'}`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
   return (
     <nav
       aria-label={t.nav}
@@ -94,10 +122,16 @@ export function Sidebar(props: {
                 >
                   <span className="size-2 shrink-0 rounded-full bg-green-400" aria-hidden="true" />
                   <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="font-semibold">{r.label}</span>
+                    {maker(r.name) && <span className="truncate text-xs text-zinc-400">{maker(r.name)}</span>}
+                    <span className="font-semibold">{withoutMaker(r.label, r.name)}</span>
                     <span className="truncate font-mono text-xs text-zinc-400">{r.board ?? t.typeUnknown}</span>
                   </span>
-                  {r.updates.length > 0 && (
+                  {r.checking || preparing === r.volume || state?.busyVolume === r.volume ? (
+                    <>
+                      <UsbBusyIcon size={34} className="shrink-0" />
+                      <span className="sr-only">{t.keepConnected}</span>
+                    </>
+                  ) : r.updates.length > 0 && (
                     <>
                       <span className="rounded-full bg-amber-400 px-1.5 text-[11px] font-semibold text-zinc-900" aria-hidden="true">
                         {r.updates.length}
@@ -112,23 +146,15 @@ export function Sidebar(props: {
         </ConnectedRadios>
       </div>
 
-      <div className="flex flex-col gap-0.5">
-        <span className="px-2 pb-1.5 text-[11px] font-medium tracking-wider text-zinc-400 uppercase">{t.overview}</span>
-        {overview.map(({ page: target, label, Icon }) => (
-          <button
-            key={target}
-            type="button"
-            onClick={() => onNavigate(target)}
-            aria-current={current(target) ? 'page' : undefined}
-            className={`${item} ${current(target) ? 'bg-zinc-800 text-white' : 'hover:bg-zinc-800/60'}`}
-          >
-            <Icon />
-            {label}
-          </button>
-        ))}
-      </div>
+      {groups.map((g) => (
+        <div key={g.title} className="flex flex-col gap-0.5">
+          <span className="px-2 pb-1.5 text-[11px] font-medium tracking-wider text-zinc-400 uppercase">{g.title}</span>
+          {g.items.map(({ page: target, label, Icon }) => link(target, label, <Icon />))}
+        </div>
+      ))}
 
       <div className="mt-auto flex flex-col gap-3">
+        {link('settings', t.settings, <SettingsIcon />)}
         <div className="flex items-center gap-2 px-1">
           <ToggleButtonGroup
             aria-label={t.theme}

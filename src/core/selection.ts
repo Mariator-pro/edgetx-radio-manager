@@ -9,6 +9,12 @@ export function updateSources(s: Settings): Source[] {
   return s.sources.filter((src) => src.kind !== 'firmware');
 }
 
+// Packages in the card's list whose source was removed: the next update deletes their files.
+export function withoutSource(s: Settings, list: InstalledList | undefined): string[] {
+  const names = new Set(updateSources(s).map((x) => x.name));
+  return Object.keys(list?.packages ?? {}).filter((name) => !names.has(name));
+}
+
 // Release when one is downloaded, else the newest main commit, else the local checkout when there is one.
 export async function defaultOrigin(p: Paths, source: Source): Promise<Origin> {
   if ((await localVersions(p, source.name)).length > 0) return 'release';
@@ -19,17 +25,20 @@ export async function defaultOrigin(p: Paths, source: Source): Promise<Origin> {
 // What goes on a radio is what its SD card holds when it is connected: every package in the card's list, with its
 // origin, and the sounds with their voices. More is chosen in the app and holds until the radio is connected again.
 // An empty card gets the sounds of the radio's voice language; SD content is always on. True when the choice changed.
-export async function selectionFromCard(p: Paths, s: Settings, board: string, card: RadioCard, list: InstalledList): Promise<boolean> {
+// only: just these packages, the others were taken over earlier and may have been changed in the app since.
+export async function selectionFromCard(p: Paths, s: Settings, board: string, card: RadioCard, list: InstalledList, only?: string[]): Promise<boolean> {
   const r = radioOf(s, board, card.cardId);
   const before = JSON.stringify([r.sources, r.sounds]);
   const empty = Object.keys(list.packages).length === 0;
-  const sources: Record<string, Choice> = {};
+  const sources: Record<string, Choice> = only ? { ...r.sources } : {};
   for (const src of updateSources(s)) {
+    if (only && !only.includes(src.name)) continue;
     const listed = list.packages[src.name];
     const on = src.kind === 'sdcard' || !!listed || (empty && src.kind === 'sounds' && !!card.language);
     sources[src.name] = { on, origin: listed?.origin ?? (await defaultOrigin(p, src)) };
   }
   r.sources = sources;
+  if (only) return JSON.stringify([r.sources, r.sounds]) !== before;
   const sounds = s.sources.find((x) => x.kind === 'sounds');
   const listed = sounds ? list.packages[sounds.name] : undefined;
   r.sounds = listed ? (listed.voices ?? card.soundLanguages ?? []) : card.language ? [card.language] : [];
