@@ -17,12 +17,13 @@ function apiServer(): Plugin {
     apply: 'serve',
     // started here, before Vite sets up its forwarding, which needs the port
     async config() {
-      const { startServer } = await import('./src/server/server.ts');
+      const { AUTO_CHECK_MS, startServer } = await import('./src/server/server.ts');
       const { paths } = await import('./src/core/paths.ts');
       const s = await startServer({
         paths: paths(),
         port: 0,
         licensesFile: resolve(import.meta.dirname, 'dist', 'THIRD_PARTY_LICENSES.txt'),
+        autoCheckMs: AUTO_CHECK_MS,
       });
       ({ page, close } = s);
       return { server: { proxy: { '/api/': s.url.replace('localhost', '127.0.0.1') } } };

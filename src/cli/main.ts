@@ -61,7 +61,7 @@ import { prepareUpdate } from '../core/update.ts';
 import { listVolumes } from '../platform/volumes.ts';
 import { FLASH_STEPS } from '../server/api.ts';
 import { noteServer, runningServer } from '../server/running.ts';
-import { startServer } from '../server/server.ts';
+import { AUTO_CHECK_MS, startServer } from '../server/server.ts';
 
 const HELP = `Usage: edgetx-radio-manager <command> [options]
 
@@ -763,6 +763,8 @@ async function ui(p: Paths): Promise<void> {
     port: 0,
     staticDir,
     licensesFile: join(REPO_ROOT, 'dist', 'THIRD_PARTY_LICENSES.txt'),
+    // off for the README screenshots, which must not download
+    autoCheckMs: process.env.RADIO_MANAGER_AUTO_CHECK === 'off' ? undefined : AUTO_CHECK_MS,
   });
   const forget = await noteServer(p.server, server.open);
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => void forget().finally(() => process.exit(0)));

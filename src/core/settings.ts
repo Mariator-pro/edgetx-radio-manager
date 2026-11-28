@@ -59,7 +59,7 @@ export interface Settings {
   lastCheck?: string; // last download run
   firmwarePrereleases?: boolean; // flash page also offers the firmware release candidates
   knownDefaults?: string[]; // default sources already offered; a removed one isn't added again
-  ui?: { lang?: string; theme?: 'light' | 'dark' }; // interface language and theme as last chosen
+  ui?: { lang?: string; theme?: 'system' | 'light' | 'dark'; sidebarCollapsed?: boolean }; // interface language, theme and collapsed sidebar as last chosen
   localRepos?: string; // folder with the local checkouts of the own projects, chosen on the sources page
 }
 

@@ -110,7 +110,12 @@ interface ServerOptions {
   pickFolder?: () => Promise<string | undefined>; // desktop app only: the system's folder dialog
   pollMs?: number;
   appUpdates?: AppUpdates; // desktop app only
+  autoCheckMs?: number; // checks for updates on its own once the last check is this old; off without
 }
+
+// The interface checks for updates every hour while it runs, so a forgotten check does not leave the packages old.
+export const AUTO_CHECK_MS = 60 * 60_000;
+const AUTO_CHECK_TICK_MS = 5 * 60_000; // how often it looks whether the hour is up; also catches up after sleep
 
 // The desktop app's own updates: the newer release found, and installing it where the app can do that itself.
 export interface AppUpdates {
@@ -415,6 +420,21 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     }
   };
 
+  const checkForUpdates = () =>
+    op('download', async () => {
+      const results = await downloadAll(p, s, fetch, downloadProgress);
+      s.lastCheck = new Date().toISOString();
+      await saveSettings(p, s);
+      return results;
+    });
+  // Quietly, without a message: the sidebar shows the check while it runs, the radio page the updates it found.
+  // Skipped while something else runs; the next look tries again.
+  const autoCheck = async () => {
+    if (!o.autoCheckMs || busy) return;
+    if (s.lastCheck && Date.now() - Date.parse(s.lastCheck) < o.autoCheckMs) return;
+    await checkForUpdates().catch(() => {});
+  };
+
   const cardAt = async (volume: string): Promise<[RadioCard, string]> => {
     const c = cards.find((x) => x.volume === volume) ? await readCard(volume) : undefined;
     if (!c) throw new HttpError(404, 'radioNotConnected');
@@ -582,13 +602,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       await pushState();
     },
     'GET /api/voices': async () => voiceViews(p, s),
-    'POST /api/download': () =>
-      op('download', async () => {
-        const results = await downloadAll(p, s, fetch, downloadProgress);
-        s.lastCheck = new Date().toISOString();
-        await saveSettings(p, s);
-        return results;
-      }),
+    'POST /api/download': checkForUpdates,
     'POST /api/backup': async (req) => {
       const { volume } = await body<{ volume: string }>(req);
       const [c, board] = await cardAt(volume);
@@ -883,11 +897,15 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
       );
     },
     'POST /api/prefs': async (req) => {
-      const { lang, theme } = await body<PrefsView>(req);
-      if ((lang !== undefined && !/^[a-z]{2}$/.test(lang)) || (theme !== undefined && theme !== 'light' && theme !== 'dark')) {
+      const { lang, theme, sidebarCollapsed } = await body<PrefsView>(req);
+      if (
+        (lang !== undefined && !/^[a-z]{2}$/.test(lang)) ||
+        (theme !== undefined && theme !== 'system' && theme !== 'light' && theme !== 'dark') ||
+        (sidebarCollapsed !== undefined && typeof sidebarCollapsed !== 'boolean')
+      ) {
         throw new HttpError(400, 'invalidRequest', { what: 'prefs' });
       }
-      s.ui = { ...s.ui, ...(lang ? { lang } : {}), ...(theme ? { theme } : {}) };
+      s.ui = { ...s.ui, ...(lang ? { lang } : {}), ...(theme ? { theme } : {}), ...(sidebarCollapsed !== undefined ? { sidebarCollapsed } : {}) };
       await saveSettings(p, s);
     },
     // empty: no folder, so no project has a local checkout
@@ -983,6 +1001,8 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     server.once('error', reject);
     server.listen(o.port, '127.0.0.1', resolve);
   });
+  void autoCheck();
+  const autoTimer = o.autoCheckMs ? setInterval(() => void autoCheck(), Math.min(o.autoCheckMs, AUTO_CHECK_TICK_MS)) : undefined;
   const address = server.address();
   const url = `http://localhost:${typeof address === 'object' && address ? address.port : o.port}`;
   return {
@@ -992,6 +1012,7 @@ export async function startServer(o: ServerOptions): Promise<RunningServer> {
     page,
     close: () => {
       clearInterval(timer);
+      clearInterval(autoTimer);
       for (const c of clients) c.end();
       server.close();
     },

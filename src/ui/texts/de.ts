@@ -1,3 +1,4 @@
+import { time } from '../dates.ts';
 import type { Texts } from '../texts.ts';
 
 export const de: Texts = {
@@ -5,6 +6,7 @@ export const de: Texts = {
   nav: 'Navigation',
   radioHeading: 'Sender',
   typeUnknown: 'Typ unbekannt',
+  noRadioConnected: 'Kein Sender angeschlossen',
   noRadio: 'Schließe den Sender per USB an und wähle „USB-Speicher“.',
   library: 'Bibliothek',
   radioData: 'Senderdaten',
@@ -20,12 +22,21 @@ export const de: Texts = {
   appUpdateAvailable: (v) => `Radio Manager ${v} ist verfügbar`,
   appUpdateInstall: 'Aktualisieren',
   appUpdateDownload: 'Herunterladen',
-  appDownloading: (pct) => `Update wird heruntergeladen … ${pct} %`,
+  appDownloading: (pct) => `Update wird geladen … ${pct}\u00a0%`,
   appRestarting: 'Wird neu gestartet …',
   theme: 'Erscheinungsbild',
   light: 'Hell',
   dark: 'Dunkel',
+  systemTheme: 'System',
+  switchTheme: (next: string) => `Wechselt zu „${next}“.`,
+  ctrlKey: 'Strg',
+  collapseSidebar: 'Seitenleiste einklappen',
+  expandSidebar: 'Seitenleiste aufklappen',
+  sidebarShort: { sources: 'Quellen', packages: 'Pakete', radios: 'Sender', backups: 'Backups', models: 'Modelle', settings: 'Optionen', noRadio: 'USB' },
+  appUpdateClick: 'Klicken zum Aktualisieren.',
+  appUpdateLink: 'Öffnet die Download-Seite.',
   language: 'Sprache',
+  languageText: 'Für alle Seiten und Meldungen der App.',
 
   someFailed: 'Einige Pakete konnten nicht heruntergeladen werden',
   checkFailed: 'Die Suche nach Updates hat nicht geklappt',
@@ -67,7 +78,7 @@ export const de: Texts = {
   noBoards: 'Die Liste der Sender kommt mit dem SD-Grundinhalt von EdgeTX. Klicke zuerst auf „Nach Updates suchen“.',
   useType: 'Diesen Typ verwenden',
   backUpNow: 'Jetzt sichern',
-  backingUpPct: (pct: number) => `Wird gesichert … ${pct} %`,
+  backingUpPct: (pct: number) => `Wird gesichert … ${pct}\u00a0%`,
   tooOld: (v) => `EdgeTX ${v} ist zu alt`,
   tooOldText: 'Das SD-Update braucht EdgeTX 2.12 oder neuer. Flashe zuerst die Firmware. Sichern kannst du die SD-Karte jederzeit.',
   upToDate: 'Aktuell',
@@ -311,7 +322,7 @@ export const de: Texts = {
   beforeDeleteModels: 'Vor dem Löschen von Modellen',
 
   models: 'Modelle',
-  settings: 'Einstellungen',
+  settings: 'Optionen',
   dataFolder: 'Datenordner',
   dataFolderText: 'Hier bewahrt die App ihre Downloads, Backups und Einstellungen auf.',
   about: 'Über die App',
@@ -426,7 +437,7 @@ export const de: Texts = {
     noConnection: () => 'GitHub ist nicht erreichbar. Prüfe die Internetverbindung.',
     rateLimit: ({ reset } = {}) =>
       reset
-        ? `GitHub nimmt gerade keine weiteren Anfragen an. Versuche es ab ${new Date(reset).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr noch einmal.`
+        ? `GitHub nimmt gerade keine weiteren Anfragen an. Versuche es ab ${time(reset, 'de-DE')} Uhr noch einmal.`
         : 'GitHub nimmt gerade keine weiteren Anfragen an. Versuche es später noch einmal.',
     githubStatus: ({ status }) => `GitHub antwortet mit Fehler ${status}. Versuche es später noch einmal.`,
     downloadFailed: ({ status }) => `Die App konnte die Datei nicht von GitHub laden (Fehler ${status}). Versuche es später noch einmal.`,

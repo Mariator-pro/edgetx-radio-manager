@@ -27,9 +27,8 @@ Desktop.ini
 *.key
 secrets.json
 
-# Claude Code: personal settings stay local
-.claude/settings.local.json
-.claude/*.lock
+# Claude Code: settings and project skills stay local
+.claude/
 
 # Control screenshots, regenerated any time
 tools/shots/

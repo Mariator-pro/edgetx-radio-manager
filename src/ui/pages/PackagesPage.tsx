@@ -2,7 +2,8 @@ import { Button, Card, Chip, Spinner, Tooltip } from '@heroui/react';
 import { useCallback, useEffect, useState } from 'react';
 import type { PackageView } from '../../server/api.ts';
 import { get, post } from '../api.ts';
-import { bytes, date } from '../format.ts';
+import { date } from '../dates.ts';
+import { bytes } from '../format.ts';
 import { usePrefs } from '../usePrefs.ts';
 import { type Ask, Confirm } from '../components/Confirm.tsx';
 
@@ -37,7 +38,7 @@ export function PackagesPage({ run, refreshKey }: { run: Run; refreshKey: unknow
                 {p.versions.map((v) => (
                   <li key={v.tag} className="flex flex-wrap items-center gap-3 border-t border-separator px-5 py-3">
                     <span className="w-24 font-mono text-sm">{v.tag}</span>
-                    <span className="w-28 text-sm text-muted">{date(v.published, t.locale)}</span>
+                    <span className="w-28 text-sm text-muted tabular-nums">{date(v.published, t.locale)}</span>
                     <span className="w-20 text-sm text-muted">{bytes(v.bytes)}</span>
                     <span className="flex flex-1 flex-wrap gap-1.5">
                       {v.installedOn.length > 0 && (

@@ -389,11 +389,12 @@ export const TOKEN_HEADER = 'x-radio-manager-token';
 export const TOKEN_HASH = 'token';
 export const TOKEN_META = 'radio-manager-token';
 
-// Language and theme, kept by the server: the port changes with every start, and the browser keeps
+// Language, theme and the collapsed sidebar, kept by the server: the port changes with every start, and the browser keeps
 // what a page stores per port, so it would forget them.
 export interface PrefsView {
   lang?: string;
-  theme?: 'light' | 'dark';
+  theme?: 'system' | 'light' | 'dark';
+  sidebarCollapsed?: boolean; // the sidebar shows only its icons
 }
 export const PREFS_META = 'radio-manager-prefs';
 

@@ -17,6 +17,7 @@ import { SourcesPage } from './pages/SourcesPage.tsx';
 import { UpdateFlow } from './pages/UpdateFlow.tsx';
 import type { Texts } from './texts.ts';
 import { usePrefs } from './usePrefs.ts';
+import { OPEN_SETTINGS } from './menu.ts';
 
 // The guided flows, the server operation each one runs and the page it starts from.
 type Flow = 'update' | 'restore' | 'modelsFlow' | 'flash';
@@ -85,6 +86,13 @@ export function App() {
     else if (next === kept) setKept(undefined);
     setPage(next);
   };
+
+  // "Settings…" in the menu bar of the desktop app (Cmd+,)
+  useEffect(() => {
+    const open = () => go('settings');
+    addEventListener(OPEN_SETTINGS, open);
+    return () => removeEventListener(OPEN_SETTINGS, open);
+  });
   const start = (flow: Flow) => {
     setKept(undefined);
     setStarts((n) => n + 1);

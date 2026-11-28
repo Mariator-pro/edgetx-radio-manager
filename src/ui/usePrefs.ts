@@ -1,7 +1,8 @@
 import { createContext, use } from 'react';
 import type { Lang, Texts } from './texts.ts';
+import type { Theme } from './appearance.ts';
 
-export type Theme = 'light' | 'dark';
+export type { Theme };
 
 interface Prefs {
   t: Texts;
@@ -9,6 +10,8 @@ interface Prefs {
   setLang: (l: Lang) => void;
   theme: Theme;
   setTheme: (t: Theme) => void;
+  sidebarCollapsed: boolean; // the sidebar shows only its icons
+  toggleSidebar: () => void;
 }
 
 export const PrefsContext = createContext<Prefs | null>(null);

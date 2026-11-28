@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
 import { delimiter, join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { versionDir } from '../src/core/packages.ts';
 import { paths } from '../src/core/paths.ts';
 import { PREFS_META, TOKEN_HEADER, TOKEN_META, type AppUpdateView, type BackupView, type ConflictFileView, type KnownRadioView, type LicensesView, type PlanView, type RestorePlanView, type RestoreResultView, type StateView, type UpdateResultView } from '../src/server/api.ts';
@@ -263,7 +263,7 @@ describe('server', () => {
     }
   });
 
-  it('keeps language and theme and puts them into the page, whatever port it runs on', async () => {
+  it('keeps language, theme and the collapsed sidebar and puts them into the page, whatever port it runs on', async () => {
     const staticDir = await tempDir();
     await writeFile(join(staticDir, 'index.html'), '<html><head><title>x</title></head></html>');
     const dataDir = paths(await tempDir());
@@ -275,15 +275,46 @@ describe('server', () => {
       expect((await choose({ lang: 'de' })).status).toBe(200);
       expect((await choose({ theme: 'dark' })).status).toBe(200);
       expect((await choose({ lang: '../x' })).status).toBe(400);
+      expect((await choose({ theme: 'system' })).status).toBe(200);
       expect((await choose({ theme: 'pink' })).status).toBe(400);
+      expect((await choose({ sidebarCollapsed: true })).status).toBe(200);
+      expect((await choose({ sidebarCollapsed: 'yes' })).status).toBe(400);
     } finally {
       first.close();
     }
     const second = await startServer({ paths: dataDir, port: 0, staticDir, pollMs: 60_000 });
     try {
-      expect(await (await fetch(second.url)).text()).toContain(`<meta name="${PREFS_META}" content="{&quot;lang&quot;:&quot;de&quot;,&quot;theme&quot;:&quot;dark&quot;}" />`);
+      expect(await (await fetch(second.url)).text()).toContain(`<meta name="${PREFS_META}" content="{&quot;lang&quot;:&quot;de&quot;,&quot;theme&quot;:&quot;system&quot;,&quot;sidebarCollapsed&quot;:true}" />`);
     } finally {
       second.close();
+    }
+  });
+
+  it('checks for updates on its own once the last check is an hour old', async () => {
+    const real = globalThis.fetch;
+    const github = vi.fn(() => Promise.reject(new Error('offline')));
+    vi.stubGlobal('fetch', (url: string | URL | Request, init?: RequestInit) => (String(url).startsWith('https://') ? github() : real(url, init)));
+    const lastCheck = async (dataDir: ReturnType<typeof paths>) => (JSON.parse(await readFile(dataDir.settings, 'utf8')) as { lastCheck?: string }).lastCheck;
+    try {
+      const recent = paths(await tempDir());
+      const now = new Date().toISOString();
+      await mkdir(recent.root, { recursive: true });
+      await writeFile(recent.settings, JSON.stringify({ lastCheck: now }));
+      const a = await startServer({ paths: recent, port: 0, pollMs: 60_000, autoCheckMs: 3_600_000 });
+      await new Promise((r) => setTimeout(r, 200));
+      a.close();
+      expect(github).not.toHaveBeenCalled();
+      expect(await lastCheck(recent)).toBe(now);
+
+      const old = paths(await tempDir());
+      await mkdir(old.root, { recursive: true });
+      await writeFile(old.settings, JSON.stringify({ lastCheck: '2026-01-01T00:00:00.000Z' }));
+      const b = await startServer({ paths: old, port: 0, pollMs: 60_000, autoCheckMs: 3_600_000 });
+      await vi.waitFor(async () => expect(await lastCheck(old)).not.toBe('2026-01-01T00:00:00.000Z'), { timeout: 5000 });
+      b.close();
+      expect(github).toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 

@@ -1,4 +1,5 @@
 import type { ProgressEvent } from '../server/api.ts';
+import { dateTime } from './dates.ts';
 
 // The last file is written; what follows is finishing up (the list on the card, removing macOS files).
 export const isLastWrite = (pr?: ProgressEvent) => pr?.step === 'write' && !!pr.total && pr.done === pr.total;
@@ -32,24 +33,12 @@ export function bytes(n: number): string {
   return `${n} B`;
 }
 
-// The one date format of the app, in the interface language: "21.11.2026, 15:19" / "Nov 21, 2026, 3:19 PM"
-// for a point in time, "21.11.2026" / "Nov 21, 2026" for a day.
-const DATE_TIME = { dateStyle: 'medium', timeStyle: 'short' } as const;
-
-export function dateTime(iso: string, locale: string): string {
-  return new Date(iso).toLocaleString(locale, DATE_TIME);
-}
-
-export function date(iso: string, locale: string): string {
-  return new Date(iso).toLocaleDateString(locale, { dateStyle: 'medium' });
-}
-
 // Backup folder "2026-10-21_1430" or "2026-10-21_1430_2" (local time) as "21.10.2026, 14:30" or "21.10.2026, 14:30 (2)".
 export function backupLabel(name: string, locale: string): string {
   const m = name.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(?:_(\d+))?$/);
   if (!m) return name;
   const [, y, mo, d, h, mi, n] = m.map(Number);
-  const text = new Date(y!, mo! - 1, d!, h!, mi!).toLocaleString(locale, DATE_TIME);
+  const text = dateTime(new Date(y!, mo! - 1, d!, h!, mi!).toISOString(), locale);
   return n ? `${text} (${n})` : text;
 }
 

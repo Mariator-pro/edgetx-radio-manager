@@ -4,7 +4,7 @@ import type { KnownRadioView } from '../../server/api.ts';
 import { get, post } from '../api.ts';
 import { EditRadio } from '../components/EditRadio.tsx';
 import { ConnectedDot } from '../components/RadioChoice.tsx';
-import { dateTime } from '../format.ts';
+import { ago, dateTime, useNow } from '../dates.ts';
 import { usePrefs } from '../usePrefs.ts';
 
 type Run = (fn: () => Promise<unknown>) => void;
@@ -71,6 +71,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 // Every radio the app knows, one card each, connected ones first.
 export function RadiosPage({ run, refreshKey, busy, onBackups }: { run: Run; refreshKey: unknown; busy?: string; onBackups: (key: string) => void }) {
   const { t } = usePrefs();
+  const now = useNow();
   const [radios, setRadios] = useState<KnownRadioView[]>();
   const [editing, setEditing] = useState<KnownRadioView>();
   const [forgetting, setForgetting] = useState<KnownRadioView>();
@@ -112,7 +113,7 @@ export function RadiosPage({ run, refreshKey, busy, onBackups }: { run: Run; ref
                 {r.pilot && <Row label={t.pilot}>{r.pilot}</Row>}
                 <Row label={t.radioId}>{r.idShort ? <span className="font-mono">{r.idShort}</span> : t.noIdYet}</Row>
                 {r.firmware && <Row label={t.radioFirmware}>{r.firmware}</Row>}
-                {!r.volume && <Row label={t.lastConnected}>{r.seen ? dateTime(r.seen, t.locale) : t.unknownTime}</Row>}
+                {!r.volume && <Row label={t.lastConnected}>{r.seen ? <span title={dateTime(r.seen, t.locale)}>{ago(r.seen, t.locale, now)}</span> : t.unknownTime}</Row>}
                 <Row label={t.radioBackups}>
                   {r.backups}
                   {r.backups > 0 && (

@@ -17,6 +17,12 @@ body {
   color: var(--color-foreground);
 }
 
+/* HeroUI breaks tooltip text between any two letters ("USB-Sp|eicher"); break between words instead. */
+.tooltip {
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
 /* Lists that open from a grey field (the language in the sidebar) in that field's colour; their rows get a
    lighter hover, which HeroUI's grey would hide. */
 .field-list {

@@ -4,7 +4,7 @@
 
 Keep your EdgeTX radio up to date without copying files by hand. Plug in the radio, and the app shows what is new: firmware, SD card content, sounds (voice announcements) and your Lua scripts and widgets from GitHub. It backs up the SD card before every change and never silently overwrites files you changed yourself.
 
-Desktop app for macOS, Windows and Linux, in English and German (English by default, German in a menu at the bottom of the sidebar). For advanced use, a [browser interface](docs/browser-interface.md) and a [command line tool](docs/command-line.md) are available when running from source.
+Desktop app for macOS, Windows and Linux, in English and German (English by default, German under Settings, Language). For advanced use, a [browser interface](docs/browser-interface.md) and a [command line tool](docs/command-line.md) are available when running from source.
 
 ![The radio page: firmware, SD card and backup status of a connected RadioMaster TX15](docs/screenshots/radio.png)
 
@@ -78,7 +78,7 @@ Below them are the sources on this radio. Each time you connect it, they show wh
 
 ### 2. Check for updates
 
-"Check for updates" at the bottom left looks for new releases of all sources and downloads them. Downloaded versions stay on your computer, so updating works offline later.
+"Check for updates" at the bottom left looks for new releases of all sources and downloads them. While the app is open it also does this on its own once the last check is an hour old, right at the start too. Downloaded versions stay on your computer, so updating works offline later.
 
 ### 3. Update the SD card
 
@@ -143,7 +143,9 @@ A package version that is on a radio can't be deleted on the "Packages" page; it
 
 ### 9. Settings
 
-The Settings page shows the [data folder](#-your-data) with "Open folder", and under "About" the version, a link to the app's MIT license and its source code, and "Show licenses" with the licenses of all open source packages inside the app.
+The Settings page (on macOS also "Settings…" in the app menu, ⌘,) shows the [data folder](#-your-data) with "Open folder", the language of the app, and under "About" the version, a link to the app's MIT license and its source code, and "Show licenses" with the licenses of all open source packages inside the app.
+
+At the bottom of the sidebar you switch between light, dark and "System", which follows your computer. The button next to the title (or ⌘B, Ctrl+B on Windows and Linux) folds the sidebar into a narrow bar of icons; the app remembers both.
 
 ## 📦 Where packages come from
 
@@ -175,13 +177,13 @@ Settings, downloads and backups live where apps keep their data on each system (
 
 ```
 EdgeTX Radio Manager/
-├── settings.json          sources, radios, backup settings
+├── settings.json          sources, radios, backup settings, language, appearance
 ├── Packages/<source>/     downloaded versions, _main/ for the main branch
 ├── Known/<source>/        checksums of downloaded versions, to recognize them on a card
 └── Backups/<board>/       one folder per backup, named by date and time
 ```
 
-On macOS the desktop app keeps its window data (language, theme) in the same folder, on Windows next to it in `%APPDATA%\EdgeTX Radio Manager\`, on Linux in `~/.config/EdgeTX Radio Manager/`.
+On macOS the desktop app keeps the cache of its built-in browser in the same folder, on Windows next to it in `%APPDATA%\EdgeTX Radio Manager\`, on Linux in `~/.config/EdgeTX Radio Manager/`.
 
 ## 📖 More documentation
 

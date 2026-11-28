@@ -129,7 +129,8 @@ describe('firmware', () => {
     expect(steps).toEqual(['writing']);
   });
 
-  it('flashes the TX16S with dfu-util to the start of the internal flash', async () => {
+  // the stand-in for dfu-util is a shell script
+  it.skipIf(process.platform === 'win32')('flashes the TX16S with dfu-util to the start of the internal flash', async () => {
     const p = await withFirmware();
     const bin = await tempDir();
     const log = join(bin, 'args.txt');

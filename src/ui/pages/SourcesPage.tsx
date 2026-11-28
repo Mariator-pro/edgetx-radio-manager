@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { type Ask, Confirm } from '../components/Confirm.tsx';
 import type { SourceCheckView, StateView } from '../../server/api.ts';
 import { errorText, post } from '../api.ts';
-import { date } from '../format.ts';
+import { date } from '../dates.ts';
 import { usePrefs } from '../usePrefs.ts';
 
 type Run = (fn: () => Promise<unknown>) => void;
@@ -180,7 +180,15 @@ export function SourcesPage({ state, run, volume }: { state: StateView; run: Run
                       {t.kinds[s.kind]}
                     </Chip>
                   </td>
-                  <td className="px-2 py-3 font-mono text-xs">{s.newest ? `${s.newest.tag} · ${date(s.newest.published, t.locale)}` : t.none}</td>
+                  <td className="px-2 py-3 text-xs">
+                    {s.newest ? (
+                      <>
+                        <span className="font-mono">{s.newest.tag}</span> · <span className="tabular-nums">{date(s.newest.published, t.locale)}</span>
+                      </>
+                    ) : (
+                      t.none
+                    )}
+                  </td>
                   <td className="px-2 py-3 font-mono text-xs">{s.main ?? '–'}</td>
                   <td className="px-2 py-3 font-mono text-xs" title={s.localDir}>
                     {s.local ?? '–'}

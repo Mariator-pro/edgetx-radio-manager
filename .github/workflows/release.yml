@@ -33,8 +33,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # on all three systems, so a test that only fails on Windows or Linux stops the release
       - run: npm test
-        if: runner.os == 'macOS'
       - run: npm run build
       # macOS: ad-hoc signature (mac.identity "-" in package.json), no Apple certificate; Windows and Linux: unsigned
       - run: npx electron-builder ${{ matrix.target }} --publish never
